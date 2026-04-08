@@ -30,18 +30,13 @@
 .\objects\main.o: .\Library\misc.h
 .\objects\main.o: .\System\Delay.h
 .\objects\main.o: .\System\sys.h
-.\objects\main.o: .\Hardware\OLED.h
 .\objects\main.o: .\Hardware\LED.h
 .\objects\main.o: D:\Program Files\ARM\ARMCC\Bin\..\include\string.h
+.\objects\main.o: .\System\usart.h
+.\objects\main.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\main.o: .\Hardware\atk_mb026.h
 .\objects\main.o: .\Hardware\atk_mb026_uart.h
-.\objects\main.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
-.\objects\main.o: .\System\usart.h
 .\objects\main.o: User\demo.h
 .\objects\main.o: User\../Hardware/RELAY/relay.h
 .\objects\main.o: User\../Hardware/TOUCH_KEY/touch_key.h
-.\objects\main.o: User\../Hardware/Serial2.h
-.\objects\main.o: User\../Hardware/RS485.h
-.\objects\main.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdarg.h
-.\objects\main.o: User\../Hardware/SoilSensor.h
-.\objects\main.o: User\../Hardware/atk_d43.h
+.\objects\main.o: User\../Hardware/OLED.h

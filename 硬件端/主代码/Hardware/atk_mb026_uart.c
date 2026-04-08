@@ -73,7 +73,7 @@ void atk_mb026_uart_printf(char *fmt, ...)
         }
         
         // �ᴭ�߃W��H
-        USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
+        USART_ITConfig(ATK_MB026_UART_INTERFACE, USART_IT_TXE, ENABLE);
     }
 }
 
@@ -130,10 +130,10 @@ void atk_mb026_uart_init(uint32_t baudrate)
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
     
     // 1. �����
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3 | RCC_APB1Periph_TIM2, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2 | RCC_APB1Periph_TIM3, ENABLE);
     
-    // 2. ����USART3���� (PB10: TX, PB11: RX)
+    // 2. ����USART2���� (PA2: TX, PA3: RX)
     // TX��������
     GPIO_InitStructure.GPIO_Pin = ATK_MB026_UART_TX_GPIO_PIN;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
@@ -145,7 +145,7 @@ void atk_mb026_uart_init(uint32_t baudrate)
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
     GPIO_Init(ATK_MB026_UART_RX_GPIO_PORT, &GPIO_InitStructure);
     
-    // 3. ����USART3�跽
+    // 3. ����USART2�跽
     USART_InitStructure.USART_BaudRate = baudrate;
     USART_InitStructure.USART_WordLength = USART_WordLength_8b;
     USART_InitStructure.USART_StopBits = USART_StopBits_1;
@@ -154,20 +154,20 @@ void atk_mb026_uart_init(uint32_t baudrate)
     USART_InitStructure.USART_Mode = USART_Mode_Tx | USART_Mode_Rx;
     USART_Init(ATK_MB026_UART_INTERFACE, &USART_InitStructure);
     
-    // 4. ����USART3��H
+    // 4. ����USART2��H
     NVIC_InitStructure.NVIC_IRQChannel = ATK_MB026_UART_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
     
-    // 5. ��USART3���x��H
+    // 5. ��USART2���x��H
     USART_ITConfig(ATK_MB026_UART_INTERFACE, USART_IT_RXNE, ENABLE);
     
-    // 6. ��USART3
+    // 6. ��USART2
     USART_Cmd(ATK_MB026_UART_INTERFACE, ENABLE);
     
-    // 7. 配置TIM2定时器，用于UART接收超时检测
+    // 7. 配置TIM3定时器，用于UART接收超时检测
     // 增加超时时间到200ms（原来约83ms）
     TIM_TimeBaseStructure.TIM_Period = 240 - 1;  // 240 * (1/1200) = 200ms
     TIM_TimeBaseStructure.TIM_Prescaler = ATK_MB026_TIM_PRESCALER - 1;  // 72MHz/60000 = 1200Hz
@@ -175,7 +175,7 @@ void atk_mb026_uart_init(uint32_t baudrate)
     TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
     TIM_TimeBaseInit(ATK_MB026_TIM_INTERFACE, &TIM_TimeBaseStructure);
     
-    // 8. 配置TIM2中断
+    // 8. 配置TIM3中断
     NVIC_InitStructure.NVIC_IRQChannel = ATK_MB026_TIM_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
@@ -196,52 +196,37 @@ void atk_mb026_uart_init(uint32_t baudrate)
 
 
 /**
- * @brief USART3�жϷ�����
+ * @brief USART2�жϷ�����
  * @note ����UART���ݽ��պͷ���
  */
-void USART3_IRQHandler(void)
+void USART2_IRQHandler(void)
 {
     uint8_t tmp;
     
     /* 1. �������ش��� */
-    if (USART_GetITStatus(USART3, USART_IT_ORE) != RESET)
+    if (USART_GetITStatus(USART2, USART_IT_ORE) != RESET)
     {
-        USART_ClearITPendingBit(USART3, USART_IT_ORE);
-        (void)USART_ReceiveData(USART3); // ��ȡDR�Ĵ�����������־
+        USART_ClearITPendingBit(USART2, USART_IT_ORE);
+        (void)USART_ReceiveData(USART2); // ��ȡDR�Ĵ�����������־
     }
     
     /* 2. 处理接收中断 */
-    if (USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)
+    if (USART_GetITStatus(USART2, USART_IT_RXNE) != RESET)
     {
-        tmp = USART_ReceiveData(USART3);
+        tmp = USART_ReceiveData(USART2);
         
         // 调试：打印接收到的字节
         printf("%02X ", tmp);
         
-        // Modbus RTU协议：通过超时判断帧结束
-        // 存储到接收缓冲区
-        if ((USART3_RX_STA & 0x8000) == 0)  // 接收未完成
-        {
-            // 存储数据
-            USART3_RX_BUF[USART3_RX_STA & 0x3FFF] = tmp;
-            USART3_RX_STA++;
-            
-            // 检查缓冲区溢出
-            if (USART3_RX_STA > (USART3_REC_LEN - 1))
-            {
-                USART3_RX_STA = 0;  // 缓冲区溢出，重新开始
-            }
-        }
-        
         /* 处理接收缓冲区 */
         if (g_sta.len < (ATK_MB026_UART_RX_BUF_SIZE - 1))
         {
-            TIM_SetCounter(TIM2, 0); // 重置定时器计数
+            TIM_SetCounter(TIM3, 0); // 重置定时器计数
             
             /* 如果是第一个字节，开启定时器 */
             if (g_sta.len == 0)
             {
-                TIM_Cmd(TIM2, ENABLE);
+                TIM_Cmd(TIM3, ENABLE);
             }
             
             /* 存储接收到的字节 */
@@ -258,51 +243,38 @@ void USART3_IRQHandler(void)
     }
     
     /* 3. ���������ж� */
-    if (USART_GetITStatus(USART3, USART_IT_TXE) != RESET)
+    if (USART_GetITStatus(USART2, USART_IT_TXE) != RESET)
     {
         if (tx_head != tx_tail)
         {
             /* ���ͻ������е����� */
-            USART_SendData(USART3, tx_buf[tx_tail]);
+            USART_SendData(USART2, tx_buf[tx_tail]);
             tx_tail = (tx_tail + 1) % TX_BUF_SIZE;
         }
         else
         {
             /* ���ͻ�����Ϊ�գ����÷����ж� */
-            USART_ITConfig(USART3, USART_IT_TXE, DISABLE);
+            USART_ITConfig(USART2, USART_IT_TXE, DISABLE);
         }
     }
 }
 
 /**
- * @brief TIM2�жϷ�����
+ * @brief TIM3�жϷ�����
  * @note ����UART���ճ�ʱ
  */
-void TIM2_IRQHandler(void)
+void TIM3_IRQHandler(void)
 {
-    if (TIM_GetITStatus(TIM2, TIM_IT_Update) != RESET)
+    if (TIM_GetITStatus(TIM3, TIM_IT_Update) != RESET)
     {
         /* 清除中断标志 */
-        TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
+        TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
         
         /* 关闭定时器 */
-        TIM_Cmd(TIM2, DISABLE);
+        TIM_Cmd(TIM3, DISABLE);
         
         /* 设置帧接收完成标志 */
         g_sta.finsh = 1;
-        
-        /* Modbus RTU协议：超时表示帧结束，设置接收完成标志 */
-        // 如果有接收到数据，设置完成标志
-        uint16_t rx_len = USART3_RX_STA & 0x3FFF;
-        if (rx_len > 0)
-        {
-            USART3_RX_STA |= 0x8000;  // 设置接收完成标志
-            printf("\r\n[TIM2] 超时触发，设置接收完成标志，len=%d\r\n", rx_len);
-        }
-        else
-        {
-            printf("\r\n[TIM2] 超时触发，但没有接收到数据\r\n");
-        }
         
         /* 处理485接收到的数据 */
         extern void Serial2_ProcessResponse(void);
@@ -311,11 +283,11 @@ void TIM2_IRQHandler(void)
 }
 
 /**
- * @brief ͨ��USART3�������ݣ���������
+ * @brief ͨ��USART2�������ݣ���������
  * @param data Ҫ���͵�����
  * @param len ���ݳ���
  */
-void usart3_send_data(const uint8_t *data, uint16_t len)
+void usart2_send_data(const uint8_t *data, uint16_t len)
 {
     for (uint16_t i = 0; i < len; i++) {
         tx_buf[tx_head] = data[i];
@@ -323,7 +295,7 @@ void usart3_send_data(const uint8_t *data, uint16_t len)
     }
     
     // ���÷����ж�
-    USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
+    USART_ITConfig(USART2, USART_IT_TXE, ENABLE);
 }
 
 

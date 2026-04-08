@@ -51,7 +51,6 @@
 ".\objects\serial2.o"
 ".\objects\rs485.o"
 ".\objects\soilsensor.o"
-".\objects\atk_d43.o"
 ".\objects\main.o"
 ".\objects\stm32f10x_it.o"
 ".\objects\demo.o"

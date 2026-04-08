@@ -923,16 +923,6 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\SoilSensor.h</FilePath>
             </File>
-            <File>
-              <FileName>atk_d43.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\atk_d43.c</FilePath>
-            </File>
-            <File>
-              <FileName>atk_d43.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\atk_d43.h</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>

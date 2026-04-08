@@ -2,8 +2,6 @@
 #include "../System/Delay.h"
 #include "../Hardware/RELAY/relay.h"
 #include "../Hardware/OLED.h"
-#include "../Hardware/RS485.h"
-#include "../Hardware/SoilSensor.h"
 #include <stdio.h>
 
 // 触摸按键状态变量
@@ -153,19 +151,7 @@ void EXTI0_IRQHandler(void)
 		delay_ms(10);
 		if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_A) == 0) {
 			printf("[Touch Key] 中断：A键被按下\r\n");
-			// 直接发送土壤传感器请求数据（HEX格式）
-			// 土壤传感器请求数据：01 03 00 01 03 00 3D CC
-			uint8_t soil_request[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x04, 0x44, 0x09};
-			RS485_SendHex(soil_request, 8);
-			printf("[System] 触摸按键A按下，发送土壤传感器请求\r\n");
-			OLED_ShowString(1, 1, "  RS485");
-			OLED_ShowString(2, 1, "  Send");
-			OLED_ShowString(3, 1, "  Request");
-			OLED_ShowString(4, 1, "  Success");
-			
-			// 延时等待响应，然后解析数据
-			delay_ms(500); // 等待传感器响应
-			SoilSensor_PrintReceivedData();
+			printf("[System] 触摸按键A按下\r\n");
 		}
 		// 清除中断标志位
 		EXTI_ClearITPendingBit(EXTI_Line0);

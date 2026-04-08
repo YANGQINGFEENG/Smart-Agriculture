@@ -1,7 +1,7 @@
 Dependencies for Project 'ATK-D43', Target 'ATK-D4X': (DO NOT MODIFY !)
 CompilerVersion: 5060960::V5.06 update 7 (build 960)::.\ARMCC
-F (.\main.c)(0x68F87F22)(--c99 -c --cpu Cortex-M3 -g -O2 --apcs=interwork -I ..\HARDWARE\LED -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\STM32F10x_FWLib\inc -I ..\CORE -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\RingBuffer -I ..\MALLOC -I ..\HARDWARE\UART3 -I ..\HARDWARE\UART2 -I ..\HARDWARE\ATK-D4X-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o ..\obj\main.o --omf_browse ..\obj\main.crf --depend ..\obj\main.d)
-I (..\HARDWARE\LED\led.h)(0x5E952560)
+F (.\main.c)(0x69D4DE8B)(--c99 -c --cpu Cortex-M3 -g -O2 --apcs=interwork -I ..\HARDWARE\LED -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\STM32F10x_FWLib\inc -I ..\CORE -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\RingBuffer -I ..\MALLOC -I ..\HARDWARE\UART3 -I ..\HARDWARE\UART2 -I ..\HARDWARE\ATK-D4X-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o ..\obj\main.o --omf_browse ..\obj\main.crf --depend ..\obj\main.d)
+I (..\HARDWARE\LED\led.h)(0x69D4DCAD)
 I (..\SYSTEM\sys\sys.h)(0x68D64662)
 I (..\USER\stm32f10x.h)(0x69D4D9C6)
 I (..\CORE\core_cm3.h)(0x4D523B58)
@@ -102,8 +102,8 @@ I (..\STM32F10x_FWLib\inc\stm32f10x_tim.h)(0x5E95255C)
 I (..\STM32F10x_FWLib\inc\stm32f10x_usart.h)(0x4D783BB4)
 I (..\STM32F10x_FWLib\inc\stm32f10x_wwdg.h)(0x4D783BB4)
 I (..\STM32F10x_FWLib\inc\misc.h)(0x4D783BB4)
-F (..\HARDWARE\LED\led.c)(0x5E952560)(--c99 -c --cpu Cortex-M3 -g -O2 --apcs=interwork -I ..\HARDWARE\LED -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\STM32F10x_FWLib\inc -I ..\CORE -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\RingBuffer -I ..\MALLOC -I ..\HARDWARE\UART3 -I ..\HARDWARE\UART2 -I ..\HARDWARE\ATK-D4X-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o ..\obj\led.o --omf_browse ..\obj\led.crf --depend ..\obj\led.d)
-I (..\HARDWARE\LED\led.h)(0x5E952560)
+F (..\HARDWARE\LED\led.c)(0x69D4DCCF)(--c99 -c --cpu Cortex-M3 -g -O2 --apcs=interwork -I ..\HARDWARE\LED -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\STM32F10x_FWLib\inc -I ..\CORE -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\RingBuffer -I ..\MALLOC -I ..\HARDWARE\UART3 -I ..\HARDWARE\UART2 -I ..\HARDWARE\ATK-D4X-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o ..\obj\led.o --omf_browse ..\obj\led.crf --depend ..\obj\led.d)
+I (..\HARDWARE\LED\led.h)(0x69D4DCAD)
 I (..\SYSTEM\sys\sys.h)(0x68D64662)
 I (..\USER\stm32f10x.h)(0x69D4D9C6)
 I (..\CORE\core_cm3.h)(0x4D523B58)

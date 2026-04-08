@@ -33,8 +33,4 @@
 .\objects\touch_key.o: .\Start\../System/Delay.h
 .\objects\touch_key.o: .\Start\../Hardware/RELAY/relay.h
 .\objects\touch_key.o: .\Start\../Hardware/OLED.h
-.\objects\touch_key.o: .\Start\../Hardware/RS485.h
-.\objects\touch_key.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdarg.h
 .\objects\touch_key.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
-.\objects\touch_key.o: D:\Program Files\ARM\ARMCC\Bin\..\include\string.h
-.\objects\touch_key.o: .\Start\../Hardware/SoilSensor.h

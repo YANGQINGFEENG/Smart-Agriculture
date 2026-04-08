@@ -1,18 +1,14 @@
 #include "stm32f10x.h"                  // Device header
 #include "Delay.h"
-#include "OLED.h"
 #include "LED.h"
 #include "string.h"
+#include "usart.h"
 #include "atk_mb026.h"
 #include "atk_mb026_uart.h"
-#include "usart.h"
 #include "demo.h"
 #include "../Hardware/RELAY/relay.h"
 #include "../Hardware/TOUCH_KEY/touch_key.h"
-#include "../Hardware/Serial2.h"
-#include "../Hardware/RS485.h"
-#include "../Hardware/SoilSensor.h"
-#include "../Hardware/atk_d43.h"
+#include "../Hardware/OLED.h"
 #include <stdio.h>
 
 // 全局变量
@@ -48,6 +44,114 @@ uint8_t check_wifi_status(void)
         }
     }
     return 0; // WiFi未连接
+}
+
+/**
+ * @brief 初始化WiFi模块
+ * @return 1: 成功, 0: 失败
+ */
+uint8_t init_wifi_module(void)
+{
+    uint8_t ret = 0;
+    
+    printf("[System] 初始化WiFi模块...\r\n");
+    
+    // 测试串口是否正常
+    printf("[System] 测试串口通信...\r\n");
+    atk_mb026_uart_printf("AT\r\n");
+    delay_ms(500);
+    
+    // 尝试初始化WiFi模块
+    ret = atk_mb026_init(115200);
+    if (ret == ATK_MB026_EOK) {
+        printf("[System] WiFi模块初始化成功\r\n");
+        return 1;
+    } else {
+        printf("[System] WiFi模块初始化失败，错误码: %d\r\n", ret);
+        
+        // 额外的调试信息
+        printf("[System] 检查以下几点:\r\n");
+        printf("[System] 1. WiFi模块硬件连接是否正确\r\n");
+        printf("[System] 2. 串口引脚(GPIOA2/GPIOA3)连接是否正确\r\n");
+        printf("[System] 3. WiFi模块电源是否稳定\r\n");
+        printf("[System] 4. 波特率设置是否正确(115200)\r\n");
+        return 0;
+    }
+}
+
+/**
+ * @brief 连接WiFi网络
+ * @return 1: 成功, 0: 失败
+ */
+uint8_t connect_wifi(void)
+{
+    uint8_t retry = 0;
+    uint8_t ret = 0;
+    
+    while (retry < MAX_WIFI_RETRY) {
+        printf("[WiFi] 连接到WiFi: %s (尝试 %d/%d)\r\n", DEMO_WIFI_SSID, retry + 1, MAX_WIFI_RETRY);
+        
+        if (atk_mb026_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD) == ATK_MB026_EOK) {
+            printf("[WiFi] WiFi连接成功\r\n");
+            
+            // 获取IP地址
+            char ip_buf[20] = {0};
+            if (atk_mb026_get_ip(ip_buf) == ATK_MB026_EOK) {
+                printf("[WiFi] 获取IP地址: %s\r\n", ip_buf);
+            }
+            
+            g_wifi_connected = 1;
+            ret = 1;
+            break;
+        } else {
+            printf("[WiFi] WiFi连接失败，%d秒后重试\r\n", (retry + 1) * 2);
+            retry++;
+            delay_ms((retry + 1) * 2000); // 递增重试间隔
+        }
+    }
+    
+    if (retry >= MAX_WIFI_RETRY) {
+        printf("[WiFi] WiFi连接失败，已达到最大重试次数\r\n");
+        ret = 0;
+    }
+    
+    return ret;
+}
+
+/**
+ * @brief 发送数据到服务器
+ * @param data 要发送的数据
+ * @param len 数据长度
+ * @return 1: 成功, 0: 失败
+ */
+uint8_t send_data_to_server(char *data, uint16_t len)
+{
+    uint8_t ret = 0;
+    
+    // 连接到服务器
+    if (atk_mb026_connect_tcp_server(SERVER_URL, SERVER_PORT) == ATK_MB026_EOK) {
+        printf("[Server] 连接服务器成功\r\n");
+        
+        // 使用AT+CIPSEND命令发送数据
+        char cmd[32];
+        sprintf(cmd, "AT+CIPSEND=%d", len);
+        
+        if (atk_mb026_send_at_cmd(cmd, ">", 2000) == ATK_MB026_EOK) {
+            printf("[Server] 发送数据...\r\n");
+            atk_mb026_uart_printf(data);
+            delay_ms(1000);
+            
+            // 关闭TCP连接
+            atk_mb026_send_at_cmd("AT+CIPCLOSE", "OK", 2000);
+            ret = 1;
+        } else {
+            printf("[Server] 发送命令失败\r\n");
+        }
+    } else {
+        printf("[Server] 连接服务器失败\r\n");
+    }
+    
+    return ret;
 }
 
 /**
@@ -329,166 +433,57 @@ void test_server_health(void)
 }
 
 /**
- * @brief 初始化WiFi模块
- * @return 1: 成功, 0: 失败
- */
-uint8_t init_wifi_module(void)
-{
-    uint8_t ret = 0;
-    
-    printf("[System] 初始化WiFi模块...\r\n");
-    OLED_ShowString(1, 1, "  System Init");
-    OLED_ShowString(2, 1, "  WiFi Module");
-    
-    if (atk_mb026_init(115200) == ATK_MB026_EOK) {
-        printf("[System] WiFi模块初始化成功\r\n");
-        OLED_ShowString(2, 1, "  Init: OK");
-        ret = 1;
-    } else {
-        printf("[System] WiFi模块初始化失败\r\n");
-        OLED_ShowString(2, 1, "  Init: Failed");
-        ret = 0;
-    }
-    
-    return ret;
-}
-
-/**
- * @brief 连接WiFi网络
- * @return 1: 成功, 0: 失败
- */
-uint8_t connect_wifi(void)
-{
-    uint8_t retry = 0;
-    uint8_t ret = 0;
-    
-    while (retry < MAX_WIFI_RETRY) {
-        printf("[WiFi] 连接到WiFi: %s (尝试 %d/%d)\r\n", DEMO_WIFI_SSID, retry + 1, MAX_WIFI_RETRY);
-        OLED_ShowString(1, 1, "  WiFi Connect");
-        OLED_ShowString(2, 1, "  Connecting");
-        
-        if (atk_mb026_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD) == ATK_MB026_EOK) {
-            printf("[WiFi] WiFi连接成功\r\n");
-            OLED_ShowString(2, 1, "  Connected");
-            
-            // 获取IP地址
-            char ip_buf[20] = {0};
-            if (atk_mb026_get_ip(ip_buf) == ATK_MB026_EOK) {
-                printf("[WiFi] 获取IP地址: %s\r\n", ip_buf);
-                OLED_ShowString(3, 1, "  IP:");
-                OLED_ShowString(4, 1, ip_buf);
-            }
-            
-            g_wifi_connected = 1;
-            ret = 1;
-            break;
-        } else {
-            printf("[WiFi] WiFi连接失败，%d秒后重试\r\n", (retry + 1) * 2);
-            OLED_ShowString(2, 1, "  Retry...");
-            retry++;
-            delay_ms((retry + 1) * 2000); // 递增重试间隔
-        }
-    }
-    
-    if (retry >= MAX_WIFI_RETRY) {
-        printf("[WiFi] WiFi连接失败，已达到最大重试次数\r\n");
-        OLED_ShowString(2, 1, "  Failed");
-        ret = 0;
-    }
-    
-    return ret;
-}
-
-/**
  * @brief 主函数
  */
 int main(void)
 {
 	// 初始化系统
 	delay_init(72);              // 初始化延时函数
-	usart_init(115200);          // 初始化串口（用于ATK-D43通信）
-	RS485_Init();                // 初始化RS485（包含USART3初始化）
-	OLED_Init();                 // 初始化OLED
+	usart_init(115200);          // 初始化串口
 	LED_Init();                  // 初始化LED
+	OLED_Init();                 // 初始化OLED
 	RELAY_Init();                // 初始化继电器
 	TOUCH_KEY_Init();            // 初始化触摸按键
 	TOUCH_KEY_EXTI_Init();       // 初始化触摸按键外部中断
 	
-	// 初始化ATK-D43模块
-	printf("[System] 初始化ATK-D43模块...\r\n");
+	// 初始化WiFi模块的串口
+	atk_mb026_uart_init(115200);
+	printf("[System] WiFi模块串口初始化成功\r\n");
+	
+	// 清屏
+	OLED_Clear();
 	OLED_ShowString(1, 1, "  System Init");
-	OLED_ShowString(2, 1, "  ATK-D43");
 	
-	// 等待DTU启动
-	printf("[System] 等待ATK-D43启动，等待10秒...\r\n");
-	OLED_ShowString(3, 1, "  Waiting 10s");
-	for(int i = 0; i < 10; i++) {
-		printf("[System] 等待 %d/10 秒...\r\n", i+1);
-		delay_ms(1000);
-	}
-	
-	// 配置DTU参数
-	int dtu_init_result = dtu_config_init(DTU_WORKMODE_MQTT, DTU_COLLECT_OFF);
-	if (dtu_init_result == 0) {
-		printf("[System] ATK-D43配置成功\r\n");
-		OLED_ShowString(2, 1, "  Config: OK");
-		
-		// 重置DTU设备
-		printf("[System] 重置ATK-D43设备...\r\n");
-		OLED_ShowString(3, 1, "  Resetting");
-		int reset_result = dtu_power_reset();
-		if (reset_result == 0) {
-			printf("[System] ATK-D43重置成功\r\n");
-			OLED_ShowString(3, 1, "  Reset: OK");
-			
-			// 等待DTU重启
-			printf("[System] 等待ATK-D43重启，等待5秒...\r\n");
-			OLED_ShowString(4, 1, "  Waiting 5s");
-			for(int i = 0; i < 5; i++) {
-				printf("[System] 等待 %d/5 秒...\r\n", i+1);
-				delay_ms(1000);
-			}
-			
-			// 验证通信
-			printf("[System] 验证ATK-D43通信...\r\n");
-			OLED_ShowString(4, 1, "  Testing");
-			USART_SendString(USART1, "AT\r\n");
-			delay_ms(1000);
-			if (g_usart_rx_sta & 0x8000) {
-				printf("[System] 收到模块响应: %s\r\n", g_usart_rx_buf);
-				OLED_ShowString(4, 1, "  Test: OK");
-			} else {
-				printf("[System] 未收到模块响应\r\n");
-				OLED_ShowString(4, 1, "  Test: No");
-			}
-			// 清空接收缓冲区
-			g_usart_rx_sta = 0;
-		} else {
-			printf("[System] ATK-D43重置失败，错误码: %d\r\n", reset_result);
-			OLED_ShowString(3, 1, "  Reset: Failed");
-		}
-	} else {
-		printf("[System] ATK-D43初始化失败，错误码: %d\r\n", dtu_init_result);
-		OLED_ShowString(2, 1, "  Init: Failed");
-	}
-	delay_ms(1000);
-	
-	// 初始化WiFi模块（暂时注释，避免与RS485引脚冲突）
-	/*
+	// 初始化WiFi模块
+	OLED_ShowString(1, 3, "  WiFi Init...");
 	if (init_wifi_module()) {
+		OLED_ShowString(1, 3, "  WiFi Init OK");
 		// 连接WiFi
+		OLED_ShowString(1, 5, "  Connecting...");
 		if (connect_wifi()) {
 			// 连接完成，准备进行下一步计划
 			printf("[System] WiFi连接完成，准备进行下一步计划\r\n");
-			OLED_ShowString(1, 1, "  System Ready");
-			OLED_ShowString(2, 1, "  Next Step");
+			OLED_ShowString(1, 5, "  Connected");
 			delay_ms(1000);
+			
+			// 测试百度连接
+			test_baidu_connectivity();
 			
 			// 测试服务器健康状态
 			test_server_health();
+			
+			// 显示初始状态
+			OLED_Clear();
+			OLED_ShowString(1, 1, "  System Ready");
+			OLED_ShowString(2, 1, "  WiFi: OK");
+			OLED_ShowString(3, 1, "  Touch Key: ON");
+			OLED_ShowString(4, 1, "  Relay: OFF");
+		} else {
+			OLED_ShowString(1, 5, "  Connect Fail");
 		}
+	} else {
+		OLED_ShowString(1, 3, "  WiFi Init Fail");
 	}
-	*/
 	
 	// 主循环
 	while (1)
@@ -501,119 +496,66 @@ int main(void)
 			// 打开继电器2（水泵供电）
 			RELAY_2(1);
 			printf("[System] 触摸按键C按下，打开继电器2（水泵供电）\r\n");
-			OLED_ShowString(1, 1, "  Relay 2");
-			OLED_ShowString(2, 1, "  ON");
-			OLED_ShowString(3, 1, "  Water Pump");
-			OLED_ShowString(4, 1, "  Powered");
 		} else if (key == 4) { // 触摸按键D
 			// 关闭继电器2（停止水泵供电）
 			RELAY_2(0);
 			printf("[System] 触摸按键D按下，关闭继电器2（停止水泵供电）\r\n");
-			OLED_ShowString(1, 1, "  Relay 2");
-			OLED_ShowString(2, 1, "  OFF");
-			OLED_ShowString(3, 1, "  Water Pump");
-			OLED_ShowString(4, 1, "  Stopped");
 		} else if (key == 1) { // 触摸按键A
-			// 直接发送土壤传感器请求数据（HEX格式）
-			// 土壤传感器请求数据：01 03 00 01 03 00 3D CC
-			RS485_printf("\x01\x03\x00\x01\x03\x00\x3D\xCC");
-			printf("[System] 触摸按键A按下，发送土壤传感器请求\r\n");
-			OLED_ShowString(1, 1, "  RS485");
-			OLED_ShowString(2, 1, "  Send");
-			OLED_ShowString(3, 1, "  Request");
-			OLED_ShowString(4, 1, "  Success");
+			// 发送测试数据到服务器
+			if (g_wifi_connected) {
+				char test_data[128];
+				sprintf(test_data, "{\"type\":\"test\",\"message\":\"Hello from STM32\",\"timestamp\":%lu}", timecount);
+				uint16_t len = strlen(test_data);
+				printf("[System] 触摸按键A按下，发送测试数据到服务器\r\n");
+				send_data_to_server(test_data, len);
+			} else {
+				printf("[System] WiFi未连接，无法发送数据\r\n");
+			}
 		}
 		
-		// 处理串口数据转发
+		// 处理串口数据
 		if (g_usart_rx_sta & 0x8000) {
 			// 有数据从串口1接收
-			uint16_t len = g_usart_rx_sta & 0x3fff;
 			printf("[System] 收到串口数据: %s\r\n", g_usart_rx_buf);
 			
-			// 转发数据到ATK-D43模块
-			send_data_to_dtu((uint8_t *)g_usart_rx_buf, len);
-			printf("[System] 数据已转发到4G模块\r\n");
-			
 			// 清空接收缓冲区
 			g_usart_rx_sta = 0;
 		}
 		
-		// 每2秒读取一次土壤传感器数据（只保留数据流，不打印具体值）
-		if (timecount % 2000 == 0) {
-			float moisture;
-			float temperature;
-			uint16_t ec;
-			float ph;
-			uint8_t result = SoilSensor_ReadData(&moisture, &temperature, &ec, &ph);
-			
-			// 只打印读取状态，不打印具体数值
-			if (result == 0) {
-				printf("[Soil Sensor] 读取成功\r\n");
-			} else {
-				printf("[Soil Sensor] 读取失败\r\n");
-			}
-		}
-		
-		// 每30秒检查一次ATK-D43状态
-		if (timecount % 30000 == 0) {
-			printf("[System] 检查ATK-D43状态...\r\n");
-			OLED_ShowString(1, 1, "  System Check");
-			OLED_ShowString(2, 1, "  ATK-D43");
-			
-			// 发送测试数据，验证通信
-			USART_SendString(USART1, "AT\r\n");
-			delay_ms(1000);
-			if (g_usart_rx_sta & 0x8000) {
-				printf("[System] ATK-D43通信正常: %s\r\n", g_usart_rx_buf);
-				OLED_ShowString(3, 1, "  Status: OK");
-			} else {
-				printf("[System] ATK-D43通信异常，重新初始化...\r\n");
-				OLED_ShowString(3, 1, "  Status: Error");
-				
-				// 重新初始化
-				dtu_config_init(DTU_WORKMODE_MQTT, DTU_COLLECT_OFF);
-				dtu_power_reset();
-				delay_ms(5000);
-			}
-			// 清空接收缓冲区
-			g_usart_rx_sta = 0;
-		}
-		
-		// 每10秒检查一次WiFi连接状态（暂时注释，避免与RS485引脚冲突）
-		/*
+		// 每10秒检查一次WiFi连接状态
 		if (timecount % WIFI_CHECK_INTERVAL == 0) {
 			uint8_t status = check_wifi_status();
 			if (status && !g_wifi_connected) {
 				// WiFi重新连接
 				printf("[WiFi] WiFi重新连接\r\n");
-				OLED_ShowString(1, 1, "  WiFi Status");
-				OLED_ShowString(2, 1, "  Reconnected");
 				g_wifi_connected = 1;
+				OLED_ShowString(1, 5, "  Connected");
 			} else if (!status && g_wifi_connected) {
 				// WiFi连接断开
 				printf("[WiFi] WiFi连接断开\r\n");
-				OLED_ShowString(1, 1, "  WiFi Status");
-				OLED_ShowString(2, 1, "  Disconnected");
 				g_wifi_connected = 0;
+				OLED_ShowString(1, 5, "  Disconnected");
 				
 				// 尝试重新连接WiFi
 				printf("[WiFi] 尝试重新连接...\r\n");
+				OLED_ShowString(1, 5, "  Reconnecting");
 				if (connect_wifi()) {
 					printf("[WiFi] 重新连接成功\r\n");
+					OLED_ShowString(1, 5, "  Connected");
+				} else {
+					OLED_ShowString(1, 5, "  Reconnect Fail");
 				}
 			} else if (status && g_wifi_connected) {
 				// WiFi连接正常
 				printf("[WiFi] WiFi连接正常\r\n");
-				OLED_ShowString(1, 1, "  WiFi Status");
-				OLED_ShowString(2, 1, "  OK");
+				OLED_ShowString(1, 5, "  Connected");
 			}
 		}
 		
-		// 每30秒测试一次百度连接（暂时注释，避免与RS485引脚冲突）
-		if (timecount % BAIDU_PING_INTERVAL == 0 && g_wifi_connected) {
+		// 定期测试百度连接
+		if (timecount % BAIDU_PING_INTERVAL == 0) {
 			test_baidu_connectivity();
 		}
-		*/
 		
 		delay_ms(1);
 	}

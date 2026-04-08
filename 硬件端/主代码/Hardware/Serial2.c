@@ -25,9 +25,9 @@ void Serial2_Init(void)
  */
 void Serial2_SendByte(uint8_t Byte)
 {
-	// 使用现有的USART3发送函数
+	// 使用现有的USART2发送函数
 	uint8_t data = Byte;
-	usart3_send_data(&data, 1);
+	usart2_send_data(&data, 1);
 }
 
 /**
@@ -38,8 +38,8 @@ void Serial2_SendByte(uint8_t Byte)
  */
 void Serial2_SendArray(uint8_t *Array, uint16_t Length)
 {
-	// 使用现有的USART3发送函数
-	usart3_send_data(Array, Length);
+	// 使用现有的USART2发送函数
+	usart2_send_data(Array, Length);
 }
 
 /**
