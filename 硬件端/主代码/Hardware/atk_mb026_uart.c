@@ -275,9 +275,9 @@ void TIM3_IRQHandler(void)
         /* 设置帧接收完成标志 */
         g_sta.finsh = 1;
         
-        /* 处理485接收到的数据 */
-        extern void Serial2_ProcessResponse(void);
-        Serial2_ProcessResponse();
+        /* 移除对Serial2_ProcessResponse()的调用，因为该函数可能不存在 */
+        // extern void Serial2_ProcessResponse(void);
+        // Serial2_ProcessResponse();
     }
 }
 

@@ -325,6 +325,14 @@ uint8_t send_http_request(char *server_url, char *server_port, char *request)
  */
 void test_baidu_connectivity(void)
 {
+    // 添加WiFi状态检查
+    if (!g_wifi_connected) {
+        printf("======================================\r\n");
+        printf("[Baidu Test] WiFi未连接，跳过测试\r\n");
+        printf("======================================\r\n");
+        return;
+    }
+    
     printf("======================================\r\n");
     printf("[Baidu Test] 测试百度连接...\r\n");
     printf("[Baidu Test] 测试地址: www.baidu.com\r\n");

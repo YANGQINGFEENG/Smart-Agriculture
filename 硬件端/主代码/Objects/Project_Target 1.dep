@@ -1373,7 +1373,7 @@ I (.\System\sys.h)(0x68407020)
 I (D:\Program Files\ARM\ARMCC\include\stdio.h)(0x60252374)
 I (D:\Program Files\ARM\ARMCC\include\string.h)(0x6025237E)
 F (.\Hardware\atk_mb026.h)(0x68499316)()
-F (.\Hardware\atk_mb026_uart.c)(0x69D5BC50)(--c99 -c --cpu Cortex-M3 -D__MICROLIB -g -O0 --apcs=interwork --split_sections -I .\Start -I .\Library -I .\User -I .\System -I .\Hardware -I .\Drivers\STM32F1xx_HAL_Driver\Inc -I .\Drivers\STM32F1xx_HAL_Driver\Src -I .\Drivers -I .\Drivers\CMSIS\Device\ST\STM32F1xx\Include -I .\Drivers\CMSIS\Include --no-multibyte-chars-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o .\objects\atk_mb026_uart.o --omf_browse .\objects\atk_mb026_uart.crf --depend .\objects\atk_mb026_uart.d)
+F (.\Hardware\atk_mb026_uart.c)(0x69D65196)(--c99 -c --cpu Cortex-M3 -D__MICROLIB -g -O0 --apcs=interwork --split_sections -I .\Start -I .\Library -I .\User -I .\System -I .\Hardware -I .\Drivers\STM32F1xx_HAL_Driver\Inc -I .\Drivers\STM32F1xx_HAL_Driver\Src -I .\Drivers -I .\Drivers\CMSIS\Device\ST\STM32F1xx\Include -I .\Drivers\CMSIS\Include --no-multibyte-chars-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o .\objects\atk_mb026_uart.o --omf_browse .\objects\atk_mb026_uart.crf --depend .\objects\atk_mb026_uart.d)
 I (Hardware\atk_mb026_uart.h)(0x69D5AC5F)
 I (.\Start\stm32f10x.h)(0x4D783CB4)
 I (.\Start\core_cm3.h)(0x4D523B58)
@@ -1486,7 +1486,7 @@ I (.\Library\stm32f10x_usart.h)(0x4D783BB4)
 I (.\Library\stm32f10x_wwdg.h)(0x4D783BB4)
 I (.\Library\misc.h)(0x4D783BB4)
 I (D:\Program Files\ARM\ARMCC\include\stdio.h)(0x60252374)
-F (.\Hardware\TOUCH_KEY\touch_key.c)(0x69D5B959)(--c99 -c --cpu Cortex-M3 -D__MICROLIB -g -O0 --apcs=interwork --split_sections -I .\Start -I .\Library -I .\User -I .\System -I .\Hardware -I .\Drivers\STM32F1xx_HAL_Driver\Inc -I .\Drivers\STM32F1xx_HAL_Driver\Src -I .\Drivers -I .\Drivers\CMSIS\Device\ST\STM32F1xx\Include -I .\Drivers\CMSIS\Include --no-multibyte-chars-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o .\objects\touch_key.o --omf_browse .\objects\touch_key.crf --depend .\objects\touch_key.d)
+F (.\Hardware\TOUCH_KEY\touch_key.c)(0x69D6385D)(--c99 -c --cpu Cortex-M3 -D__MICROLIB -g -O0 --apcs=interwork --split_sections -I .\Start -I .\Library -I .\User -I .\System -I .\Hardware -I .\Drivers\STM32F1xx_HAL_Driver\Inc -I .\Drivers\STM32F1xx_HAL_Driver\Src -I .\Drivers -I .\Drivers\CMSIS\Device\ST\STM32F1xx\Include -I .\Drivers\CMSIS\Include --no-multibyte-chars-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o .\objects\touch_key.o --omf_browse .\objects\touch_key.crf --depend .\objects\touch_key.d)
 I (Hardware\TOUCH_KEY\touch_key.h)(0x69CE0830)
 I (.\System\sys.h)(0x68407020)
 I (.\Start\stm32f10x.h)(0x4D783CB4)
@@ -1626,7 +1626,7 @@ I (D:\Program Files\ARM\ARMCC\include\string.h)(0x6025237E)
 I (Hardware\../System/Delay.h)(0x68AAE4B4)
 I (Hardware\../System/sys.h)(0x68407020)
 F (.\Hardware\SoilSensor.h)(0x69D0E7F6)()
-F (.\User\main.c)(0x69D5031B)(--c99 -c --cpu Cortex-M3 -D__MICROLIB -g -O0 --apcs=interwork --split_sections -I .\Start -I .\Library -I .\User -I .\System -I .\Hardware -I .\Drivers\STM32F1xx_HAL_Driver\Inc -I .\Drivers\STM32F1xx_HAL_Driver\Src -I .\Drivers -I .\Drivers\CMSIS\Device\ST\STM32F1xx\Include -I .\Drivers\CMSIS\Include --no-multibyte-chars-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o .\objects\main.o --omf_browse .\objects\main.crf --depend .\objects\main.d)
+F (.\User\main.c)(0x69D6518A)(--c99 -c --cpu Cortex-M3 -D__MICROLIB -g -O0 --apcs=interwork --split_sections -I .\Start -I .\Library -I .\User -I .\System -I .\Hardware -I .\Drivers\STM32F1xx_HAL_Driver\Inc -I .\Drivers\STM32F1xx_HAL_Driver\Src -I .\Drivers -I .\Drivers\CMSIS\Device\ST\STM32F1xx\Include -I .\Drivers\CMSIS\Include --no-multibyte-chars-I"D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include"-D__UVISION_VERSION="536" -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER-o .\objects\main.o --omf_browse .\objects\main.crf --depend .\objects\main.d)
 I (.\Start\stm32f10x.h)(0x4D783CB4)
 I (.\Start\core_cm3.h)(0x4D523B58)
 I (D:\Program Files\ARM\ARMCC\include\stdint.h)(0x6025237E)

@@ -1815,26 +1815,26 @@ Image Symbol Table
     i.atk_mb026_join_ap                      0x080024e8   Section        0  atk_mb026.o(i.atk_mb026_join_ap)
     i.atk_mb026_send_at_cmd                  0x08002538   Section        0  atk_mb026.o(i.atk_mb026_send_at_cmd)
     i.atk_mb026_uart_init                    0x08002590   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_init)
-    i.atk_mb026_uart_printf                  0x080026d8   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_printf)
-    i.atk_mb026_uart_rx_get_frame            0x08002748   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_rx_get_frame)
-    i.atk_mb026_uart_rx_restart              0x08002774   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_rx_restart)
-    i.check_wifi_status                      0x08002790   Section        0  main.o(i.check_wifi_status)
-    i.connect_wifi                           0x080027d8   Section        0  main.o(i.connect_wifi)
-    i.delay_init                             0x080029d0   Section        0  delay.o(i.delay_init)
-    i.delay_ms                               0x080029f0   Section        0  delay.o(i.delay_ms)
-    i.fputc                                  0x08002a44   Section        0  usart.o(i.fputc)
-    i.init_wifi_module                       0x08002a60   Section        0  main.o(i.init_wifi_module)
-    i.main                                   0x08002b64   Section        0  main.o(i.main)
-    i.ping_server                            0x08002db0   Section        0  main.o(i.ping_server)
-    i.send_http_request                      0x08002f0c   Section        0  main.o(i.send_http_request)
-    i.test_baidu_connectivity                0x080034ec   Section        0  main.o(i.test_baidu_connectivity)
-    i.test_server_health                     0x080036f4   Section        0  main.o(i.test_server_health)
-    i.usart_init                             0x08003b34   Section        0  usart.o(i.usart_init)
-    .constdata                               0x08003bd4   Section     1520  oled.o(.constdata)
-    .constdata                               0x080041c4   Section      129  ctype_o.o(.constdata)
-    .constdata                               0x08004248   Section        4  ctype_o.o(.constdata)
-    table                                    0x08004248   Data           4  ctype_o.o(.constdata)
-    .conststring                             0x0800424c   Section      125  main.o(.conststring)
+    i.atk_mb026_uart_printf                  0x080026d4   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_printf)
+    i.atk_mb026_uart_rx_get_frame            0x08002744   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_rx_get_frame)
+    i.atk_mb026_uart_rx_restart              0x08002770   Section        0  atk_mb026_uart.o(i.atk_mb026_uart_rx_restart)
+    i.check_wifi_status                      0x0800278c   Section        0  main.o(i.check_wifi_status)
+    i.connect_wifi                           0x080027d4   Section        0  main.o(i.connect_wifi)
+    i.delay_init                             0x080029cc   Section        0  delay.o(i.delay_init)
+    i.delay_ms                               0x080029ec   Section        0  delay.o(i.delay_ms)
+    i.fputc                                  0x08002a40   Section        0  usart.o(i.fputc)
+    i.init_wifi_module                       0x08002a5c   Section        0  main.o(i.init_wifi_module)
+    i.main                                   0x08002b60   Section        0  main.o(i.main)
+    i.ping_server                            0x08002dac   Section        0  main.o(i.ping_server)
+    i.send_http_request                      0x08002f08   Section        0  main.o(i.send_http_request)
+    i.test_baidu_connectivity                0x080034e8   Section        0  main.o(i.test_baidu_connectivity)
+    i.test_server_health                     0x080036f0   Section        0  main.o(i.test_server_health)
+    i.usart_init                             0x08003b30   Section        0  usart.o(i.usart_init)
+    .constdata                               0x08003bd0   Section     1520  oled.o(.constdata)
+    .constdata                               0x080041c0   Section      129  ctype_o.o(.constdata)
+    .constdata                               0x08004244   Section        4  ctype_o.o(.constdata)
+    table                                    0x08004244   Data           4  ctype_o.o(.constdata)
+    .conststring                             0x08004248   Section      125  main.o(.conststring)
     .data                                    0x20000000   Section       20  stm32f10x_rcc.o(.data)
     APBAHBPrescTable                         0x20000000   Data          16  stm32f10x_rcc.o(.data)
     ADCPrescTable                            0x20000010   Data           4  stm32f10x_rcc.o(.data)
@@ -2079,26 +2079,26 @@ Image Symbol Table
     atk_mb026_init                           0x080024c9   Thumb Code    32  atk_mb026.o(i.atk_mb026_init)
     atk_mb026_join_ap                        0x080024e9   Thumb Code    46  atk_mb026.o(i.atk_mb026_join_ap)
     atk_mb026_send_at_cmd                    0x08002539   Thumb Code    78  atk_mb026.o(i.atk_mb026_send_at_cmd)
-    atk_mb026_uart_init                      0x08002591   Thumb Code   304  atk_mb026_uart.o(i.atk_mb026_uart_init)
-    atk_mb026_uart_printf                    0x080026d9   Thumb Code    98  atk_mb026_uart.o(i.atk_mb026_uart_printf)
-    atk_mb026_uart_rx_get_frame              0x08002749   Thumb Code    34  atk_mb026_uart.o(i.atk_mb026_uart_rx_get_frame)
-    atk_mb026_uart_rx_restart                0x08002775   Thumb Code    24  atk_mb026_uart.o(i.atk_mb026_uart_rx_restart)
-    check_wifi_status                        0x08002791   Thumb Code    44  main.o(i.check_wifi_status)
-    connect_wifi                             0x080027d9   Thumb Code   204  main.o(i.connect_wifi)
-    delay_init                               0x080029d1   Thumb Code    28  delay.o(i.delay_init)
-    delay_ms                                 0x080029f1   Thumb Code    78  delay.o(i.delay_ms)
-    fputc                                    0x08002a45   Thumb Code    24  usart.o(i.fputc)
-    init_wifi_module                         0x08002a61   Thumb Code    82  main.o(i.init_wifi_module)
-    main                                     0x08002b65   Thumb Code   292  main.o(i.main)
-    ping_server                              0x08002db1   Thumb Code   152  main.o(i.ping_server)
-    send_http_request                        0x08002f0d   Thumb Code   588  main.o(i.send_http_request)
-    test_baidu_connectivity                  0x080034ed   Thumb Code   156  main.o(i.test_baidu_connectivity)
-    test_server_health                       0x080036f5   Thumb Code   326  main.o(i.test_server_health)
-    usart_init                               0x08003b35   Thumb Code   138  usart.o(i.usart_init)
-    OLED_F8x16                               0x08003bd4   Data        1520  oled.o(.constdata)
-    __ctype_table                            0x080041c4   Data         129  ctype_o.o(.constdata)
-    Region$$Table$$Base                      0x080042cc   Number         0  anon$$obj.o(Region$$Table)
-    Region$$Table$$Limit                     0x080042ec   Number         0  anon$$obj.o(Region$$Table)
+    atk_mb026_uart_init                      0x08002591   Thumb Code   300  atk_mb026_uart.o(i.atk_mb026_uart_init)
+    atk_mb026_uart_printf                    0x080026d5   Thumb Code    98  atk_mb026_uart.o(i.atk_mb026_uart_printf)
+    atk_mb026_uart_rx_get_frame              0x08002745   Thumb Code    34  atk_mb026_uart.o(i.atk_mb026_uart_rx_get_frame)
+    atk_mb026_uart_rx_restart                0x08002771   Thumb Code    24  atk_mb026_uart.o(i.atk_mb026_uart_rx_restart)
+    check_wifi_status                        0x0800278d   Thumb Code    44  main.o(i.check_wifi_status)
+    connect_wifi                             0x080027d5   Thumb Code   204  main.o(i.connect_wifi)
+    delay_init                               0x080029cd   Thumb Code    28  delay.o(i.delay_init)
+    delay_ms                                 0x080029ed   Thumb Code    78  delay.o(i.delay_ms)
+    fputc                                    0x08002a41   Thumb Code    24  usart.o(i.fputc)
+    init_wifi_module                         0x08002a5d   Thumb Code    82  main.o(i.init_wifi_module)
+    main                                     0x08002b61   Thumb Code   292  main.o(i.main)
+    ping_server                              0x08002dad   Thumb Code   152  main.o(i.ping_server)
+    send_http_request                        0x08002f09   Thumb Code   588  main.o(i.send_http_request)
+    test_baidu_connectivity                  0x080034e9   Thumb Code   156  main.o(i.test_baidu_connectivity)
+    test_server_health                       0x080036f1   Thumb Code   326  main.o(i.test_server_health)
+    usart_init                               0x08003b31   Thumb Code   138  usart.o(i.usart_init)
+    OLED_F8x16                               0x08003bd0   Data        1520  oled.o(.constdata)
+    __ctype_table                            0x080041c0   Data         129  ctype_o.o(.constdata)
+    Region$$Table$$Base                      0x080042c8   Number         0  anon$$obj.o(Region$$Table)
+    Region$$Table$$Limit                     0x080042e8   Number         0  anon$$obj.o(Region$$Table)
     GPIO_InitStructure                       0x20000018   Data           4  sys.o(.data)
     NVIC_InitStructure                       0x2000001c   Data           4  sys.o(.data)
     __stdout                                 0x20000020   Data           4  usart.o(.data)
@@ -2125,9 +2125,9 @@ Memory Map of the image
 
   Image Entry point : 0x080000ed
 
-  Load Region LR_IROM1 (Base: 0x08000000, Size: 0x00004324, Max: 0x00010000, ABSOLUTE)
+  Load Region LR_IROM1 (Base: 0x08000000, Size: 0x00004320, Max: 0x00010000, ABSOLUTE)
 
-    Execution Region ER_IROM1 (Exec base: 0x08000000, Load base: 0x08000000, Size: 0x000042ec, Max: 0x00010000, ABSOLUTE)
+    Execution Region ER_IROM1 (Exec base: 0x08000000, Load base: 0x08000000, Size: 0x000042e8, Max: 0x00010000, ABSOLUTE)
 
     Exec Addr    Load Addr    Size         Type   Attr      Idx    E Section Name        Object
 
@@ -2251,48 +2251,48 @@ Memory Map of the image
     0x080024c8   0x080024c8   0x00000020   Code   RO         4107    i.atk_mb026_init    atk_mb026.o
     0x080024e8   0x080024e8   0x00000050   Code   RO         4108    i.atk_mb026_join_ap  atk_mb026.o
     0x08002538   0x08002538   0x00000058   Code   RO         4111    i.atk_mb026_send_at_cmd  atk_mb026.o
-    0x08002590   0x08002590   0x00000148   Code   RO         4284    i.atk_mb026_uart_init  atk_mb026_uart.o
-    0x080026d8   0x080026d8   0x00000070   Code   RO         4285    i.atk_mb026_uart_printf  atk_mb026_uart.o
-    0x08002748   0x08002748   0x0000002c   Code   RO         4286    i.atk_mb026_uart_rx_get_frame  atk_mb026_uart.o
-    0x08002774   0x08002774   0x0000001c   Code   RO         4288    i.atk_mb026_uart_rx_restart  atk_mb026_uart.o
-    0x08002790   0x08002790   0x00000048   Code   RO         4420    i.check_wifi_status  main.o
-    0x080027d8   0x080027d8   0x000001f8   Code   RO         4421    i.connect_wifi      main.o
-    0x080029d0   0x080029d0   0x00000020   Code   RO         3199    i.delay_init        delay.o
-    0x080029f0   0x080029f0   0x00000054   Code   RO         3200    i.delay_ms          delay.o
-    0x08002a44   0x08002a44   0x0000001c   Code   RO         3375    i.fputc             usart.o
-    0x08002a60   0x08002a60   0x00000104   Code   RO         4422    i.init_wifi_module  main.o
-    0x08002b64   0x08002b64   0x0000024c   Code   RO         4423    i.main              main.o
-    0x08002db0   0x08002db0   0x0000015c   Code   RO         4424    i.ping_server       main.o
-    0x08002f0c   0x08002f0c   0x000005e0   Code   RO         4425    i.send_http_request  main.o
-    0x080034ec   0x080034ec   0x00000208   Code   RO         4426    i.test_baidu_connectivity  main.o
-    0x080036f4   0x080036f4   0x00000440   Code   RO         4427    i.test_server_health  main.o
-    0x08003b34   0x08003b34   0x000000a0   Code   RO         3376    i.usart_init        usart.o
-    0x08003bd4   0x08003bd4   0x000005f0   Data   RO         3582    .constdata          oled.o
-    0x080041c4   0x080041c4   0x00000081   Data   RO         4986    .constdata          mc_w.l(ctype_o.o)
-    0x08004245   0x08004245   0x00000003   PAD
-    0x08004248   0x08004248   0x00000004   Data   RO         4987    .constdata          mc_w.l(ctype_o.o)
-    0x0800424c   0x0800424c   0x0000007d   Data   RO         4428    .conststring        main.o
-    0x080042c9   0x080042c9   0x00000003   PAD
-    0x080042cc   0x080042cc   0x00000020   Data   RO         5026    Region$$Table       anon$$obj.o
+    0x08002590   0x08002590   0x00000144   Code   RO         4284    i.atk_mb026_uart_init  atk_mb026_uart.o
+    0x080026d4   0x080026d4   0x00000070   Code   RO         4285    i.atk_mb026_uart_printf  atk_mb026_uart.o
+    0x08002744   0x08002744   0x0000002c   Code   RO         4286    i.atk_mb026_uart_rx_get_frame  atk_mb026_uart.o
+    0x08002770   0x08002770   0x0000001c   Code   RO         4288    i.atk_mb026_uart_rx_restart  atk_mb026_uart.o
+    0x0800278c   0x0800278c   0x00000048   Code   RO         4420    i.check_wifi_status  main.o
+    0x080027d4   0x080027d4   0x000001f8   Code   RO         4421    i.connect_wifi      main.o
+    0x080029cc   0x080029cc   0x00000020   Code   RO         3199    i.delay_init        delay.o
+    0x080029ec   0x080029ec   0x00000054   Code   RO         3200    i.delay_ms          delay.o
+    0x08002a40   0x08002a40   0x0000001c   Code   RO         3375    i.fputc             usart.o
+    0x08002a5c   0x08002a5c   0x00000104   Code   RO         4422    i.init_wifi_module  main.o
+    0x08002b60   0x08002b60   0x0000024c   Code   RO         4423    i.main              main.o
+    0x08002dac   0x08002dac   0x0000015c   Code   RO         4424    i.ping_server       main.o
+    0x08002f08   0x08002f08   0x000005e0   Code   RO         4425    i.send_http_request  main.o
+    0x080034e8   0x080034e8   0x00000208   Code   RO         4426    i.test_baidu_connectivity  main.o
+    0x080036f0   0x080036f0   0x00000440   Code   RO         4427    i.test_server_health  main.o
+    0x08003b30   0x08003b30   0x000000a0   Code   RO         3376    i.usart_init        usart.o
+    0x08003bd0   0x08003bd0   0x000005f0   Data   RO         3582    .constdata          oled.o
+    0x080041c0   0x080041c0   0x00000081   Data   RO         4986    .constdata          mc_w.l(ctype_o.o)
+    0x08004241   0x08004241   0x00000003   PAD
+    0x08004244   0x08004244   0x00000004   Data   RO         4987    .constdata          mc_w.l(ctype_o.o)
+    0x08004248   0x08004248   0x0000007d   Data   RO         4428    .conststring        main.o
+    0x080042c5   0x080042c5   0x00000003   PAD
+    0x080042c8   0x080042c8   0x00000020   Data   RO         5026    Region$$Table       anon$$obj.o
 
 
-    Execution Region RW_IRAM1 (Exec base: 0x20000000, Load base: 0x080042ec, Size: 0x000006a0, Max: 0x00005000, ABSOLUTE)
+    Execution Region RW_IRAM1 (Exec base: 0x20000000, Load base: 0x080042e8, Size: 0x000006a0, Max: 0x00005000, ABSOLUTE)
 
     Exec Addr    Load Addr    Size         Type   Attr      Idx    E Section Name        Object
 
-    0x20000000   0x080042ec   0x00000014   Data   RW         1805    .data               stm32f10x_rcc.o
-    0x20000014   0x08004300   0x00000004   Data   RW         3202    .data               delay.o
-    0x20000018   0x08004304   0x00000008   Data   RW         3268    .data               sys.o
-    0x20000020   0x0800430c   0x00000007   Data   RW         3378    .data               usart.o
-    0x20000027   0x08004313   0x00000001   PAD
-    0x20000028   0x08004314   0x00000007   Data   RW         4291    .data               atk_mb026_uart.o
-    0x2000002f   0x0800431b   0x00000001   PAD
-    0x20000030   0x0800431c   0x00000006   Data   RW         4429    .data               main.o
-    0x20000036   0x08004322   0x00000002   PAD
+    0x20000000   0x080042e8   0x00000014   Data   RW         1805    .data               stm32f10x_rcc.o
+    0x20000014   0x080042fc   0x00000004   Data   RW         3202    .data               delay.o
+    0x20000018   0x08004300   0x00000008   Data   RW         3268    .data               sys.o
+    0x20000020   0x08004308   0x00000007   Data   RW         3378    .data               usart.o
+    0x20000027   0x0800430f   0x00000001   PAD
+    0x20000028   0x08004310   0x00000007   Data   RW         4291    .data               atk_mb026_uart.o
+    0x2000002f   0x08004317   0x00000001   PAD
+    0x20000030   0x08004318   0x00000006   Data   RW         4429    .data               main.o
+    0x20000036   0x0800431e   0x00000002   PAD
     0x20000038        -       0x00000010   Zero   RW         3267    .bss                sys.o
     0x20000048        -       0x000000c8   Zero   RW         3377    .bss                usart.o
     0x20000110        -       0x0000018a   Zero   RW         4290    .bss                atk_mb026_uart.o
-    0x2000029a   0x08004322   0x00000006   PAD
+    0x2000029a   0x0800431e   0x00000006   PAD
     0x200002a0        -       0x00000400   Zero   RW            1    STACK               startup_stm32f10x_md.o
 
 
@@ -2304,7 +2304,7 @@ Image component sizes
       Code (inc. data)   RO Data    RW Data    ZI Data      Debug   Object Name
 
        700        276          0          0          0       5208   atk_mb026.o
-       856         86          0          7        394       5239   atk_mb026_uart.o
+       852         86          0          7        394       5239   atk_mb026_uart.o
          0          0          0          0          0       4516   core_cm3.o
        116         10          0          4          0       1120   delay.o
         72          6          0          0          0        459   led.o
@@ -2323,7 +2323,7 @@ Image component sizes
        324         40          0          7        200       3557   usart.o
 
     ----------------------------------------------------------------------
-      9660       3632       1916         56       1640     350063   Object Totals
+      9656       3632       1916         56       1640     350063   Object Totals
          0          0         32          0          0          0   (incl. Generated)
         16          0          3          4          6          0   (incl. Padding)
 
@@ -2389,15 +2389,15 @@ Image component sizes
 
       Code (inc. data)   RO Data    RW Data    ZI Data      Debug   
 
-     15080       3776       2052         56       1640     347903   Grand Totals
-     15080       3776       2052         56       1640     347903   ELF Image Totals
-     15080       3776       2052         56          0          0   ROM Totals
+     15076       3776       2052         56       1640     347903   Grand Totals
+     15076       3776       2052         56       1640     347903   ELF Image Totals
+     15076       3776       2052         56          0          0   ROM Totals
 
 ==============================================================================
 
-    Total RO  Size (Code + RO Data)                17132 (  16.73kB)
+    Total RO  Size (Code + RO Data)                17128 (  16.73kB)
     Total RW  Size (RW Data + ZI Data)              1696 (   1.66kB)
-    Total ROM Size (Code + RO Data + RW Data)      17188 (  16.79kB)
+    Total ROM Size (Code + RO Data + RW Data)      17184 (  16.78kB)
 
 ==============================================================================
 
