@@ -1,6 +1,4 @@
 .\objects\dht11.o: Hardware\dht11.c
-.\objects\dht11.o: Hardware\dht11.h
-.\objects\dht11.o: .\System\sys.h
 .\objects\dht11.o: .\Start\stm32f10x.h
 .\objects\dht11.o: .\Start\core_cm3.h
 .\objects\dht11.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdint.h
@@ -31,7 +29,4 @@
 .\objects\dht11.o: .\Library\stm32f10x_wwdg.h
 .\objects\dht11.o: .\Library\misc.h
 .\objects\dht11.o: .\System\Delay.h
-.\objects\dht11.o: Hardware\atk_mb026_uart.h
-.\objects\dht11.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdarg.h
-.\objects\dht11.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
-.\objects\dht11.o: D:\Program Files\ARM\ARMCC\Bin\..\include\string.h
+.\objects\dht11.o: .\System\sys.h

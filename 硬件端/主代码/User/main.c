@@ -9,6 +9,11 @@
 #include "../Hardware/RELAY/relay.h"
 #include "../Hardware/TOUCH_KEY/touch_key.h"
 #include "../Hardware/OLED.h"
+#include "../Hardware/dht11.h"
+#include "../Hardware/LightSensor.h"
+#include "../Hardware/RS485.h"
+#include "../Hardware/SoilSensor.h"
+#include "../Hardware/ServerComm.h"
 #include <stdio.h>
 
 // 全局变量
@@ -23,10 +28,7 @@ uint8_t g_server_connected = 0; // 服务器连接状态标志
 #define SERVER_TEST_COUNT 3     // 服务器测试次数
 #define BAIDU_PING_INTERVAL 30000 // 百度Ping测试间隔(ms)
 
-// 服务器信息
-#define SERVER_URL "subfastigiated-avis-unreplevinable.ngrok-free.dev"
-#define SERVER_PORT "80"
-#define SERVER_PATH "/api/monitor/health"
+// 服务器信息 - 已移至ServerComm.h中定义
 
 /**
  * @brief 检查WiFi连接状态
@@ -55,30 +57,21 @@ uint8_t init_wifi_module(void)
     uint8_t ret = 0;
     
     printf("[System] 初始化WiFi模块...\r\n");
+    OLED_ShowString(1, 1, "  System Init");
+    OLED_ShowString(2, 1, "  WiFi Module");
     
-    // 测试串口是否正常
-    printf("[System] 测试串口通信...\r\n");
-    atk_mb026_uart_printf("AT\r\n");
-    delay_ms(500);
-    
-    // 尝试初始化WiFi模块
-    ret = atk_mb026_init(115200);
-    if (ret == ATK_MB026_EOK) {
+    if (atk_mb026_init(115200) == 0) {
         printf("[System] WiFi模块初始化成功\r\n");
-        return 1;
+        OLED_ShowString(2, 1, "  Init: OK");
+        ret = 1;
     } else {
-        printf("[System] WiFi模块初始化失败，错误码: %d\r\n", ret);
-        
-        // 额外的调试信息
-        printf("[System] 检查以下几点:\r\n");
-        printf("[System] 1. WiFi模块硬件连接是否正确\r\n");
-        printf("[System] 2. 串口引脚(GPIOA2/GPIOA3)连接是否正确\r\n");
-        printf("[System] 3. WiFi模块电源是否稳定\r\n");
-        printf("[System] 4. 波特率设置是否正确(115200)\r\n");
-        return 0;
+        printf("[System] WiFi模块初始化失败\r\n");
+        OLED_ShowString(2, 1, "  Init: Failed");
+        ret = 0;
     }
+    
+    return ret;
 }
-
 /**
  * @brief 连接WiFi网络
  * @return 1: 成功, 0: 失败
@@ -451,12 +444,18 @@ int main(void)
 	LED_Init();                  // 初始化LED
 	OLED_Init();                 // 初始化OLED
 	RELAY_Init();                // 初始化继电器
-	TOUCH_KEY_Init();            // 初始化触摸按键
-	TOUCH_KEY_EXTI_Init();       // 初始化触摸按键外部中断
+	DHT11_Init();                // 初始化温湿度传感器
+	LightSensor_Init();          // 初始化光照传感器
+//	TOUCH_KEY_Init();            // 初始化触摸按键
+//	TOUCH_KEY_EXTI_Init();       // 初始化触摸按键外部中断
+	RS485_Init();                // 初始化RS485通信（包含USART3初始化，波特率4800）
 	
 	// 初始化WiFi模块的串口
 	atk_mb026_uart_init(115200);
 	printf("[System] WiFi模块串口初始化成功\r\n");
+	
+	// 初始化服务器通信模块
+	ServerComm_Init();
 	
 	// 清屏
 	OLED_Clear();
@@ -563,6 +562,77 @@ int main(void)
 		// 定期测试百度连接
 		if (timecount % BAIDU_PING_INTERVAL == 0) {
 			test_baidu_connectivity();
+		}
+		
+		// 每2分钟读取一次传感器数据并发送到服务器
+		if (timecount % 120000 == 0) {
+			// 读取温湿度数据
+			if (DHT11_ReadData() == 0) {
+				uint8_t temp = DHT11_GetTemperature();
+				uint8_t humi = DHT11_GetHumidity();
+				// 读取光照数据
+				uint16_t light_raw = LightSensor_Read();
+				uint8_t light_percent = LightSensor_GetPercentage();
+				// 读取土壤传感器数据
+				float soil_moisture = 0;
+				float soil_temp = 0;
+				uint16_t soil_ec = 0;
+				float soil_ph = 0;
+				uint8_t soil_status = SoilSensor_ReadData(&soil_moisture, &soil_temp, &soil_ec, &soil_ph);
+				
+				// 在串口助手上显示数据
+				if (soil_status == 0) {
+					printf("[Sensor] 温度: %d°C, 湿度: %d%%, 光照: %d (%.1f%%), 土壤湿度: %.1f%%, 土壤温度: %.1f°C, 电导率: %dμS/cm, PH值: %.1f\r\n", 
+						temp, humi, light_raw, (float)light_percent, soil_moisture, soil_temp, soil_ec, soil_ph);
+				} else {
+					printf("[Sensor] 温度: %d°C, 湿度: %d%%, 光照: %d (%.1f%%), 土壤数据: N/A\r\n", 
+						temp, humi, light_raw, (float)light_percent);
+				}
+				
+				// 发送数据到服务器
+				if (g_wifi_connected) {
+					// 发送空气温度数据
+					ServerComm_SendSensorData(SENSOR_ID_TEMPERATURE, temp);
+					delay_ms(500);
+					
+					// 发送空气湿度数据
+					ServerComm_SendSensorData(SENSOR_ID_HUMIDITY, humi);
+					delay_ms(500);
+					
+					// 发送光照数据
+					ServerComm_SendSensorData(SENSOR_ID_LIGHT, light_percent);
+					delay_ms(500);
+					
+					// 发送土壤数据
+					if (soil_status == 0) {
+						// 发送土壤湿度数据
+						ServerComm_SendSensorData(SENSOR_ID_SOIL_MOISTURE, soil_moisture);
+						delay_ms(500);
+						
+						// 发送土壤温度数据
+						ServerComm_SendSensorData(SENSOR_ID_SOIL_TEMPERATURE, soil_temp);
+						delay_ms(500);
+					}
+				}
+				
+				// 在OLED上显示数据
+				OLED_Clear();
+				OLED_ShowString(1, 1, "  Sensor Data");
+				char buf[20];
+				sprintf(buf, "  Temp: %d", temp);
+				OLED_ShowString(2, 1, buf);
+				sprintf(buf, "  Humi: %d%%", humi);
+				OLED_ShowString(3, 1, buf);
+				if (soil_status == 0) {
+					sprintf(buf, "  Soil: %.1f%%", soil_moisture);
+					OLED_ShowString(4, 1, buf);
+				} else {
+					sprintf(buf, "  Light: %d%%", light_percent);
+					OLED_ShowString(4, 1, buf);
+				}
+			} else {
+				printf("[Sensor] 温湿度传感器读取失败\r\n");
+			}
 		}
 		
 		delay_ms(1);

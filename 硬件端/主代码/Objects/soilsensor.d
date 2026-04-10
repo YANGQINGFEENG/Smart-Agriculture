@@ -32,5 +32,6 @@
 .\objects\soilsensor.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdarg.h
 .\objects\soilsensor.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\soilsensor.o: D:\Program Files\ARM\ARMCC\Bin\..\include\string.h
+.\objects\soilsensor.o: Hardware\SoilSensor.h
 .\objects\soilsensor.o: Hardware\../System/Delay.h
 .\objects\soilsensor.o: Hardware\../System/sys.h

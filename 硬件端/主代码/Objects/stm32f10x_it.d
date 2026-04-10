@@ -29,3 +29,7 @@
 .\objects\stm32f10x_it.o: .\Library\stm32f10x_usart.h
 .\objects\stm32f10x_it.o: .\Library\stm32f10x_wwdg.h
 .\objects\stm32f10x_it.o: .\Library\misc.h
+.\objects\stm32f10x_it.o: .\Hardware\RS485.h
+.\objects\stm32f10x_it.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdarg.h
+.\objects\stm32f10x_it.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
+.\objects\stm32f10x_it.o: D:\Program Files\ARM\ARMCC\Bin\..\include\string.h

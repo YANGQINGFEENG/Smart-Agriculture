@@ -162,8 +162,9 @@ void USART1_IRQHandler(void)
             }
         }
     }
+    
+    /* 移除对ATK_MB026_USART1_IRQHandler的调用，因为WiFi模块现在使用USART2 */
+    // extern void ATK_MB026_USART1_IRQHandler(void);
+    // ATK_MB026_USART1_IRQHandler();
 }
-
-
-
 

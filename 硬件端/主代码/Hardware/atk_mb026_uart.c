@@ -129,23 +129,38 @@ void atk_mb026_uart_init(uint32_t baudrate)
     USART_InitTypeDef USART_InitStructure;
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
     
-    // 1. �����
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2 | RCC_APB1Periph_TIM3, ENABLE);
+    printf("[Serial Init] 开始初始化WiFi模块串口...\r\n");
+    printf("[Serial Init] 目标串口: USART2\r\n");
+    printf("[Serial Init] 波特率: %lu\r\n", baudrate);
+    printf("[Serial Init] TX引脚: PA2\r\n");
+    printf("[Serial Init] RX引脚: PA3\r\n");
     
-    // 2. ����USART2���� (PA2: TX, PA3: RX)
+    // 1. ������细打印时钟配置
+    printf("[Serial Init] 1. 配置时钟...\r\n");
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2 | RCC_APB1Periph_TIM2, ENABLE);
+    printf("[Serial Init]  - GPIOA时钟: 已启用\r\n");
+    printf("[Serial Init]  - AFIO时钟: 已启用\r\n");
+    printf("[Serial Init]  - USART2时钟: 已启用\r\n");
+    printf("[Serial Init]  - TIM2时钟: 已启用\r\n");
+    
+    // 2. ����USART2���筨细打印引脚配置
+    printf("[Serial Init] 2. 配置引脚...\r\n");
     // TX��������
     GPIO_InitStructure.GPIO_Pin = ATK_MB026_UART_TX_GPIO_PIN;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(ATK_MB026_UART_TX_GPIO_PORT, &GPIO_InitStructure);
+    printf("[Serial Init]  - TX引脚(PA2): 复用推挽输出，50MHz\r\n");
     
     // RX��������
     GPIO_InitStructure.GPIO_Pin = ATK_MB026_UART_RX_GPIO_PIN;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
     GPIO_Init(ATK_MB026_UART_RX_GPIO_PORT, &GPIO_InitStructure);
+    printf("[Serial Init]  - RX引脚(PA3): 浮空输入\r\n");
     
-    // 3. ����USART2�跽
+    // 3. ����USART2�跽��细打印串口配置
+    printf("[Serial Init] 3. 配置串口参数...\r\n");
     USART_InitStructure.USART_BaudRate = baudrate;
     USART_InitStructure.USART_WordLength = USART_WordLength_8b;
     USART_InitStructure.USART_StopBits = USART_StopBits_1;
@@ -153,45 +168,70 @@ void atk_mb026_uart_init(uint32_t baudrate)
     USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
     USART_InitStructure.USART_Mode = USART_Mode_Tx | USART_Mode_Rx;
     USART_Init(ATK_MB026_UART_INTERFACE, &USART_InitStructure);
+    printf("[Serial Init]  - 波特率: %lu\r\n", baudrate);
+    printf("[Serial Init]  - 数据位: 8位\r\n");
+    printf("[Serial Init]  - 停止位: 1位\r\n");
+    printf("[Serial Init]  - 校验位: 无\r\n");
+    printf("[Serial Init]  - 流控制: 无\r\n");
+    printf("[Serial Init]  - 模式: 收发模式\r\n");
     
-    // 4. ����USART2��H
+    // 4. ����USART2��H��细打印中断配置
+    printf("[Serial Init] 4. 配置中断...\r\n");
     NVIC_InitStructure.NVIC_IRQChannel = ATK_MB026_UART_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
+    printf("[Serial Init]  - USART2中断: 已启用\r\n");
+    printf("[Serial Init]  - 中断处理函数: USART2_IRQHandler\r\n");
+    printf("[Serial Init]  - 抢占优先级: 1\r\n");
+    printf("[Serial Init]  - 子优先级: 1\r\n");
     
     // 5. ��USART2���x��H
     USART_ITConfig(ATK_MB026_UART_INTERFACE, USART_IT_RXNE, ENABLE);
+    printf("[Serial Init] 5. 启用接收中断: 已启用\r\n");
     
     // 6. ��USART2
     USART_Cmd(ATK_MB026_UART_INTERFACE, ENABLE);
+    printf("[Serial Init] 6. 启用USART2: 已启用\r\n");
     
-    // 7. 配置TIM3定时器，用于UART接收超时检测
+    // 7. 配置TIM2定时器，用于UART接收超时检测
+    printf("[Serial Init] 7. 配置TIM2定时器...\r\n");
     // 增加超时时间到200ms（原来约83ms）
     TIM_TimeBaseStructure.TIM_Period = 240 - 1;  // 240 * (1/1200) = 200ms
     TIM_TimeBaseStructure.TIM_Prescaler = ATK_MB026_TIM_PRESCALER - 1;  // 72MHz/60000 = 1200Hz
     TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
     TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
     TIM_TimeBaseInit(ATK_MB026_TIM_INTERFACE, &TIM_TimeBaseStructure);
+    printf("[Serial Init]  - 定时器: TIM2\r\n");
+    printf("[Serial Init]  - 预分频器: %d\r\n", ATK_MB026_TIM_PRESCALER - 1);
+    printf("[Serial Init]  - 自动重装载值: 239\r\n");
+    printf("[Serial Init]  - 超时时间: 200ms\r\n");
     
-    // 8. 配置TIM3中断
+    // 8. 配置TIM2中断
     NVIC_InitStructure.NVIC_IRQChannel = ATK_MB026_TIM_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
     NVIC_Init(&NVIC_InitStructure);
     TIM_ITConfig(ATK_MB026_TIM_INTERFACE, TIM_IT_Update, ENABLE);
+    printf("[Serial Init] 8. 配置TIM2中断: 已启用\r\n");
+    printf("[Serial Init]  - 抢占优先级: 2\r\n");
+    printf("[Serial Init]  - 子优先级: 1\r\n");
     
     // 注意：不要在初始化时启用TIM2，应该在接收到第一个字节时再启用
     // TIM_Cmd(TIM2, ENABLE);  // 移除此行
 
 		
 		
-    // ����ɹ�������ӳ�
+    // ����ɹ�������ӳ��细打印初始化完成
     g_sta.len = 0;
     g_sta.finsh = 0;
     tx_head = 0;
     tx_tail = 0;
+    printf("[Serial Init] 9. 初始化缓冲区...\r\n");
+    printf("[Serial Init]  - 接收缓冲区: 已清空\r\n");
+    printf("[Serial Init]  - 发送缓冲区: 已清空\r\n");
+    printf("[Serial Init] WiFi模块串口初始化完成！\r\n\r\n");
 }
 
 
@@ -215,17 +255,17 @@ void USART2_IRQHandler(void)
     {
         tmp = USART_ReceiveData(USART2);
         
-        /* 注意：不要在中断中调用printf，会导致通过USART1发送时阻塞等待，引发死锁 */
+        /* 注意：不要在中断中调用printf，会导致通过USART2发送时阻塞等待，引发死锁 */
         
         /* 处理接收缓冲区 */
         if (g_sta.len < (ATK_MB026_UART_RX_BUF_SIZE - 1))
         {
-            TIM_SetCounter(TIM3, 0); // 重置定时器计数
+            TIM_SetCounter(TIM2, 0); // 重置定时器计数
             
             /* 如果是第一个字节，开启定时器 */
             if (g_sta.len == 0)
             {
-                TIM_Cmd(TIM3, ENABLE);
+                TIM_Cmd(TIM2, ENABLE);
             }
             
             /* 存储接收到的字节 */
@@ -259,18 +299,18 @@ void USART2_IRQHandler(void)
 }
 
 /**
- * @brief TIM3�жϷ�����
+ * @brief TIM2�жϷ�����
  * @note ����UART���ճ�ʱ
  */
-void TIM3_IRQHandler(void)
+void TIM2_IRQHandler(void)
 {
-    if (TIM_GetITStatus(TIM3, TIM_IT_Update) != RESET)
+    if (TIM_GetITStatus(TIM2, TIM_IT_Update) != RESET)
     {
         /* 清除中断标志 */
-        TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
+        TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
         
         /* 关闭定时器 */
-        TIM_Cmd(TIM3, DISABLE);
+        TIM_Cmd(TIM2, DISABLE);
         
         /* 设置帧接收完成标志 */
         g_sta.finsh = 1;

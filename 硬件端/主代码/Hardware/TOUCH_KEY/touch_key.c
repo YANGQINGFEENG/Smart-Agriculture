@@ -4,6 +4,9 @@
 #include "../Hardware/OLED.h"
 #include <stdio.h>
 
+// 声明函数原型
+void SoilSensor_PrintReceivedData(void);
+
 // 触摸按键状态变量
 volatile uint8_t touch_key_status = 0; // 0-无按键，1-A，2-B，3-C，4-D
 

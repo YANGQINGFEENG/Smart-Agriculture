@@ -5,7 +5,7 @@ REM 作者：STM32开发团队
 REM 日期：2026-02-05
 
 REM 定义Keil MDK路径
-set UV4_PATH="D:\Program Files\UV4\uv4.exe"
+set UV4_PATH="E:\keil_v5\UV4\UV4.exe"
 
 REM 定义项目文件路径
 set PROJECT_FILE="Project.uvprojx"

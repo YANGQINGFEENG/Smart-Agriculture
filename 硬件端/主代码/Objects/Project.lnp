@@ -51,6 +51,8 @@
 ".\objects\serial2.o"
 ".\objects\rs485.o"
 ".\objects\soilsensor.o"
+".\objects\lightsensor.o"
+".\objects\servercomm.o"
 ".\objects\main.o"
 ".\objects\stm32f10x_it.o"
 ".\objects\demo.o"

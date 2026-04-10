@@ -23,6 +23,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f10x_it.h"
+#include "RS485.h"
 
 /** @addtogroup STM32F10x_StdPeriph_Template
   * @{
@@ -154,7 +155,42 @@ void SysTick_Handler(void)
   */
 /*void PPP_IRQHandler(void)
 {
-}*/
+}
+*/
+
+/**
+  * @brief  This function handles USART3 global interrupt request.
+  * @param  None
+  * @retval None
+  */
+void USART3_IRQHandler(void)
+{
+    uint8_t recv_data;
+    
+    /* 处理接收中断 */
+    if (USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)
+    {
+        /* 读取接收到的数据 */
+        recv_data = USART_ReceiveData(USART3);
+        
+        /* 将数据存储到接收缓冲区 */
+        if ((USART3_RX_STA & 0x3FFF) < USART3_REC_LEN)
+        {
+            USART3_RX_BUF[USART3_RX_STA & 0x3FFF] = recv_data;
+            USART3_RX_STA++;
+        }
+        
+        /* 清除中断标志 */
+        USART_ClearITPendingBit(USART3, USART_IT_RXNE);
+    }
+    
+    /* 处理其他中断 */
+    if (USART_GetITStatus(USART3, USART_IT_ORE) != RESET)
+    {
+        USART_ClearITPendingBit(USART3, USART_IT_ORE);
+        (void)USART_ReceiveData(USART3);
+    }
+}
 
 /**
   * @}

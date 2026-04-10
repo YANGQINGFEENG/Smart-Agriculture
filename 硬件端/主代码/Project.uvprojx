@@ -923,6 +923,26 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\SoilSensor.h</FilePath>
             </File>
+            <File>
+              <FileName>LightSensor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\LightSensor.c</FilePath>
+            </File>
+            <File>
+              <FileName>LightSensor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\LightSensor.h</FilePath>
+            </File>
+            <File>
+              <FileName>ServerComm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\ServerComm.c</FilePath>
+            </File>
+            <File>
+              <FileName>ServerComm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\ServerComm.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

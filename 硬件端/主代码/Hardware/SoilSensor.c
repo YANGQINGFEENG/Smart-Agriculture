@@ -1,5 +1,6 @@
 #include "stm32f10x.h"
 #include "RS485.h"
+#include "SoilSensor.h"
 #include "../System/Delay.h"
 
 #define SOIL_SENSOR_ADDR 0x01 // 土壤传感器地址
@@ -50,6 +51,22 @@ uint8_t SoilSensor_VerifyCRC16(uint8_t *data, uint8_t length)
 	uint16_t calculated_crc = SoilSensor_CalculateCRC16(data, length - 2);
 	
 	return (received_crc == calculated_crc) ? 0 : 1;
+}
+
+/**
+ * @brief 打印接收到的数据
+ * @param 无
+ * @retval 无
+ */
+void SoilSensor_PrintReceivedData(void)
+{
+	// 实现打印接收到的数据的功能
+	printf("[Soil Sensor] 接收到的数据：");
+	for (uint16_t i = 0; i < (USART3_RX_STA & 0x3FFF); i++)
+	{
+		printf("%02X ", USART3_RX_BUF[i]);
+	}
+	printf("\r\n");
 }
 
 /**
@@ -148,4 +165,3 @@ uint8_t SoilSensor_ReadData(float *moisture, float *temperature, uint16_t *ec, f
 	
 	return 0; // 成功
 }
-
