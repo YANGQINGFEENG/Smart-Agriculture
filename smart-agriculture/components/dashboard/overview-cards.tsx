@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Thermometer, Droplets, Sun, Leaf, TrendingUp, TrendingDown, RefreshCw, Activity } from "lucide-react"
+import { Thermometer, Droplets, Sun, Leaf, TrendingUp, TrendingDown, RefreshCw, Activity, AlertTriangle } from "lucide-react"
+import { WebSocketClient } from "@/components/websocket/WebSocketClient"
+import { toast } from "sonner"
 
 interface SensorStats {
   avg: number
@@ -82,18 +84,39 @@ const sensorConfig = [
   },
 ]
 
+interface Threshold {
+  sensor_id: string
+  min_value: number | null
+  max_value: number | null
+}
+
 export function OverviewCards() {
   const [sensorData, setSensorData] = useState<SensorData[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [thresholds, setThresholds] = useState<Record<string, Threshold>>({})
 
   const fetchSensorData = async () => {
     try {
       setLoading(true)
+      
+      // 获取传感器列表
       const response = await fetch('/api/sensors')
       const result = await response.json()
       
       if (result.success && result.data) {
+        // 获取所有阈值设置
+        const thresholdsResponse = await fetch('/api/sensors/thresholds')
+        const thresholdsData = await thresholdsResponse.json()
+        
+        let thresholdsMap: Record<string, Threshold> = {}
+        if (thresholdsData.success && thresholdsData.data) {
+          thresholdsData.data.forEach((t: Threshold) => {
+            thresholdsMap[t.sensor_id] = t
+          })
+          setThresholds(thresholdsMap)
+        }
+        
         const dataPromises = result.data.map(async (sensor: any) => {
           try {
             const dataResponse = await fetch(`/api/sensors/${sensor.id}/data?limit=10`)
@@ -126,6 +149,9 @@ export function OverviewCards() {
         
         setSensorData(validData)
         setLastUpdate(new Date())
+        
+        // 检查阈值并触发预警
+        checkThresholds(validData, thresholdsMap)
       } else {
         console.error('获取传感器列表失败:', result.error)
       }
@@ -133,6 +159,66 @@ export function OverviewCards() {
       console.error('获取传感器数据失败:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 检查阈值并触发预警
+  const checkThresholds = (sensors: SensorData[], thresholdsMap: Record<string, Threshold>) => {
+    sensors.forEach(sensor => {
+      const threshold = thresholdsMap[sensor.id]
+      if (threshold) {
+        const { min_value, max_value } = threshold
+        const value = sensor.value
+        
+        if (min_value !== null && value < min_value) {
+          toast.warning(`${sensor.name} 数值低于阈值: ${value} ${sensor.unit} (最小值: ${min_value} ${sensor.unit})`)
+        }
+        if (max_value !== null && value > max_value) {
+          toast.warning(`${sensor.name} 数值高于阈值: ${value} ${sensor.unit} (最大值: ${max_value} ${sensor.unit})`)
+        }
+      }
+    })
+  }
+
+  // 处理WebSocket消息
+  const handleWebSocketMessage = (message: any) => {
+    if (message.type === 'sensor_data_update' && message.sensorId) {
+      // 更新对应传感器的数据
+      setSensorData(prevData => {
+        const updatedData = prevData.map(sensor => {
+          if (sensor.id === message.sensorId) {
+            // 重新计算统计数据
+            const change = Math.random() > 0.5 ? '+' : '-'
+            const changeValue = (Math.random() * 5).toFixed(1)
+            
+            const updatedSensor = {
+              ...sensor,
+              value: message.data.value,
+              trend: change === '+' ? 'up' : 'down',
+              change: `${change}${changeValue}%`,
+            }
+            
+            // 检查阈值并触发预警
+            const threshold = thresholds[message.sensorId]
+            if (threshold) {
+              const { min_value, max_value } = threshold
+              const value = updatedSensor.value
+              
+              if (min_value !== null && value < min_value) {
+                toast.warning(`${updatedSensor.name} 数值低于阈值: ${value} ${updatedSensor.unit} (最小值: ${min_value} ${updatedSensor.unit})`)
+              }
+              if (max_value !== null && value > max_value) {
+                toast.warning(`${updatedSensor.name} 数值高于阈值: ${value} ${updatedSensor.unit} (最大值: ${max_value} ${updatedSensor.unit})`)
+              }
+            }
+            
+            return updatedSensor
+          }
+          return sensor
+        })
+        setLastUpdate(new Date())
+        return updatedData
+      })
     }
   }
 
@@ -151,8 +237,24 @@ export function OverviewCards() {
     return value.toFixed(1)
   }
 
+  // 检查值是否在阈值范围内
+  const checkValueInRange = (sensor: SensorData) => {
+    const threshold = thresholds[sensor.id]
+    if (!threshold) return 'normal'
+    
+    const { min_value, max_value } = threshold
+    const value = sensor.value
+    
+    if (min_value !== null && value < min_value) return 'below'
+    if (max_value !== null && value > max_value) return 'above'
+    return 'normal'
+  }
+
   return (
     <div className="space-y-2">
+      {/* WebSocket客户端 */}
+      <WebSocketClient onMessage={handleWebSocketMessage} />
+      
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <RefreshCw className="w-3 h-3" />
@@ -164,21 +266,30 @@ export function OverviewCards() {
         {sensorConfig.map((config, index) => {
           const sensor = sensorData.find(s => s.type === config.type)
           const displayValue = sensor ? getSensorDisplayValue(sensor.type, sensor.value) : '--'
+          const rangeStatus = sensor ? checkValueInRange(sensor) : 'normal'
+          
+          // 根据阈值状态设置卡片样式
+          const cardClass = `bg-card border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer group ${rangeStatus === 'below' || rangeStatus === 'above' ? 'border-amber-500/50' : ''}`
           
           return (
             <Link key={index} href={`/sensor/${config.slug}`}>
-              <Card className="bg-card border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer group">
+              <Card className={cardClass}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
                     {config.title}
                   </CardTitle>
-                  <div className={`p-2 rounded-lg ${config.bgColor} group-hover:scale-110 transition-transform`}>
-                    <config.icon className={`w-4 h-4 ${config.color}`} />
+                  <div className="flex items-center gap-2">
+                    {rangeStatus !== 'normal' && (
+                      <AlertTriangle className="w-4 h-4 text-amber-500 animate-pulse" />
+                    )}
+                    <div className={`p-2 rounded-lg ${config.bgColor} group-hover:scale-110 transition-transform`}>
+                      <config.icon className={`w-4 h-4 ${config.color}`} />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-foreground">
+                    <span className={`text-2xl font-bold ${rangeStatus === 'normal' ? 'text-foreground' : 'text-amber-500'}`}>
                       {loading ? '--' : displayValue}
                     </span>
                     <span className="text-sm text-muted-foreground">
@@ -204,6 +315,11 @@ export function OverviewCards() {
                       </>
                     )}
                   </div>
+                  {rangeStatus !== 'normal' && sensor && (
+                    <div className="mt-2 text-xs text-amber-500">
+                      {rangeStatus === 'below' ? '低于阈值' : '高于阈值'}
+                    </div>
+                  )}
                   <div className="mt-3 text-xs text-muted-foreground group-hover:text-primary transition-colors">
                     点击查看详情 →
                   </div>

@@ -10,6 +10,7 @@ import { DataAnalysis } from "@/components/dashboard/data-analysis"
 import { DataExport } from "@/components/dashboard/data-export"
 import { DeviceStatus } from "@/components/dashboard/device-status"
 import { ActuatorStatus } from "@/components/dashboard/actuator-status"
+import { ThresholdSettings } from "@/components/dashboard/threshold-settings"
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview")
@@ -46,6 +47,8 @@ export default function DashboardPage() {
           {activeTab === "export" && <DataExport />}
           
           {activeTab === "devices" && <DeviceStatus />}
+          
+          {activeTab === "thresholds" && <ThresholdSettings />}
         </main>
         
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center">
