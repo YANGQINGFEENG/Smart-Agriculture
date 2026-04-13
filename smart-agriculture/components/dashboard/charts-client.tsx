@@ -103,7 +103,7 @@ export function ChartsClient() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="bg-card border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-foreground flex items-center justify-between">
@@ -126,7 +126,7 @@ export function ChartsClient() {
                 }}
                 className="h-[200px] w-full"
               >
-                <AreaChart data={temperatureData} width={500} height={200}>
+                <AreaChart data={temperatureData} width="100%" height={200}>
                   <defs>
                     <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="var(--color-chart-4)" stopOpacity={0.3} />
@@ -153,6 +153,8 @@ export function ChartsClient() {
                     stroke="var(--color-chart-4)"
                     strokeWidth={2}
                     fill="url(#tempGradient)"
+                    animationDuration={1500}
+                    animationEasing="ease-in-out"
                   />
                 </AreaChart>
               </ChartContainer>
@@ -195,7 +197,7 @@ export function ChartsClient() {
                 }}
                 className="h-[200px] w-full"
               >
-                <LineChart data={humidityData} width={500} height={200}>
+                <LineChart data={humidityData} width="100%" height={200}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                   <XAxis
                     dataKey="time"
@@ -216,6 +218,8 @@ export function ChartsClient() {
                     stroke="var(--color-chart-2)"
                     strokeWidth={2}
                     dot={false}
+                    animationDuration={1500}
+                    animationEasing="ease-in-out"
                   />
                   <Line
                     type="monotone"
@@ -223,6 +227,8 @@ export function ChartsClient() {
                     stroke="var(--color-primary)"
                     strokeWidth={2}
                     dot={false}
+                    animationDuration={1500}
+                    animationEasing="ease-in-out"
                   />
                 </LineChart>
               </ChartContainer>
@@ -230,7 +236,7 @@ export function ChartsClient() {
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border lg:col-span-2">
+        <Card className="bg-card border-border md:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-foreground flex items-center justify-between">
               本周数据汇总
@@ -260,7 +266,7 @@ export function ChartsClient() {
               }}
               className="h-[200px] w-full"
             >
-              <BarChart data={weeklyData} width={1000} height={200}>
+              <BarChart data={weeklyData} width="100%" height={200}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                 <XAxis
                   dataKey="day"
@@ -274,8 +280,8 @@ export function ChartsClient() {
                   tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
                 />
                 <Tooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="temperature" fill="var(--color-chart-4)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="humidity" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="temperature" fill="var(--color-chart-4)" radius={[4, 4, 0, 0]} animationDuration={1500} animationEasing="ease-in-out" />
+                <Bar dataKey="humidity" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} animationDuration={1500} animationEasing="ease-in-out" />
               </BarChart>
             </ChartContainer>
           </CardContent>

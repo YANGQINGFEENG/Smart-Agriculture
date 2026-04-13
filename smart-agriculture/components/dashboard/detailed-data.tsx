@@ -46,6 +46,7 @@ interface TableData {
   type: string
   type_name: string
   value: string
+  valueColor: string
   location: string
   time: string
   status: string
@@ -98,12 +99,33 @@ export function DetailedData() {
             }
           }
           
+          const getValueColor = (value: number, type: string): string => {
+            if (type === 'temperature') {
+              if (value > 30) return 'text-chart-4';
+              if (value < 10) return 'text-chart-2';
+              return 'text-foreground';
+            } else if (type === 'humidity' || type === 'soil') {
+              if (value > 80) return 'text-chart-4';
+              if (value < 30) return 'text-chart-4';
+              return 'text-foreground';
+            } else if (type === 'light') {
+              if (value > 10000) return 'text-chart-3';
+              if (value < 1000) return 'text-chart-2';
+              return 'text-foreground';
+            } else if (type === 'ph') {
+              if (value > 7.5 || value < 5.5) return 'text-chart-4';
+              return 'text-foreground';
+            }
+            return 'text-foreground';
+          };
+
           return {
             id: sensor.id,
             name: sensor.name,
             type: sensor.type,
             type_name: sensor.type_name,
             value: latestData ? formatValue(latestData.value, sensor.type) : '--',
+            valueColor: latestData ? getValueColor(latestData.value, sensor.type) : 'text-muted-foreground',
             location: sensor.location,
             time: latestData 
               ? new Date(latestData.timestamp).toLocaleString('zh-CN')
@@ -230,23 +252,32 @@ export function DetailedData() {
                           {getTypeLabel(item.type)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium text-foreground">{item.value}</TableCell>
+                      <TableCell className={`font-medium ${item.valueColor}`}>{item.value}</TableCell>
                       <TableCell className="text-muted-foreground">{item.location}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{item.time}</TableCell>
                       <TableCell>
-                        <Badge
-                          className={
-                            item.status === "正常"
-                              ? "bg-primary/20 text-primary hover:bg-primary/30"
-                              : item.status === "延迟"
-                              ? "bg-chart-3/20 text-chart-3 hover:bg-chart-3/30"
-                              : item.status === "异常"
-                              ? "bg-chart-4/20 text-chart-4 hover:bg-chart-4/30"
-                              : "bg-destructive/20 text-destructive hover:bg-destructive/30"
-                          }
-                        >
-                          {item.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <div className={`
+                            w-2 h-2 rounded-full
+                            ${item.status === "正常" ? "bg-primary" :
+                              item.status === "延迟" ? "bg-chart-3" :
+                              item.status === "异常" ? "bg-chart-4" :
+                              "bg-destructive"}
+                          `} />
+                          <Badge
+                            className={
+                              item.status === "正常"
+                                ? "bg-primary/20 text-primary hover:bg-primary/30"
+                                : item.status === "延迟"
+                                ? "bg-chart-3/20 text-chart-3 hover:bg-chart-3/30"
+                                : item.status === "异常"
+                                ? "bg-chart-4/20 text-chart-4 hover:bg-chart-4/30"
+                                : "bg-destructive/20 text-destructive hover:bg-destructive/30"
+                            }
+                          >
+                            {item.status}
+                          </Badge>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -237,8 +237,8 @@ export function ActuatorStatus() {
                 <span className="text-3xl font-bold text-primary">{onlineCount}</span>
                 <span className="text-xs text-muted-foreground mt-1">在线设备</span>
               </div>
-              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                <span className="text-3xl font-bold text-green-500">{onCount}</span>
+              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-accent/10 border border-accent/30">
+                <span className="text-3xl font-bold text-accent-foreground">{onCount}</span>
                 <span className="text-xs text-muted-foreground mt-1">运行中</span>
               </div>
               <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/50 border border-border">
@@ -260,7 +260,7 @@ export function ActuatorStatus() {
                     className={`
                       relative p-5 rounded-xl border-2 transition-all duration-300
                       ${isOn 
-                        ? 'bg-green-500/10 border-green-500 shadow-lg shadow-green-500/20' 
+                        ? 'bg-accent/10 border-accent shadow-lg shadow-accent/20' 
                         : 'bg-muted/30 border-border hover:border-primary/50'
                       }
                       ${isUpdating ? 'opacity-75' : ''}
@@ -271,14 +271,14 @@ export function ActuatorStatus() {
                         <div className={`
                           p-3 rounded-xl transition-all duration-300
                           ${isOn 
-                            ? 'bg-green-500/30 shadow-lg shadow-green-500/30' 
+                            ? 'bg-accent/30 shadow-lg shadow-accent/30' 
                             : 'bg-muted'
                           }
                         `}>
                           <Icon className={`
                             w-6 h-6 transition-all duration-300
                             ${isOn 
-                              ? 'text-green-500 animate-pulse' 
+                              ? 'text-accent-foreground animate-pulse' 
                               : 'text-muted-foreground'
                             }
                           `} />
@@ -290,11 +290,11 @@ export function ActuatorStatus() {
                               {actuator.name}
                             </p>
                             {isOnline ? (
-                              <Badge className="bg-green-500/20 text-green-600 text-xs border border-green-500/30">
+                              <Badge className="bg-primary/20 text-primary text-xs border border-primary/30">
                                 在线
                               </Badge>
                             ) : (
-                              <Badge className="bg-red-500/20 text-red-600 text-xs border border-red-500/30">
+                              <Badge className="bg-destructive/20 text-destructive text-xs border border-destructive/30">
                                 离线
                               </Badge>
                             )}
@@ -332,7 +332,7 @@ export function ActuatorStatus() {
                           relative w-16 h-16 rounded-2xl transition-all duration-300
                           flex items-center justify-center
                           ${isOn 
-                            ? 'bg-green-500 hover:bg-green-600 shadow-lg shadow-green-500/50' 
+                            ? 'bg-accent hover:bg-accent/90 shadow-lg shadow-accent/50' 
                             : 'bg-muted hover:bg-muted/80'
                           }
                           ${!isOnline || isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
@@ -351,7 +351,7 @@ export function ActuatorStatus() {
                     
                     {isOn && (
                       <div className="absolute top-2 right-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
+                        <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
                       </div>
                     )}
                   </div>
