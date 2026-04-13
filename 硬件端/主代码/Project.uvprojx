@@ -339,7 +339,7 @@
               <MiscControls>--no-multibyte-chars</MiscControls>
               <Define>USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\Start;.\Library;.\User;.\System;.\Hardware;.\Drivers\STM32F1xx_HAL_Driver\Inc;.\Drivers\STM32F1xx_HAL_Driver\Src;.\Drivers;.\Drivers\CMSIS\Device\ST\STM32F1xx\Include;.\Drivers\CMSIS\Include</IncludePath>
+              <IncludePath>.\Start;.\Library;.\User;.\System;.\Hardware;.\Drivers\STM32F1xx_HAL_Driver\Inc;.\Drivers\STM32F1xx_HAL_Driver\Src;.\Drivers;.\Drivers\CMSIS\Device\ST\STM32F1xx\Include;.\Drivers\CMSIS\Include;.\App\Inc;.\BSP\Inc;.\Config;.\Middlewares\WiFi;.\Middlewares\Protocol</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -977,6 +977,76 @@
               <FileName>demo.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\User\demo.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>App</GroupName>
+          <Files>
+            <File>
+              <FileName>main.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\App\Src\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>system.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\App\Src\system.c</FilePath>
+            </File>
+            <File>
+              <FileName>system.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\App\Inc\system.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>BSP</GroupName>
+          <Files>
+            <File>
+              <FileName>uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\BSP\Src\uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>uart.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\BSP\Inc\uart.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Middlewares</GroupName>
+          <Files>
+            <File>
+              <FileName>wifi_manager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Middlewares\WiFi\wifi_manager.c</FilePath>
+            </File>
+            <File>
+              <FileName>wifi_manager.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Middlewares\WiFi\wifi_manager.h</FilePath>
+            </File>
+            <File>
+              <FileName>protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Middlewares\Protocol\protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>protocol.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Middlewares\Protocol\protocol.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Config</GroupName>
+          <Files>
+            <File>
+              <FileName>sys_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Config\sys_config.h</FilePath>
             </File>
           </Files>
         </Group>
