@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { toast } from "sonner"
 import {
   Power,
   PowerOff,
@@ -93,7 +92,7 @@ export function ActuatorStatus() {
   useEffect(() => {
     fetchActuators()
     
-    const interval = setInterval(fetchActuators, 10000) // 优化：降低更新频率到10秒
+    const interval = setInterval(fetchActuators, 2000)
     
     return () => clearInterval(interval)
   }, [fetchActuators])
@@ -120,7 +119,7 @@ export function ActuatorStatus() {
       const commandResult = await commandResponse.json()
       
       if (!commandResult.success) {
-        toast.error('发送控制指令失败: ' + commandResult.error)
+        alert('发送控制指令失败: ' + commandResult.error)
         setUpdating(null)
         return
       }
@@ -147,14 +146,13 @@ export function ActuatorStatus() {
           )
         )
         
-        toast.success(`已${newState === 'on' ? '开启' : '关闭'} ${actuators.find(a => a.id === actuatorId)?.name}`)
         setTimeout(() => fetchActuators(), 500)
       } else {
-        toast.error('操作失败: ' + result.error)
+        alert('操作失败: ' + result.error)
       }
     } catch (error) {
       console.error('切换执行器状态失败:', error)
-      toast.error('操作失败，请重试')
+      alert('操作失败')
     } finally {
       setUpdating(null)
     }

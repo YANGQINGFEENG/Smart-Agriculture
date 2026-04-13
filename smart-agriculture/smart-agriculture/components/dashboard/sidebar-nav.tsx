@@ -28,7 +28,6 @@ const navItems = [
   { id: "analysis", label: "数据分析", icon: BarChart3 },
   { id: "export", label: "数据导出", icon: Download },
   { id: "devices", label: "设备连接", icon: Wifi },
-  { id: "thresholds", label: "阈值设置", icon: Settings },
 ]
 
 const sensorTypes = [

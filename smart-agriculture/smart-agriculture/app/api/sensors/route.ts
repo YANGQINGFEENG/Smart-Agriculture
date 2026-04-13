@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
-import { cacheService } from '@/lib/redis'
 
 /**
  * 传感器数据接口
@@ -39,15 +38,6 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url)
     const type = url.searchParams.get('type')
 
-    // 生成缓存键
-    const cacheKey = type ? `sensors:list:${type}` : 'sensors:list'
-
-    // 尝试从缓存获取数据
-    const cachedData = await cacheService.get(cacheKey)
-    if (cachedData) {
-      return NextResponse.json(cachedData)
-    }
-
     let query = `
       SELECT 
         s.id, 
@@ -76,16 +66,11 @@ export async function GET(request: NextRequest) {
 
     const rows = await db.query<Sensor[]>(query, params)
 
-    const responseData = {
+    return NextResponse.json({
       success: true,
       data: rows,
       total: rows.length,
-    }
-
-    // 将结果缓存
-    await cacheService.set(cacheKey, responseData, 600) // 10分钟过期
-
-    return NextResponse.json(responseData)
+    })
   } catch (error) {
     console.error('获取传感器列表失败:', error)
     return NextResponse.json(
@@ -169,9 +154,6 @@ export async function POST(request: NextRequest) {
       [sensorId]
     )
 
-    // 清除缓存
-    await cacheService.delete('sensors:list')
-    
     return NextResponse.json({
       success: true,
       data: newSensors[0],

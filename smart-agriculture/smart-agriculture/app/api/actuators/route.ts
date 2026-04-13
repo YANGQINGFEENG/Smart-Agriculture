@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
-import { successResponse, errorResponse, serverErrorResponse, validateParams, handleApiRequest } from '@/lib/api-utils'
-import { cacheService } from '@/lib/redis'
 
 /**
  * 执行器数据接口
@@ -36,18 +34,9 @@ interface ActuatorType extends RowDataPacket {
  * 支持按类型过滤：?type=water_pump
  */
 export async function GET(request: NextRequest) {
-  return handleApiRequest(async () => {
+  try {
     const url = new URL(request.url)
     const type = url.searchParams.get('type')
-
-    // 生成缓存键
-    const cacheKey = type ? `actuators:list:${type}` : 'actuators:list'
-
-    // 尝试从缓存获取数据
-    const cachedData = await cacheService.get(cacheKey)
-    if (cachedData) {
-      return NextResponse.json(cachedData)
-    }
 
     let query = `
       SELECT 
@@ -78,17 +67,22 @@ export async function GET(request: NextRequest) {
 
     const rows = await db.query<Actuator[]>(query, params)
 
-    const responseData = {
+    return NextResponse.json({
       success: true,
       data: rows,
       total: rows.length,
-    }
-
-    // 将结果缓存
-    await cacheService.set(cacheKey, responseData, 600) // 10分钟过期
-
-    return successResponse(rows, undefined, rows.length)
-  })
+    })
+  } catch (error) {
+    console.error('获取执行器列表失败:', error)
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: '获取执行器列表失败',
+        details: error instanceof Error ? error.message : '未知错误'
+      },
+      { status: 500 }
+    )
+  }
 }
 
 /**
@@ -96,13 +90,14 @@ export async function GET(request: NextRequest) {
  * 新增执行器
  */
 export async function POST(request: NextRequest) {
-  return handleApiRequest(async () => {
+  try {
     const body = await request.json()
     
-    // 验证参数
-    const validation = validateParams(body, ['name', 'type_id', 'location'])
-    if (!validation.valid) {
-      return errorResponse(validation.error!)
+    if (!body.name || !body.type_id || !body.location) {
+      return NextResponse.json(
+        { success: false, error: '缺少必要参数：name, type_id, location' },
+        { status: 400 }
+      )
     }
 
     const types = await db.query<ActuatorType[]>(
@@ -111,7 +106,10 @@ export async function POST(request: NextRequest) {
     )
 
     if (types.length === 0) {
-      return errorResponse('执行器类型不存在')
+      return NextResponse.json(
+        { success: false, error: '执行器类型不存在' },
+        { status: 400 }
+      )
     }
 
     const typePrefix = types[0].type.split('_').map(word => word.charAt(0).toUpperCase()).join('')
@@ -158,9 +156,20 @@ export async function POST(request: NextRequest) {
       [actuatorId]
     )
 
-    // 清除缓存
-    await cacheService.delete('actuators:list*')
-
-    return successResponse(newActuators[0], '执行器创建成功')
-  })
+    return NextResponse.json({
+      success: true,
+      data: newActuators[0],
+      message: '执行器创建成功',
+    })
+  } catch (error) {
+    console.error('创建执行器失败:', error)
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: '创建执行器失败',
+        details: error instanceof Error ? error.message : '未知错误'
+      },
+      { status: 500 }
+    )
+  }
 }
