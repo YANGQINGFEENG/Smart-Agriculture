@@ -34,21 +34,21 @@ const tabTitles: Record<string, string> = {
 export function Header({ activeTab }: HeaderProps) {
   return (
     <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-      <div className="h-full px-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-semibold text-foreground">
+      <div className="h-full px-4 md:px-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg md:text-xl font-semibold text-foreground">
             {tabTitles[activeTab]}
           </h2>
-          <Badge variant="secondary" className="bg-primary/10 text-primary">
+          <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">
             实时更新
           </Badge>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Select defaultValue="today">
-            <SelectTrigger className="w-[140px] bg-secondary border-border">
+            <SelectTrigger className="w-[120px] md:w-[140px] bg-secondary border-border text-sm">
               <Calendar className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="时间范围" />
+              <SelectValue placeholder="时间" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="today">今天</SelectItem>
@@ -73,13 +73,13 @@ export function Header({ activeTab }: HeaderProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 pl-2 pr-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary/20 text-primary text-sm">
+              <Button variant="ghost" className="flex items-center gap-1 pl-2 pr-2">
+                <Avatar className="h-7 w-7 md:h-8 md:w-8">
+                  <AvatarFallback className="bg-primary/20 text-primary text-xs">
                     管
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm text-foreground">管理员</span>
+                <span className="hidden sm:inline text-sm text-foreground">管理员</span>
                 <ChevronDown className="w-4 h-4 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>

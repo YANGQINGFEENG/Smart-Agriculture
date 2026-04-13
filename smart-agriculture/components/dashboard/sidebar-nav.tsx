@@ -55,38 +55,42 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
       <nav className="flex-1 p-4">
         <div className="mb-6">
           <p className="text-xs font-medium text-muted-foreground mb-3 px-3">主功能</p>
-          <ul className="space-y-1">
+          <ul className="space-y-1" role="navigation" aria-label="主功能导航">
             {navItems.map((item) => (
               <li key={item.id}>
                 <button
                   onClick={() => onTabChange(item.id)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
                     activeTab === item.id
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   )}
+                  aria-current={activeTab === item.id ? "page" : undefined}
+                  aria-label={item.label}
                 >
-                  <item.icon className="w-4 h-4" />
+                  <item.icon className="w-4 h-4" aria-hidden="true" />
                   {item.label}
                 </button>
               </li>
             ))}
             <li>
               <Link
-                href="/compare"
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-              >
-                <TrendingUp className="w-4 h-4" />
+                  href="/compare"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200"
+                  aria-label="数据对比"
+                >
+                <TrendingUp className="w-4 h-4" aria-hidden="true" />
                 数据对比
               </Link>
             </li>
             <li>
               <Link
-                href="/actuators"
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-              >
-                <Power className="w-4 h-4" />
+                  href="/actuators"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200"
+                  aria-label="执行器控制"
+                >
+                <Power className="w-4 h-4" aria-hidden="true" />
                 执行器控制
               </Link>
             </li>
@@ -95,23 +99,24 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
 
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-3 px-3">传感器类型</p>
-          <ul className="space-y-1">
+          <ul className="space-y-1" role="list" aria-label="传感器类型列表">
             {sensorTypes.map((sensor, index) => (
-              <li key={index}>
+              <li key={index} role="listitem">
                 <div className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground">
-                  <sensor.icon className="w-4 h-4" />
+                  <sensor.icon className="w-4 h-4" aria-hidden="true" />
                   {sensor.label}
-                  <span className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  <span className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" aria-label="在线" />
                 </div>
               </li>
             ))}
           </ul>
         </div>
+
       </nav>
 
       <div className="p-4 border-t border-border">
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-          <Settings className="w-4 h-4" />
+        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200" aria-label="系统设置">
+          <Settings className="w-4 h-4" aria-hidden="true" />
           系统设置
         </button>
       </div>

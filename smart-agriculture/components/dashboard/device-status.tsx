@@ -146,18 +146,16 @@ export function DeviceStatus() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {summaryStats.map((stat, index) => (
-          <Card key={index} className="bg-card border-border">
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className={`text-3xl font-bold ${stat.color}`}>
-                  {loading ? '--' : stat.value}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div key={index} className="bg-card border border-border rounded-lg p-4">
+            <div className="text-center">
+              <p className={`text-2xl font-bold ${stat.color}`}>
+                {loading ? '--' : stat.value}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+            </div>
+          </div>
         ))}
       </div>
 
@@ -184,11 +182,11 @@ export function DeviceStatus() {
               暂无设备数据
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {devices.map((device) => (
                 <div
                   key={device.id}
-                  className="p-4 rounded-xl border border-border bg-secondary/30 space-y-4"
+                  className="p-3 rounded-xl border border-border bg-secondary/30 space-y-3"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
