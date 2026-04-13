@@ -29,6 +29,7 @@ const tabTitles: Record<string, string> = {
   analysis: "数据分析",
   export: "数据导出",
   devices: "设备连接",
+  thresholds: "阈值设置",
 }
 
 export function Header({ activeTab }: HeaderProps) {

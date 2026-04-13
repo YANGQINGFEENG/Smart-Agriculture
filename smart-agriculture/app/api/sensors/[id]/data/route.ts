@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { cacheService } from '@/lib/redis'
+import { broadcastMessage } from '@/app/api/websocket/route'
 
 /**
  * 传感器数据接口
@@ -43,6 +45,15 @@ export async function GET(
     const endTime = url.searchParams.get('endTime')
     const limit = parseInt(url.searchParams.get('limit') || '100', 10)
 
+    // 生成缓存键
+    const cacheKey = `sensor:${id}:data:${startTime || 'all'}:${endTime || 'all'}:${limit}`
+
+    // 尝试从缓存获取数据
+    const cachedData = await cacheService.get(cacheKey)
+    if (cachedData) {
+      return NextResponse.json(cachedData)
+    }
+
     const sensors = await db.query<Sensor[]>(
       'SELECT id FROM sensors WHERE id = ?',
       [id]
@@ -84,6 +95,7 @@ export async function GET(
       ${endTime ? ' AND timestamp <= ?' : ''}
     `
 
+
     const statsParams: any[] = [id]
     if (startTime) statsParams.push(new Date(startTime))
     if (endTime) statsParams.push(new Date(endTime))
@@ -99,12 +111,17 @@ export async function GET(
       min: statsResult[0]?.min ? Number(statsResult[0].min) : 0,
     }
 
-    return NextResponse.json({
+    const responseData = {
       success: true,
       data,
       stats,
       total: data.length,
-    })
+    }
+
+    // 将结果缓存
+    await cacheService.set(cacheKey, responseData, 300) // 5分钟过期
+
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error('获取传感器数据失败:', error)
     return NextResponse.json(
@@ -179,7 +196,18 @@ export async function POST(
       [result.insertId]
     )
 
+    // 清除相关缓存
+    await cacheService.delete(`sensor:${id}:data:*`)
+    
     console.log(`[Sensor] 传感器数据保存成功 - ID: ${id}, 值: ${newData[0].value}`)
+
+    // 通过WebSocket广播数据更新
+    broadcastMessage({
+      type: 'sensor_data_update',
+      sensorId: id,
+      data: newData[0],
+      timestamp: new Date().toISOString(),
+    })
 
     return NextResponse.json({
       success: true,
