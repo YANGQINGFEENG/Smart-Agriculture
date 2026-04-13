@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>农业物联网监控系统</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>农业物联网监控系统</h1>
+        
+        <div class="dashboard">
+            <!-- 设备状态概览 -->
+            <div class="section">
+                <h2>设备状态概览</h2>
+                <div class="device-grid" id="device-grid">
+                    <!-- 设备卡片将通过JavaScript动态添加 -->
+                </div>
+            </div>
+            
+            <!-- 数据可视化 -->
+            <div class="section">
+                <div class="section-header">
+                    <h2>数据可视化</h2>
+                    <div class="chart-controls">
+                        <select id="device-select">
+                            <option value="">选择设备</option>
+                        </select>
+                        <select id="sensor-select">
+                            <option value="">选择传感器</option>
+                        </select>
+                        <button id="update-chart">更新图表</button>
+                        <button id="test-chart">测试图表</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chart"></canvas>
+                </div>
+            </div>
+            
+            <!-- 实时数据 -->
+            <div class="section">
+                <h2>实时数据</h2>
+                <div class="data-table">
+                    <table id="data-table">
+                        <thead>
+                            <tr>
+                                <th>设备ID</th>
+                                <th>传感器类型</th>
+                                <th>数值</th>
+                                <th>单位</th>
+                                <th>时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 数据行将通过JavaScript动态添加 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

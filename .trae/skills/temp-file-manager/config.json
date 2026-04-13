@@ -1,0 +1,58 @@
+{
+  "version": "1.0.0",
+  "last_update": "2026-04-11",
+  "temp_files": [],
+  "cleanup_logs": [
+    {
+      "cleanup_date": "2026-04-11",
+      "cleanup_by": "admin",
+      "filename": "temp_20260411_serial_detect_admin.py",
+      "path": "temp/test_scripts/",
+      "creator": "admin",
+      "original_expire": "2026-04-14",
+      "cleanup_reason": "测试完成",
+      "notes": "串口检测测试完成"
+    },
+    {
+      "cleanup_date": "2026-04-11",
+      "cleanup_by": "admin",
+      "filename": "temp_20260411_temp_file_manager_test_admin.py",
+      "path": "temp/test_scripts/",
+      "creator": "admin",
+      "original_expire": "2026-04-14",
+      "cleanup_reason": "测试完成",
+      "notes": "临时文件管理skill测试完成"
+    },
+    {
+      "cleanup_date": "2026-04-11",
+      "cleanup_by": "admin",
+      "filename": "test_print.py",
+      "path": "./",
+      "creator": "admin",
+      "original_expire": "2026-04-14",
+      "cleanup_reason": "测试完成",
+      "notes": "终端打印123测试完成"
+    }
+  ],
+  "archive_records": [],
+  "settings": {
+    "default_retention": {
+      "快速验证脚本": 3,
+      "测试数据文件": 7,
+      "调试输出文件": 3,
+      "临时备份文件": 7,
+      "其他临时文件": 7
+    },
+    "max_retention": {
+      "快速验证脚本": 7,
+      "测试数据文件": 14,
+      "调试输出文件": 7,
+      "临时备份文件": 14,
+      "其他临时文件": 30
+    },
+    "disk_thresholds": {
+      "warning": 85,
+      "critical": 90
+    }
+  }
+}

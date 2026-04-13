@@ -1,0 +1,21 @@
+{
+  "name": "auto_build",
+  "display_name": "自动编译项目",
+  "description": "每次执行完命令后自动编译STM32项目",
+  "version": "1.0.0",
+  "author": "Trae AI",
+  "trigger": {
+    "type": "post_command",
+    "conditions": []
+  },
+  "action": {
+    "type": "command",
+    "command": ".trae\\skill\\build_project.bat",
+    "args": [],
+    "working_directory": "{{workspace}}"
+  },
+  "settings": {
+    "enabled": true,
+    "show_output": true
+  }
+}
