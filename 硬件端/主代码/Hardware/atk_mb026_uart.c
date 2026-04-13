@@ -41,7 +41,7 @@ volatile uint16_t tx_tail = 0;                     // 发送缓冲区尾指针
 void atk_mb026_uart_printf(char *fmt, ...)
 {
     va_list ap;
-    char buf[128];
+    char buf[512];
     uint16_t len;
     
     va_start(ap, fmt);
@@ -59,6 +59,27 @@ void atk_mb026_uart_printf(char *fmt, ...)
         
         // 启用发送中断
         USART_ITConfig(ATK_MB026_UART_INTERFACE, USART_IT_TXE, ENABLE);
+    }
+}
+
+/**
+ * @brief   ATK-MB026 UART printf函数（阻塞方式）
+ * @param   fmt 格式化字符串
+ */
+void atk_mb026_uart_printf_blocking(char *fmt, ...)
+{
+    va_list ap;
+    char buf[512];
+    uint16_t len;
+    
+    va_start(ap, fmt);
+    len = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    
+    if (len > 0)
+    {
+        // 使用阻塞方式发送
+        usart2_send_data_blocking((uint8_t *)buf, len);
     }
 }
 
@@ -313,4 +334,38 @@ void usart2_send_data(const uint8_t *data, uint16_t len)
     
     // 启用发送中断
     USART_ITConfig(USART2, USART_IT_TXE, ENABLE);
+}
+
+/**
+ * @brief   等待发送完成
+ */
+void atk_mb026_uart_wait_tx_done(void)
+{
+    uint32_t timeout = 10000;  // 10秒超时
+    
+    while ((tx_head != tx_tail) && (timeout > 0))
+    {
+        timeout--;
+        delay_ms(1);
+    }
+}
+
+/**
+ * @brief   通过USART2发送数据（阻塞方式）
+ * @param   data 要发送的数据
+ * @param   len 数据长度
+ */
+void usart2_send_data_blocking(const uint8_t *data, uint16_t len)
+{
+    for (uint16_t i = 0; i < len; i++)
+    {
+        // 等待发送缓冲区为空
+        while (USART_GetFlagStatus(USART2, USART_FLAG_TXE) == RESET);
+        
+        // 发送一个字节
+        USART_SendData(USART2, data[i]);
+    }
+    
+    // 等待发送完成
+    while (USART_GetFlagStatus(USART2, USART_FLAG_TC) == RESET);
 }

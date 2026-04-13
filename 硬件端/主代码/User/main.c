@@ -36,7 +36,7 @@ uint8_t g_server_connected = 0;          // 服务器连接状态标志（0: 未
 
 #define MAX_WIFI_RETRY 5                 // WiFi连接最大重试次数
 #define MAX_SERVER_RETRY 3               // 服务器连接最大重试次数
-#define WIFI_CHECK_INTERVAL 10000        // WiFi状态检查间隔（ms）
+#define WIFI_CHECK_INTERVAL 50000        // WiFi状态检查间隔（ms）
 #define SERVER_TEST_COUNT 3              // 服务器测试次数
 #define BAIDU_PING_INTERVAL 30000        // 百度Ping测试间隔（ms）
 
@@ -58,8 +58,11 @@ uint8_t check_wifi_status(void)
     if (atk_mb026_send_at_cmd("AT+CWSTATUS", "OK", 1000) == ATK_MB026_EOK) {
         ret = atk_mb026_uart_rx_get_frame();
         if (ret != NULL) {
-            if (strstr((const char *)ret, "+CWSTATUS:2") != NULL) {
-                return 1; // WiFi已连接
+            if (strstr((const char *)ret, "+CWSTATUS:1") != NULL) {
+                return 1; // WiFi已连接（STA模式，已连接AP）
+            }
+            if (strstr((const char *)ret, "+CWSTATUS:3") != NULL) {
+                return 1; // WiFi已连接（STA+AP模式）
             }
         }
     }
@@ -238,19 +241,13 @@ uint8_t send_http_request(char *server_url, char *server_port, char *request)
 {
     uint8_t ret = 0;
     uint8_t retry = 0;
+    uint8_t *response = NULL;
+    uint32_t wait_timeout = 0;
     
     while (retry < MAX_SERVER_RETRY) {
-        // 连接到服务器
         printf("[DEBUG] 尝试连接服务器: %s:%s (尝试 %d/%d)\r\n", server_url, server_port, retry + 1, MAX_SERVER_RETRY);
         OLED_ShowString(3, 1, "  Connecting");
         OLED_ShowString(4, 1, "  Server");
-        
-        // 重置接收缓冲区
-        atk_mb026_uart_rx_restart();
-        
-        // 强制设置单连接模式
-        printf("[DEBUG] 强制设置单连接模式...\r\n");
-        atk_mb026_send_at_cmd("AT+CIPMUX=0", "OK", 1000);
         
         if (atk_mb026_connect_tcp_server(server_url, server_port) == ATK_MB026_EOK) {
             printf("[DEBUG] 连接服务器成功\r\n");
@@ -258,86 +255,129 @@ uint8_t send_http_request(char *server_url, char *server_port, char *request)
             OLED_ShowString(4, 1, "  Server");
             g_server_connected = 1;
             
-            // 清空接收缓冲区
-            atk_mb026_uart_rx_restart();
-            
-            // 使用AT+CIPSEND命令发送数据
             char cmd[32];
             int req_len = strlen(request);
             sprintf(cmd, "AT+CIPSEND=%d", req_len);
             printf("[DEBUG] 发送AT命令: %s\r\n", cmd);
             
-            // 发送AT+CIPSEND命令
-            if (atk_mb026_send_at_cmd(cmd, ">", 2000) == ATK_MB026_EOK) {
+            atk_mb026_uart_rx_restart();
+            
+            if (atk_mb026_send_at_cmd(cmd, ">", 3000) == ATK_MB026_EOK) {
                 printf("[DEBUG] 收到'>'提示符，发送HTTP请求\r\n");
                 OLED_ShowString(3, 1, "  Sending");
                 OLED_ShowString(4, 1, "  Request");
                 
-                // 清空接收缓冲区
                 atk_mb026_uart_rx_restart();
-                
-                // 发送HTTP请求数据
                 atk_mb026_uart_printf((char *)request);
-                printf("[DEBUG] HTTP请求已发送\r\n");
+                printf("[DEBUG] HTTP请求已发送 (%d字节)\r\n", req_len);
+                printf("[DEBUG] 请求内容:\r\n%s\r\n", request);
                 OLED_ShowString(3, 1, "  Sent");
                 OLED_ShowString(4, 1, "  Request");
                 
-                // 等待响应
                 printf("[DEBUG] 等待服务器响应...\r\n");
                 OLED_ShowString(3, 1, "  Waiting");
                 OLED_ShowString(4, 1, "  Response");
-                delay_ms(8000); // 增加等待时间
                 
-                // 处理响应
-                uint8_t *response = atk_mb026_uart_rx_get_frame();
-                if (response != NULL) {
-                    printf("[DEBUG] 收到服务器响应\r\n");
-                    // 显示完整的响应内容
-                    printf("[Server Test] 收到服务器响应: \r\n");
-                    printf("%s\r\n", response);
-                    
-                    // 检查响应状态
-                    if (strstr((const char *)response, "200 OK") != NULL) {
-                        printf("[Server Test] 服务器响应正常\r\n");
-                        OLED_ShowString(3, 1, "  Server:");
-                        OLED_ShowString(4, 1, "  OK");
-                        ret = 1;
-                    } else if (strstr((const char *)response, "AT+CIPSEND") != NULL) {
-                        // 收到AT命令回显，可能是模块状态异常
-                        printf("[Server Test] 收到AT命令回显，模块状态异常\r\n");
-                        OLED_ShowString(3, 1, "  Module:");
-                        OLED_ShowString(4, 1, "  Error");
-                        ret = 0;
-                    } else {
-                        printf("[Server Test] 服务器响应异常\r\n");
-                        OLED_ShowString(3, 1, "  Server:");
-                        OLED_ShowString(4, 1, "  Error");
-                        ret = 1; // 虽然响应异常，但通信成功
+                wait_timeout = 15000;
+                uint8_t got_response = 0;
+                uint8_t got_send_ok = 0;
+                
+                while (wait_timeout > 0) {
+                    response = atk_mb026_uart_rx_get_frame();
+                    if (response != NULL) {
+                        printf("[HTTP] 收到数据: %s\r\n", (char *)response);
+                        
+                        if (strstr((const char *)response, "SEND OK") != NULL) {
+                            printf("[HTTP] 数据发送确认: SEND OK\r\n");
+                            got_send_ok = 1;
+                        }
+                        
+                        if (strstr((const char *)response, "HTTP/") != NULL ||
+                            strstr((const char *)response, "+IPD") != NULL ||
+                            strstr((const char *)response, "\"success\"") != NULL ||
+                            strstr((const char *)response, "\"data\"") != NULL ||
+                            strstr((const char *)response, "\"total\"") != NULL ||
+                            strstr((const char *)response, "temperature") != NULL ||
+                            strstr((const char *)response, "传感器") != NULL) {
+                            printf("[HTTP] ========== 收到服务器响应 ==========\r\n");
+                            printf("%s\r\n", (char *)response);
+                            printf("[HTTP] ================================\r\n");
+                            
+                            if (strstr((const char *)response, "\"success\":true") != NULL ||
+                                strstr((const char *)response, "\"success\": true") != NULL) {
+                                printf("[HTTP] 服务器响应: 成功 (JSON)\r\n");
+                                OLED_ShowString(3, 1, "  Response:");
+                                OLED_ShowString(4, 1, "  OK");
+                                ret = 1;
+                            } else if (strstr((const char *)response, "200") != NULL) {
+                                printf("[HTTP] 服务器响应: 200 OK\r\n");
+                                OLED_ShowString(3, 1, "  Response:");
+                                OLED_ShowString(4, 1, "  200 OK");
+                                ret = 1;
+                            } else if (strstr((const char *)response, "temperature") != NULL ||
+                                       strstr((const char *)response, "传感器") != NULL) {
+                                printf("[HTTP] 服务器响应: 收到传感器数据\r\n");
+                                OLED_ShowString(3, 1, "  Response:");
+                                OLED_ShowString(4, 1, "  Data OK");
+                                ret = 1;
+                            } else if (strstr((const char *)response, "400") != NULL) {
+                                printf("[HTTP] 服务器响应: 400 Bad Request\r\n");
+                                OLED_ShowString(3, 1, "  Response:");
+                                OLED_ShowString(4, 1, "  400");
+                                ret = 1;
+                            } else if (strstr((const char *)response, "404") != NULL) {
+                                printf("[HTTP] 服务器响应: 404 Not Found\r\n");
+                                OLED_ShowString(3, 1, "  Response:");
+                                OLED_ShowString(4, 1, "  404");
+                                ret = 1;
+                            } else {
+                                printf("[HTTP] 服务器响应: 其他状态\r\n");
+                                OLED_ShowString(3, 1, "  Response:");
+                                OLED_ShowString(4, 1, "  OK");
+                                ret = 1;
+                            }
+                            got_response = 1;
+                        }
+                        else if (strstr((const char *)response, "ERROR") != NULL ||
+                                 strstr((const char *)response, "FAIL") != NULL) {
+                            printf("[HTTP] 发送失败\r\n");
+                            break;
+                        }
+                        else if (strstr((const char *)response, "CLOSED") != NULL) {
+                            printf("[HTTP] 连接已关闭\r\n");
+                            if (got_send_ok && !got_response) {
+                                printf("[HTTP] 数据已发送但未收到响应\r\n");
+                            }
+                            break;
+                        }
+                        
+                        atk_mb026_uart_rx_restart();
                     }
-                } else {
-                    printf("[Server Test] 未收到服务器响应\r\n");
-                    OLED_ShowString(3, 1, "  No");
-                    OLED_ShowString(4, 1, "  Response");
+                    wait_timeout--;
+                    delay_ms(1);
+                }
+                
+                if (!got_response && ret == 0) {
+                    printf("[HTTP] 等待超时，未收到响应\r\n");
+                    OLED_ShowString(3, 1, "  Timeout");
+                    OLED_ShowString(4, 1, "  No Resp");
                 }
             } else {
-                printf("[Server Test] 发送AT命令失败\r\n");
+                printf("[HTTP] 发送AT+CIPSEND命令失败\r\n");
                 OLED_ShowString(3, 1, "  Cmd:");
                 OLED_ShowString(4, 1, "  Fail");
             }
             
-            // 关闭TCP连接
             printf("[DEBUG] 关闭TCP连接\r\n");
             atk_mb026_send_at_cmd("AT+CIPCLOSE", "OK", 2000);
             g_server_connected = 0;
-            
-            // 短暂延迟，确保连接完全关闭
-            delay_ms(1000);
+            delay_ms(500);
             
             if (ret) {
-                break; // 成功，退出重试
+                break;
             }
         } else {
-            printf("[Server Test] 连接服务器失败\r\n");
+            printf("[HTTP] 连接服务器失败\r\n");
             OLED_ShowString(3, 1, "  Connect");
             OLED_ShowString(4, 1, "  Fail");
         }
@@ -370,28 +410,51 @@ void test_baidu_connectivity(void)
     }
     
     printf("======================================\r\n");
-    printf("[Baidu Test] 测试百度连接...\r\n");
-    printf("[Baidu Test] 测试地址: www.baidu.com\r\n");
+    printf("[Network Test] 测试网络连通性...\r\n");
     printf("======================================\r\n");
     
+    OLED_ShowString(1, 1, "  Network Test");
+    OLED_ShowString(2, 1, "  Pinging...");
+    
+    // 首先测试服务器IP连通性
+    printf("\r\n[Network Test] ===== 测试服务器IP连通性 =====\r\n");
+    printf("[Network Test] 目标IP: %s\r\n", SERVER_IP);
+    uint8_t server_ping_result = atk_mb026_ping((char *)SERVER_IP);
+    if (server_ping_result == ATK_MB026_EOK) {
+        printf("[Network Test] 服务器IP Ping: 成功\r\n");
+        OLED_ShowString(2, 1, "  Server: OK");
+    } else {
+        printf("[Network Test] 服务器IP Ping: 失败 (错误码: %d)\r\n", server_ping_result);
+        OLED_ShowString(2, 1, "  Server: FAIL");
+        printf("[Network Test] 可能原因:\r\n");
+        printf("[Network Test]   1. 服务器IP地址不正确\r\n");
+        printf("[Network Test]   2. WiFi模块和服务器不在同一网段\r\n");
+        printf("[Network Test]   3. 服务器防火墙阻止了ICMP\r\n");
+    }
+    
+    delay_ms(2000);
+    
+    // 然后测试百度连通性
+    printf("\r\n[Network Test] ===== 测试百度连通性 =====\r\n");
+    printf("[Network Test] 测试地址: www.baidu.com\r\n");
     OLED_ShowString(1, 1, "  Baidu Test");
     OLED_ShowString(2, 1, "  Pinging...");
     
     uint32_t ping_time = ping_server("www.baidu.com");
     if (ping_time > 0) {
-        printf("[Baidu Test] Ping百度: 成功 - 响应时间 %lu ms\r\n", ping_time);
-        OLED_ShowString(2, 1, "  Success");
+        printf("[Network Test] Ping百度: 成功 - 响应时间 %lu ms\r\n", ping_time);
+        OLED_ShowString(2, 1, "  Baidu: OK");
         char ping_str[20];
         sprintf(ping_str, "  %lu ms", ping_time);
         OLED_ShowString(3, 1, ping_str);
     } else {
-        printf("[Baidu Test] Ping百度: 失败 - 超时或不可达\r\n");
-        OLED_ShowString(2, 1, "  Failed");
+        printf("[Network Test] Ping百度: 失败 - 超时或不可达\r\n");
+        OLED_ShowString(2, 1, "  Baidu: FAIL");
         OLED_ShowString(3, 1, "  Timeout");
     }
     
     printf("======================================\r\n");
-    printf("[Baidu Test] 测试完成\r\n");
+    printf("[Network Test] 测试完成\r\n");
     printf("======================================\r\n");
     
     delay_ms(2000);
@@ -406,20 +469,17 @@ void test_server_health(void)
 {
     printf("======================================\r\n");
     printf("[Server Test] 测试服务器健康状态...\r\n");
-    printf("[Server Test] 测试地址: http://%s%s\r\n", SERVER_URL, SERVER_PATH);
+    printf("[Server Test] 测试地址: http://%s:%s%s\r\n", SERVER_URL, SERVER_PORT, SERVER_PATH);
     printf("[Server Test] 测试次数: %d次\r\n", SERVER_TEST_COUNT);
     printf("======================================\r\n");
     
-    // 准备HTTP请求
-    char request[256];
+    char request[300];
     sprintf(request, "GET %s HTTP/1.1\r\n" 
-                   "Host: %s\r\n" 
+                   "Host: %s:%s\r\n" 
                    "Connection: close\r\n" 
-                   "ngrok-skip-browser-warning: 1\r\n" 
                    "User-Agent: STM32-Client/1.0\r\n" 
-                   "Device-ID: %s\r\n" 
                    "\r\n",
-                   SERVER_PATH, SERVER_URL, DEMO_WIFI_SSID);
+                   SERVER_PATH, SERVER_URL, SERVER_PORT);
     
     int success_count = 0;
     int failure_count = 0;
@@ -503,6 +563,12 @@ int main(void)
 	atk_mb026_uart_init(115200);
 	printf("[System] WiFi模块串口初始化成功\r\n");
 	
+	// 配置TCP长连接模式
+	printf("[System] 配置TCP长连接模式...\r\n");
+	atk_mb026_send_at_cmd("AT+CIPMUX=0", "OK", 2000);  // 单连接模式
+	atk_mb026_send_at_cmd("AT+CIPMODE=0", "OK", 2000); // 正常传输模式
+	printf("[System] TCP长连接模式配置完成\r\n");
+	
 	// 初始化服务器通信模块
 	ServerComm_Init();
 	
@@ -517,23 +583,28 @@ int main(void)
 		// 连接WiFi
 		OLED_ShowString(1, 5, "  Connecting...");
 		if (connect_wifi()) {
-			// 连接完成，准备进行下一步计划
-			printf("[System] WiFi连接完成，准备进行下一步计划\r\n");
+			printf("[System] WiFi连接成功，开始上传传感器数据...\r\n");
 			OLED_ShowString(1, 5, "  Connected");
-			delay_ms(1000);
+			delay_ms(500);
 			
-			// 测试百度连接
-			test_baidu_connectivity();
+			// 建立TCP长连接
+			printf("[System] 建立TCP长连接...\r\n");
+			OLED_ShowString(3, 1, "  TCP Connect");
+			if (ServerComm_Connect() == 0) {
+				printf("[System] TCP长连接建立成功\r\n");
+				OLED_ShowString(3, 1, "  TCP: OK");
+			} else {
+				printf("[System] TCP长连接建立失败\r\n");
+				OLED_ShowString(3, 1, "  TCP: FAIL");
+			}
+			delay_ms(500);
 			
-			// 测试服务器健康状态
-			test_server_health();
-			
-			// 显示初始状态
+			// 显示运行状态
 			OLED_Clear();
-			OLED_ShowString(1, 1, "  System Ready");
+			OLED_ShowString(1, 1, "  Running...");
 			OLED_ShowString(2, 1, "  WiFi: OK");
-			OLED_ShowString(3, 1, "  Touch Key: ON");
-			OLED_ShowString(4, 1, "  Relay: OFF");
+			OLED_ShowString(3, 1, "  TCP: OK");
+			OLED_ShowString(4, 1, "  KeepAlive");
 		} else {
 			OLED_ShowString(1, 5, "  Connect Fail");
 		}
@@ -548,139 +619,61 @@ int main(void)
 		
 		// 检测触摸按键
 		uint8_t key = TOUCH_KEY_Scan();
-		if (key == 3) { // 触摸按键C
-			// 打开继电器2（水泵供电）
+		if (key == 3) {
 			RELAY_2(1);
-			printf("[System] 触摸按键C按下，打开继电器2（水泵供电）\r\n");
-		} else if (key == 4) { // 触摸按键D
-			// 关闭继电器2（停止水泵供电）
+			printf("[Key] 触摸按键C按下，打开继电器2（水泵）\r\n");
+			// 上传执行器状态
+			if (g_wifi_connected && ServerComm_IsConnected()) {
+				ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1);
+			}
+		} else if (key == 4) {
 			RELAY_2(0);
-			printf("[System] 触摸按键D按下，关闭继电器2（停止水泵供电）\r\n");
-		} else if (key == 1) { // 触摸按键A
-			// 发送测试数据到服务器
+			printf("[Key] 触摸按键D按下，关闭继电器2（水泵）\r\n");
+			// 上传执行器状态
+			if (g_wifi_connected && ServerComm_IsConnected()) {
+				ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1);
+			}
+		}
+		
+		// 每10秒上传一次传感器数据（后台静默运行）
+		if (timecount % UPLOAD_INTERVAL_MS == 0) {
 			if (g_wifi_connected) {
-				char test_data[128];
-				sprintf(test_data, "{\"type\":\"test\",\"message\":\"Hello from STM32\",\"timestamp\":%lu}", timecount);
-				uint16_t len = strlen(test_data);
-				printf("[System] 触摸按键A按下，发送测试数据到服务器\r\n");
-				send_data_to_server(test_data, len);
-			} else {
-				printf("[System] WiFi未连接，无法发送数据\r\n");
+				// 静默上传传感器数据，不打印详细日志
+				ServerComm_SendData_KeepAlive_Silent();
 			}
 		}
 		
-		// 处理串口数据
-		if (g_usart_rx_sta & 0x8000) {
-			// 有数据从串口1接收
-			printf("[System] 收到串口数据: %s\r\n", g_usart_rx_buf);
-			
-			// 清空接收缓冲区
-			g_usart_rx_sta = 0;
-		}
-		
-		// 每10秒检查一次WiFi连接状态
-		if (timecount % WIFI_CHECK_INTERVAL == 0) {
-			uint8_t status = check_wifi_status();
-			if (status && !g_wifi_connected) {
-				// WiFi重新连接
-				printf("[WiFi] WiFi重新连接\r\n");
-				g_wifi_connected = 1;
-				OLED_ShowString(1, 5, "  Connected");
-			} else if (!status && g_wifi_connected) {
-				// WiFi连接断开
-				printf("[WiFi] WiFi连接断开\r\n");
-				g_wifi_connected = 0;
-				OLED_ShowString(1, 5, "  Disconnected");
-				
-				// 尝试重新连接WiFi
-				printf("[WiFi] 尝试重新连接...\r\n");
-				OLED_ShowString(1, 5, "  Reconnecting");
-				if (connect_wifi()) {
-					printf("[WiFi] 重新连接成功\r\n");
-					OLED_ShowString(1, 5, "  Connected");
-				} else {
-					OLED_ShowString(1, 5, "  Reconnect Fail");
-				}
-			} else if (status && g_wifi_connected) {
-				// WiFi连接正常
-				printf("[WiFi] WiFi连接正常\r\n");
-				OLED_ShowString(1, 5, "  Connected");
-			}
-		}
-		
-		// 定期测试百度连接
-		if (timecount % BAIDU_PING_INTERVAL == 0) {
-			test_baidu_connectivity();
-		}
-		
-		// 每2分钟读取一次传感器数据并发送到服务器
-		if (timecount % 120000 == 0) {
-			// 读取温湿度数据
-			if (DHT11_ReadData() == 0) {
-				uint8_t temp = DHT11_GetTemperature();
-				uint8_t humi = DHT11_GetHumidity();
-				// 读取光照数据
-				uint16_t light_raw = LightSensor_Read();
-				uint8_t light_percent = LightSensor_GetPercentage();
-				// 读取土壤传感器数据
-				float soil_moisture = 0;
-				float soil_temp = 0;
-				uint16_t soil_ec = 0;
-				float soil_ph = 0;
-				uint8_t soil_status = SoilSensor_ReadData(&soil_moisture, &soil_temp, &soil_ec, &soil_ph);
-				
-				// 在串口助手上显示数据
-				if (soil_status == 0) {
-					printf("[Sensor] 温度: %d°C, 湿度: %d%%, 光照: %d (%.1f%%), 土壤湿度: %.1f%%, 土壤温度: %.1f°C, 电导率: %dμS/cm, PH值: %.1f\r\n", 
-						temp, humi, light_raw, (float)light_percent, soil_moisture, soil_temp, soil_ec, soil_ph);
-				} else {
-					printf("[Sensor] 温度: %d°C, 湿度: %d%%, 光照: %d (%.1f%%), 土壤数据: N/A\r\n", 
-						temp, humi, light_raw, (float)light_percent);
-				}
-				
-				// 发送数据到服务器
-				if (g_wifi_connected) {
-					// 发送空气温度数据
-					ServerComm_SendSensorData(SENSOR_ID_TEMPERATURE, temp);
-					delay_ms(500);
+		// 每500ms查询一次控制指令（更快的响应）
+		if (timecount % 500 == 0) {
+			if (g_wifi_connected && ServerComm_IsConnected()) {
+				int cmd_id = 0;
+				char cmd[16] = {0};
+				uint8_t cmd_result = ServerComm_CheckAndExecuteCommand(ACTUATOR_ID_PUMP, &cmd_id, cmd);
+				if (cmd_result == 1 && cmd_id > 0) {
+					printf("[Command] ========== 执行控制指令 ==========\r\n");
+					printf("[Command] 指令ID: %d, 指令: %s\r\n", cmd_id, cmd);
 					
-					// 发送空气湿度数据
-					ServerComm_SendSensorData(SENSOR_ID_HUMIDITY, humi);
-					delay_ms(500);
-					
-					// 发送光照数据
-					ServerComm_SendSensorData(SENSOR_ID_LIGHT, light_percent);
-					delay_ms(500);
-					
-					// 发送土壤数据
-					if (soil_status == 0) {
-						// 发送土壤湿度数据
-						ServerComm_SendSensorData(SENSOR_ID_SOIL_MOISTURE, soil_moisture);
-						delay_ms(500);
-						
-						// 发送土壤温度数据
-						ServerComm_SendSensorData(SENSOR_ID_SOIL_TEMPERATURE, soil_temp);
-						delay_ms(500);
+					if (strcmp(cmd, "on") == 0) {
+						printf("[Command] 执行打开水泵指令\r\n");
+						RELAY_2(1);
+						OLED_ShowString(4, 1, "  Pump: ON ");
+						delay_ms(100);
+						ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1);
+						ServerComm_ConfirmCommand(ACTUATOR_ID_PUMP, cmd_id, "executed");
+						printf("[Command] 指令执行完成\r\n");
+					} else if (strcmp(cmd, "off") == 0) {
+						printf("[Command] 执行关闭水泵指令\r\n");
+						RELAY_2(0);
+						OLED_ShowString(4, 1, "  Pump: OFF");
+						delay_ms(100);
+						ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1);
+						ServerComm_ConfirmCommand(ACTUATOR_ID_PUMP, cmd_id, "executed");
+						printf("[Command] 指令执行完成\r\n");
+					} else {
+						printf("[Command] 未知指令: %s\r\n", cmd);
+						ServerComm_ConfirmCommand(ACTUATOR_ID_PUMP, cmd_id, "failed");
 					}
 				}
-				
-				// 在OLED上显示数据
-				OLED_Clear();
-				OLED_ShowString(1, 1, "  Sensor Data");
-				char buf[20];
-				sprintf(buf, "  Temp: %d", temp);
-				OLED_ShowString(2, 1, buf);
-				sprintf(buf, "  Humi: %d%%", humi);
-				OLED_ShowString(3, 1, buf);
-				if (soil_status == 0) {
-					sprintf(buf, "  Soil: %.1f%%", soil_moisture);
-					OLED_ShowString(4, 1, buf);
-				} else {
-					sprintf(buf, "  Light: %d%%", light_percent);
-					OLED_ShowString(4, 1, buf);
-				}
-			} else {
-				printf("[Sensor] 温湿度传感器读取失败\r\n");
 			}
 		}
 		

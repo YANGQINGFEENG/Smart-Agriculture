@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Thermometer, Droplets, Sun, Leaf, TrendingUp, TrendingDown, RefreshCw } from "lucide-react"
+import { Thermometer, Droplets, Sun, Leaf, TrendingUp, TrendingDown, RefreshCw, Activity } from "lucide-react"
 
 interface SensorStats {
   avg: number
@@ -55,6 +55,30 @@ const sensorConfig = [
     color: "text-primary",
     bgColor: "bg-primary/10",
     slug: "soil",
+  },
+  {
+    title: "土壤温度",
+    type: "soil_temperature",
+    icon: Thermometer,
+    color: "text-chart-5",
+    bgColor: "bg-chart-5/10",
+    slug: "soil_temperature",
+  },
+  {
+    title: "土壤EC值",
+    type: "ec",
+    icon: Activity,
+    color: "text-chart-1",
+    bgColor: "bg-chart-1/10",
+    slug: "ec",
+  },
+  {
+    title: "土壤pH值",
+    type: "ph",
+    icon: Droplets,
+    color: "text-chart-2",
+    bgColor: "bg-chart-2/10",
+    slug: "ph",
   },
 ]
 
@@ -108,7 +132,7 @@ export function OverviewCards() {
   useEffect(() => {
     fetchSensorData()
     
-    const interval = setInterval(fetchSensorData, 5000)
+    const interval = setInterval(fetchSensorData, 2000)
     
     return () => clearInterval(interval)
   }, [])
@@ -129,7 +153,7 @@ export function OverviewCards() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {sensorConfig.map((config, index) => {
           const sensor = sensorData.find(s => s.type === config.type)
           const displayValue = sensor ? getSensorDisplayValue(sensor.type, sensor.value) : '--'

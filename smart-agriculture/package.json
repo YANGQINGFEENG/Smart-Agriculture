@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node start-dev.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint ."
@@ -59,6 +59,8 @@
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
     "sonner": "^1.7.1",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^6.0.1",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
     "zod": "^3.24.1"

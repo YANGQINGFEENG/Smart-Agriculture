@@ -669,27 +669,65 @@ uint8_t atk_mb026_connect_tcp_server(char *server_ip, char *server_port)
 {
     uint8_t ret;
     char cmd[64];
+    uint8_t *response = NULL;
     
-    // 设置为单连接模式，透传模式必须在单连接下工作
-    printf("[DEBUG] 设置单连接模式...\r\n");
-    ret = atk_mb026_send_at_cmd("AT+CIPMUX=0", "OK", 1000);
+    printf("\r\n[TCP] 连接 %s:%s\r\n", server_ip, server_port);
+    
+    delay_ms(500);
+    
+    atk_mb026_uart_rx_restart();
+    delay_ms(100);
+    
+    atk_mb026_send_at_cmd("AT+CIPCLOSE", "OK", 2000);
+    delay_ms(500);
+    
+    ret = atk_mb026_send_at_cmd("AT+CIPMUX=0", "OK", 2000);
     if (ret != ATK_MB026_EOK)
     {
-        printf("[ERROR] 设置单连接模式失败! 错误码: %d\r\n", ret);
-        return ATK_MB026_ERROR;
+        printf("[TCP] 单连接模式失败，等待...\r\n");
+        delay_ms(1000);
+        atk_mb026_send_at_cmd("AT+CIPCLOSE", "OK", 2000);
+        delay_ms(500);
+        atk_mb026_send_at_cmd("AT+CIPMUX=0", "OK", 2000);
     }
-    printf("[SUCCESS] 单连接模式设置成功\r\n");
     
     sprintf(cmd, "AT+CIPSTART=\"TCP\",\"%s\",%s", server_ip, server_port);
-    ret = atk_mb026_send_at_cmd(cmd, "CONNECT", 5000);
-    if (ret == ATK_MB026_EOK)
+    
+    atk_mb026_uart_rx_restart();
+    atk_mb026_uart_printf("%s\r\n", cmd);
+    
+    uint32_t timeout = 8000;
+    while (timeout > 0)
     {
-        return ATK_MB026_EOK;
+        response = atk_mb026_uart_rx_get_frame();
+        if (response != NULL)
+        {
+            if (strstr((const char *)response, "CONNECT") != NULL ||
+                strstr((const char *)response, "OK") != NULL)
+            {
+                printf("[TCP] 连接成功\r\n");
+                return ATK_MB026_EOK;
+            }
+            else if (strstr((const char *)response, "ERROR") != NULL ||
+                     strstr((const char *)response, "FAIL") != NULL ||
+                     strstr((const char *)response, "busy") != NULL)
+            {
+                printf("[TCP] 连接失败: %s\r\n", (char *)response);
+                return ATK_MB026_ERROR;
+            }
+            else if (strstr((const char *)response, "ALREADY CONNECTED") != NULL)
+            {
+                printf("[TCP] 已连接\r\n");
+                return ATK_MB026_EOK;
+            }
+            atk_mb026_uart_rx_restart();
+        }
+        timeout--;
+        delay_ms(1);
     }
-    else
-    {
-        return ATK_MB026_ERROR;
-    }
+    
+    printf("[TCP] 连接超时\r\n");
+    return ATK_MB026_ETIMEOUT;
 }
 
 /**
@@ -828,4 +866,73 @@ uint8_t atk_mb026_disconnect_atkcld(void)
     {
         return ATK_MB026_ERROR;
     }
+}
+
+/**
+ * @brief   ATK-MB026 Ping测试
+ * @param   ip 目标IP地址
+ * @return  ATK_MB026_EOK: Ping成功
+ *          ATK_MB026_ETIMEOUT: Ping超时
+ *          ATK_MB026_ERROR: Ping失败
+ * @note    用于测试网络连通性，结果会打印到串口
+ */
+uint8_t atk_mb026_ping(char *ip)
+{
+    char cmd[64];
+    uint8_t *response = NULL;
+    
+    printf("\r\n[PING] ========== Ping测试开始 ==========\r\n");
+    printf("[PING] 目标IP: %s\r\n", ip);
+    
+    sprintf(cmd, "AT+PING=\"%s\"", ip);
+    
+    printf("[PING] 发送命令: %s\r\n", cmd);
+    
+    atk_mb026_uart_rx_restart();
+    atk_mb026_uart_printf("%s\r\n", cmd);
+    
+    uint32_t timeout = 10000;
+    while (timeout > 0)
+    {
+        response = atk_mb026_uart_rx_get_frame();
+        if (response != NULL)
+        {
+            printf("[PING] 收到响应: %s\r\n", (char *)response);
+            
+            if (strstr((const char *)response, "+PING:") != NULL)
+            {
+                char *ping_result = strstr((const char *)response, "+PING:");
+                printf("[PING] Ping结果: %s\r\n", ping_result);
+                
+                if (strstr((const char *)response, "timeout") != NULL ||
+                    strstr((const char *)response, "TIMEOUT") != NULL)
+                {
+                    printf("[PING] ========== Ping超时 ==========\r\n\r\n");
+                    return ATK_MB026_ETIMEOUT;
+                }
+                
+                printf("[PING] ========== Ping成功 ==========\r\n\r\n");
+                return ATK_MB026_EOK;
+            }
+            else if (strstr((const char *)response, "ERROR") != NULL)
+            {
+                printf("[PING] ========== Ping失败 (ERROR) ==========\r\n\r\n");
+                return ATK_MB026_ERROR;
+            }
+            else if (strstr((const char *)response, "OK") != NULL)
+            {
+                printf("[PING] ========== Ping成功 (OK) ==========\r\n\r\n");
+                return ATK_MB026_EOK;
+            }
+            else
+            {
+                atk_mb026_uart_rx_restart();
+            }
+        }
+        timeout--;
+        delay_ms(1);
+    }
+    
+    printf("[PING] ========== Ping超时 (无响应) ==========\r\n\r\n");
+    return ATK_MB026_ETIMEOUT;
 }

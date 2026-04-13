@@ -9,6 +9,7 @@ import { DetailedData } from "@/components/dashboard/detailed-data"
 import { DataAnalysis } from "@/components/dashboard/data-analysis"
 import { DataExport } from "@/components/dashboard/data-export"
 import { DeviceStatus } from "@/components/dashboard/device-status"
+import { ActuatorStatus } from "@/components/dashboard/actuator-status"
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview")
@@ -33,6 +34,7 @@ export default function DashboardPage() {
           {activeTab === "overview" && (
             <div className="space-y-6">
               <OverviewCards />
+              <ActuatorStatus />
               <DataCharts />
             </div>
           )}

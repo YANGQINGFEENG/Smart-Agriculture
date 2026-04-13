@@ -97,7 +97,10 @@ async function initDatabase() {
     ('temperature', '温度传感器', '°C'),
     ('humidity', '空气湿度传感器', '%'),
     ('light', '光照传感器', 'Lux'),
-    ('soil', '土壤湿度传感器', '%')
+    ('soil', '土壤湿度传感器', '%'),
+    ('soil_temperature', '土壤温度传感器', '°C'),
+    ('ec', '土壤电导率传感器', 'μS/cm'),
+    ('ph', '土壤pH值传感器', 'pH')
     ON DUPLICATE KEY UPDATE name = VALUES(name), unit = VALUES(unit)
   `)
   console.log('✅ 传感器类型插入成功')
@@ -107,7 +110,6 @@ async function initDatabase() {
   await connection.query(`
     INSERT INTO sensors (id, name, type_id, location, status, battery, last_update) VALUES
     ('T-001', 'A区温室1号温度传感器', 1, 'A区温室', 'online', 95, CURRENT_TIMESTAMP),
-    ('T-002', 'A区温室2号温度传感器', 1, 'A区温室', 'online', 92, CURRENT_TIMESTAMP),
     ('T-003', 'B区温室1号温度传感器', 1, 'B区温室', 'online', 88, CURRENT_TIMESTAMP),
     ('H-001', 'A区温室1号湿度传感器', 2, 'A区温室', 'online', 90, CURRENT_TIMESTAMP),
     ('H-002', 'B区温室1号湿度传感器', 2, 'B区温室', 'online', 85, CURRENT_TIMESTAMP),
@@ -115,7 +117,10 @@ async function initDatabase() {
     ('L-002', 'B区温室1号光照传感器', 3, 'B区温室', 'online', 89, CURRENT_TIMESTAMP),
     ('S-001', 'A区温室1号土壤湿度传感器', 4, 'A区温室', 'online', 91, CURRENT_TIMESTAMP),
     ('S-002', 'B区温室1号土壤湿度传感器', 4, 'B区温室', 'online', 87, CURRENT_TIMESTAMP),
-    ('S-003', 'C区大棚1号土壤湿度传感器', 4, 'C区大棚', 'online', 84, CURRENT_TIMESTAMP)
+    ('S-003', 'C区大棚1号土壤湿度传感器', 4, 'C区大棚', 'online', 84, CURRENT_TIMESTAMP),
+    ('T-002', 'A区温室1号土壤温度传感器', 5, 'A区温室', 'online', 92, CURRENT_TIMESTAMP),
+    ('E-001', 'A区温室1号土壤EC传感器', 6, 'A区温室', 'online', 90, CURRENT_TIMESTAMP),
+    ('P-001', 'A区温室1号土壤pH传感器', 7, 'A区温室', 'online', 88, CURRENT_TIMESTAMP)
     ON DUPLICATE KEY UPDATE name = VALUES(name), type_id = VALUES(type_id), location = VALUES(location), status = VALUES(status), battery = VALUES(battery), last_update = VALUES(last_update)
   `)
   console.log('✅ 传感器设备插入成功')
@@ -127,21 +132,17 @@ async function initDatabase() {
   for (let i = 0; i < 24; i++) {
     const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000)
     
-    // 温度传感器数据（18-30°C）
+    // 空气温度传感器数据（18-30°C）
     await connection.query(
       'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
       ['T-001', 18 + Math.random() * 12, timestamp]
     )
     await connection.query(
       'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
-      ['T-002', 18 + Math.random() * 12, timestamp]
-    )
-    await connection.query(
-      'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
       ['T-003', 18 + Math.random() * 12, timestamp]
     )
     
-    // 湿度传感器数据（50-80%）
+    // 空气湿度传感器数据（50-80%）
     await connection.query(
       'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
       ['H-001', 50 + Math.random() * 30, timestamp]
@@ -173,6 +174,24 @@ async function initDatabase() {
     await connection.query(
       'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
       ['S-003', 30 + Math.random() * 30, timestamp]
+    )
+    
+    // 土壤温度传感器数据（15-28°C）
+    await connection.query(
+      'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
+      ['T-002', 15 + Math.random() * 13, timestamp]
+    )
+    
+    // 土壤电导率传感器数据（200-1000 μS/cm）
+    await connection.query(
+      'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
+      ['E-001', 200 + Math.random() * 800, timestamp]
+    )
+    
+    // 土壤pH传感器数据（5.5-7.5）
+    await connection.query(
+      'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
+      ['P-001', 5.5 + Math.random() * 2, timestamp]
     )
   }
   

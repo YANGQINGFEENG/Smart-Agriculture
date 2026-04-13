@@ -1,64 +1,66 @@
----
+***
+
 name: "keil-compile-result-check"
 description: "执行Keil UV4命令行编译，自动解析日志检测错误、警告、目标状态与文件生成，快速判断编译是否成功。当用户需要检测Keil编译结果或分析UV4编译日志时调用。"
 version: "1.0.0"
 user-invocable: true
 allowed-tools:
-  - run_shell
-  - read_file
-  - write_file
----
+
+- run\_shell
+- read\_file
+- write\_file
+
+***
 
 # Keil 编译结果检测与分析 Skill
 
 ## 触发词
+
 - "检测Keil编译结果"
 - "分析UV4编译日志"
 - "判断Keil项目编译成败"
 - "检查Project.uvprojx编译"
 
 ## 输入
+
 - Keil项目文件路径（默认：Project.uvprojx）
 - UV4.exe路径（默认：D:\Program Files\UV4\UV4.exe）
 
 ## 输出
+
 - 编译成功/带警告/失败 结论
 - 错误数、警告数
 - 是否生成 .axf / .hex
 - 简要建议
 
 ## 执行步骤
+
 1. **检查上次成功路径**
    - 首先检查是否存在上次成功编译的路径记录
    - 如果存在，优先使用上次成功的路径
-
 2. **路径自动检测**
    - **Keil项目文件**：
-     1. 首先检查当前目录是否存在 *.uvprojx 文件
+     1. 首先检查当前目录是否存在 \*.uvprojx 文件
      2. 如果存在多个，选择最近修改的文件
      3. 如果当前目录不存在，搜索子目录
    - **UV4.exe路径**：
      1. 首先检查默认路径 D:\Program Files\UV4\UV4.exe
      2. 如果不存在，检查 D:\Program Files (x86)\UV4\UV4.exe
      3. 如果仍不存在，搜索系统注册表中的 Keil 安装路径
-
 3. **执行编译命令**
    ```powershell
    & "[自动检测的UV4路径]" -b "[自动检测的项目文件路径]"
    ```
    记录完整日志输出。
-
 4. **日志关键检测**
-   - 错误：匹配 \d+ Error\(s\) → 错误数量
-   - 警告：匹配 \d+ Warning\(s\) → 警告数量
+   - 错误：匹配 \d+ Error(s) → 错误数量
+   - 警告：匹配 \d+ Warning(s) → 警告数量
    - 结果：Target created（成功）/ Target not created（失败）
-   - 文件：检查 Objects/*.axf 、 *.hex 是否存在
-
+   - 文件：检查 Objects/\*.axf 、 \*.hex 是否存在
 5. **结果判定**
    - ✅ 完全成功：0 错误 + 0 警告 + Target created + 文件存在
    - ⚠️ 带警告成功：0 错误 + 有警告 + Target created + 文件存在
    - ❌ 编译失败：≥1 错误 或 Target not created
-
 6. **警告修复**
    - 如果编译成功但有警告：
      1. 分析警告类型（函数隐式声明、文件末尾缺少换行等）
@@ -66,47 +68,52 @@ allowed-tools:
         - 函数隐式声明：添加函数原型声明
         - 文件末尾缺少换行：添加换行符
      3. 重新编译验证警告是否修复
-
 7. **路径记录与更新**
    - 如果编译成功，记录当前使用的路径到配置文件
    - 如果编译失败：
      1. 检查当前使用的路径是否正确
      2. 尝试其他可能的路径组合
      3. 找到成功路径后，自动更新技能配置
-
 8. **输出总结**
    - 完全成功：✅ 编译成功！0错误，0警告，已生成 .axf/.hex
    - 带警告成功：⚠️ 编译完成（0错误，X警告），已尝试自动修复
    - 失败：❌ 编译失败（X错误），未生成目标文件，请检查代码/配置
 
 ## 判定规则 / 逻辑
+
 - **成功条件**：0错误 + Target created + 生成目标文件
 - **失败条件**：≥1错误 或 Target not created 或未生成目标文件
 - **警告处理**：有警告但无错误时，视为成功但建议核查警告
 
 ## 示例（成功/失败）
+
 ### 成功日志
-```".\Objects\Project.axf" - 0 Error(s), 2 Warning(s).
+
+```".\Objects\Project.axf"
 Target created.
 Build Time Elapsed: 00:00:05
 ```
 
 → 输出：
+
 ```
 ✅ 编译成功！0错误，2个警告，已生成 .axf/.hex 文件
 ```
 
 ### 失败日志
-```".\Objects\Project.axf" - 2 Error(s), 6 Warning(s).
+
+```".\Objects\Project.axf"
 Target not created.
 ```
 
 → 输出：
+
 ```
 ❌ 编译失败！2个错误，未生成目标文件，请检查代码/配置
 ```
 
 ## 错误处理
+
 - **UV4 路径错误** → 自动搜索失败时，提示用户手动指定 UV4.exe 路径
 - **项目文件不存在** → 自动搜索失败时，提示用户手动指定 .uvprojx 文件路径
 - **路径自动检测失败** → 提供手动输入选项
@@ -116,6 +123,7 @@ Target not created.
 - **日志无关键信息** → 提示手动查看日志或重新编译
 
 ## 配置文件管理
+
 - **配置文件位置**：`.trae/skills/keil-compile-result-check/config.json`
 - **存储内容**：
   - 上次成功的 UV4.exe 路径
@@ -125,3 +133,4 @@ Target not created.
   - 每次编译成功后自动更新配置文件
   - 下次运行时优先读取配置文件中的路径
   - 手动输入路径成功后也会更新配置文件
+

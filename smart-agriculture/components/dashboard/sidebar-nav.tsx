@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -12,6 +13,8 @@ import {
   Droplets,
   Thermometer,
   Sun,
+  TrendingUp,
+  Power,
 } from "lucide-react"
 
 interface SidebarNavProps {
@@ -69,6 +72,24 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
                 </button>
               </li>
             ))}
+            <li>
+              <Link
+                href="/compare"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              >
+                <TrendingUp className="w-4 h-4" />
+                数据对比
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/actuators"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              >
+                <Power className="w-4 h-4" />
+                执行器控制
+              </Link>
+            </li>
           </ul>
         </div>
 

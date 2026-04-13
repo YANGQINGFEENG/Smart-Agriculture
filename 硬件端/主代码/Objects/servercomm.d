@@ -35,3 +35,8 @@
 .\objects\servercomm.o: .\System\sys.h
 .\objects\servercomm.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\servercomm.o: D:\Program Files\ARM\ARMCC\Bin\..\include\string.h
+.\objects\servercomm.o: Hardware\dht11.h
+.\objects\servercomm.o: Hardware\LightSensor.h
+.\objects\servercomm.o: Hardware\SoilSensor.h
+.\objects\servercomm.o: Hardware\OLED.h
+.\objects\servercomm.o: D:\Program Files\ARM\ARMCC\Bin\..\include\stdlib.h

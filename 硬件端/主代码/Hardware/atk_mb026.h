@@ -284,4 +284,14 @@ uint8_t atk_mb026_connect_atknewcld(char *id, char *pwd);
  */
 uint8_t atk_mb026_disconnect_atkcld(void);
 
+/**
+ * @brief   ATK-MB026 Ping测试
+ * @param   ip 目标IP地址
+ * @return  ATK_MB026_EOK: Ping成功
+ *          ATK_MB026_ETIMEOUT: Ping超时
+ *          ATK_MB026_ERROR: Ping失败
+ * @note    用于测试网络连通性，结果会打印到串口
+ */
+uint8_t atk_mb026_ping(char *ip);
+
 #endif

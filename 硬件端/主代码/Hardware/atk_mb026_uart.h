@@ -41,8 +41,8 @@
 
 /* ==================== 缓冲区大小定义 ==================== */
 
-#define ATK_MB026_UART_RX_BUF_SIZE            256                 // 接收缓冲区大小
-#define ATK_MB026_UART_TX_BUF_SIZE            256                 // 发送缓冲区大小
+#define ATK_MB026_UART_RX_BUF_SIZE            1024                // 接收缓冲区大小（增大以容纳HTTP响应）
+#define ATK_MB026_UART_TX_BUF_SIZE            512                 // 发送缓冲区大小
 
 /* ==================== 函数声明 ==================== */
 
@@ -51,6 +51,24 @@
  * @param   fmt 格式化字符串
  */
 void atk_mb026_uart_printf(char *fmt, ...);
+
+/**
+ * @brief   ATK-MB026 UART printf函数（阻塞方式）
+ * @param   fmt 格式化字符串
+ */
+void atk_mb026_uart_printf_blocking(char *fmt, ...);
+
+/**
+ * @brief   等待发送完成
+ */
+void atk_mb026_uart_wait_tx_done(void);
+
+/**
+ * @brief   通过USART2发送数据（阻塞方式）
+ * @param   data 要发送的数据
+ * @param   len 数据长度
+ */
+void usart2_send_data_blocking(const uint8_t *data, uint16_t len);
 
 /**
  * @brief   ATK-MB026 UART重新开始接收数据

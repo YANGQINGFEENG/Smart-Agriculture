@@ -129,9 +129,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    
     const body = await request.json()
     
+    console.log(`[Sensor] 收到传感器数据上传请求 - ID: ${id}, 数据:`, JSON.stringify(body))
+    
     if (typeof body.value !== 'number') {
+      console.log(`[Sensor] 参数错误 - ID: ${id}, value类型不正确`)
       return NextResponse.json(
         { success: false, error: '缺少必要参数：value（数值类型）' },
         { status: 400 }
@@ -144,10 +148,20 @@ export async function POST(
     )
 
     if (sensors.length === 0) {
+      console.log(`[Sensor] 传感器不存在 - ID: ${id}`)
       return NextResponse.json(
         { success: false, error: '传感器不存在' },
         { status: 404 }
       )
+    }
+
+    if (body.value === 0) {
+      console.log(`[Sensor] 数据值为0，跳过更新 - ID: ${id}`)
+      return NextResponse.json({
+        success: true,
+        data: null,
+        message: 'OK',
+      })
     }
 
     const result = await db.execute<ResultSetHeader>(
@@ -165,17 +179,19 @@ export async function POST(
       [result.insertId]
     )
 
+    console.log(`[Sensor] 传感器数据保存成功 - ID: ${id}, 值: ${newData[0].value}`)
+
     return NextResponse.json({
       success: true,
       data: newData[0],
-      message: '传感器数据添加成功',
+      message: 'OK',
     })
   } catch (error) {
-    console.error('添加传感器数据失败:', error)
+    console.error('[Sensor] 保存传感器数据失败:', error)
     return NextResponse.json(
       { 
         success: false, 
-        error: '添加传感器数据失败',
+        error: '保存传感器数据失败',
         details: error instanceof Error ? error.message : '未知错误'
       },
       { status: 500 }

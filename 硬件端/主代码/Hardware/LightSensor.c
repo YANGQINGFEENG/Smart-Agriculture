@@ -79,10 +79,26 @@ uint16_t LightSensor_Read(void)
  * @brief   获取光照强度百分比
  * @details 将ADC值（0-4095）映射到百分比（0-100%）
  * @return  光照强度（0-100%）
+ * @note    已弃用，建议使用 LightSensor_GetLux() 获取勒克斯值
  */
 uint8_t LightSensor_GetPercentage(void)
 {
     uint16_t adc_value = LightSensor_Read();
-    // 将0-4095映射到0-100
     return (uint8_t)((adc_value * 100) / 4095);
+}
+
+/**
+ * @brief   获取光照强度（勒克斯）
+ * @details 将ADC值转换为勒克斯单位
+ * @return  光照强度（0-10000 Lux）
+ * @note    典型光照范围：黑暗<10 Lux，室内100-500 Lux，阴天1000 Lux，晴天10000+ Lux
+ *          ADC值越高表示光照越强（光敏电阻分压原理）
+ */
+uint16_t LightSensor_GetLux(void)
+{
+    uint16_t adc_value = LightSensor_Read();
+    
+    uint16_t lux = (uint16_t)((adc_value * 10000UL) / 4095);
+    
+    return lux;
 }

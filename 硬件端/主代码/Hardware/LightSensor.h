@@ -6,5 +6,6 @@
 void LightSensor_Init(void);
 uint16_t LightSensor_Read(void);
 uint8_t LightSensor_GetPercentage(void);
+uint16_t LightSensor_GetLux(void);
 
 #endif
