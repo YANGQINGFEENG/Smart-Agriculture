@@ -24,6 +24,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f10x_it.h"
 #include "RS485.h"
+#include "uart.h"
 
 /** @addtogroup STM32F10x_StdPeriph_Template
   * @{
@@ -139,6 +140,8 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
+    extern volatile uint32_t g_system_tick;
+    g_system_tick++;
 }
 
 /******************************************************************************/
@@ -159,37 +162,36 @@ void SysTick_Handler(void)
 */
 
 /**
+  * @brief  This function handles USART1 global interrupt request.
+  * @param  None
+  * @retval None
+  */
+extern void USART1_IRQHandler(void);
+void USART1_IRQHandler(void)
+{
+    /* 实际实现在 uart.c 中 */
+}
+
+/**
   * @brief  This function handles USART3 global interrupt request.
   * @param  None
   * @retval None
   */
+extern void USART3_IRQHandler(void);
 void USART3_IRQHandler(void)
 {
-    uint8_t recv_data;
-    
-    /* 处理接收中断 */
-    if (USART_GetITStatus(USART3, USART_IT_RXNE) != RESET)
-    {
-        /* 读取接收到的数据 */
-        recv_data = USART_ReceiveData(USART3);
-        
-        /* 将数据存储到接收缓冲区 */
-        if ((USART3_RX_STA & 0x3FFF) < USART3_REC_LEN)
-        {
-            USART3_RX_BUF[USART3_RX_STA & 0x3FFF] = recv_data;
-            USART3_RX_STA++;
-        }
-        
-        /* 清除中断标志 */
-        USART_ClearITPendingBit(USART3, USART_IT_RXNE);
-    }
-    
-    /* 处理其他中断 */
-    if (USART_GetITStatus(USART3, USART_IT_ORE) != RESET)
-    {
-        USART_ClearITPendingBit(USART3, USART_IT_ORE);
-        (void)USART_ReceiveData(USART3);
-    }
+    /* 实际实现在 uart.c 中 */
+}
+
+/**
+  * @brief  This function handles DMA1 Channel2 global interrupt request.
+  * @param  None
+  * @retval None
+  */
+extern void DMA1_Channel2_IRQHandler(void);
+void DMA1_Channel2_IRQHandler(void)
+{
+    /* 实际实现在 uart.c 中 */
 }
 
 /**
