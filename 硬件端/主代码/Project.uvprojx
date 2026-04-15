@@ -934,6 +934,16 @@
               <FilePath>.\Hardware\LightSensor.h</FilePath>
             </File>
             <File>
+              <FileName>OLED_Display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\OLED_Display.c</FilePath>
+            </File>
+            <File>
+              <FileName>OLED_Display.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\OLED_Display.h</FilePath>
+            </File>
+            <File>
               <FileName>ServerComm.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\ServerComm.c</FilePath>

@@ -10,8 +10,147 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static uint8_t g_tcp_connected = 0;
-static uint8_t g_transparent_mode = 0;
+// ==================== 全局变量定义 ====================
+
+static uint8_t g_tcp_connected = 0;                    // TCP连接状态标志
+static uint8_t g_transparent_mode = 0;                 // 透传模式标志
+NetworkQueue_t g_network_queue;                         // 网络请求队列（全局变量，供OLED显示使用）
+static uint32_t g_system_time = 0;                      // 系统时间计数器
+
+// ==================== 队列操作函数实现 ====================
+
+/**
+ * @brief 初始化网络请求队列
+ * @param queue 队列指针
+ * @note 将队列头尾指针和计数器初始化为0
+ */
+void NetworkQueue_Init(NetworkQueue_t *queue)
+{
+    queue->head = 0;
+    queue->tail = 0;
+    queue->count = 0;
+    memset(queue->requests, 0, sizeof(queue->requests));
+    printf("[Queue] 队列初始化完成，大小: %d\r\n", NETWORK_QUEUE_SIZE);
+}
+
+/**
+ * @brief 添加请求到队列（按优先级插入）
+ * @param queue 队列指针
+ * @param request 请求指针
+ * @return 0:成功 1:队列已满
+ * @note 高优先级请求会插入到队列前面
+ */
+uint8_t NetworkQueue_Enqueue(NetworkQueue_t *queue, NetworkRequest_t *request)
+{
+    if (NetworkQueue_IsFull(queue)) {
+        printf("[Queue] 队列已满，无法添加请求\r\n");
+        return SERVER_COMM_ERROR_QUEUE_FULL;
+    }
+    
+    // 设置请求时间戳
+    request->timestamp = g_system_time;
+    request->retry_count = 0;
+    
+    // 根据优先级插入到队列
+    if (request->priority == REQ_PRIORITY_HIGH) {
+        // 高优先级：插入到队列头部
+        uint16_t insert_pos = queue->head;
+        if (insert_pos == 0) {
+            insert_pos = NETWORK_QUEUE_SIZE - 1;
+        } else {
+            insert_pos--;
+        }
+        
+        // 移动其他请求
+        if (queue->count > 0) {
+            for (uint16_t i = 0; i < queue->count; i++) {
+                uint16_t src_pos = (queue->head - 1 - i + NETWORK_QUEUE_SIZE) % NETWORK_QUEUE_SIZE;
+                uint16_t dst_pos = (src_pos - 1 + NETWORK_QUEUE_SIZE) % NETWORK_QUEUE_SIZE;
+                queue->requests[dst_pos] = queue->requests[src_pos];
+            }
+        }
+        
+        queue->head = insert_pos;
+    } else {
+        // 普通和低优先级：添加到队列尾部
+        queue->requests[queue->tail] = *request;
+        queue->tail = (queue->tail + 1) % NETWORK_QUEUE_SIZE;
+    }
+    
+    queue->count++;
+    printf("[Queue] 请求已添加，类型: %d, 优先级: %d, 队列数量: %d\r\n", 
+           request->type, request->priority, queue->count);
+    
+    return SERVER_COMM_OK;
+}
+
+/**
+ * @brief 从队列中取出请求
+ * @param queue 队列指针
+ * @param request 请求指针（用于返回）
+ * @return 0:成功 1:队列为空
+ */
+uint8_t NetworkQueue_Dequeue(NetworkQueue_t *queue, NetworkRequest_t *request)
+{
+    if (NetworkQueue_IsEmpty(queue)) {
+        printf("[Queue] 队列为空，无法取出请求\r\n");
+        return SERVER_COMM_ERROR_QUEUE_EMPTY;
+    }
+    
+    *request = queue->requests[queue->head];
+    queue->head = (queue->head + 1) % NETWORK_QUEUE_SIZE;
+    queue->count--;
+    
+    printf("[Queue] 请求已取出，类型: %d, 队列数量: %d\r\n", 
+           request->type, queue->count);
+    
+    return SERVER_COMM_OK;
+}
+
+/**
+ * @brief 检查队列是否为空
+ * @param queue 队列指针
+ * @return 1:队列为空 0:队列不为空
+ */
+uint8_t NetworkQueue_IsEmpty(NetworkQueue_t *queue)
+{
+    return (queue->count == 0);
+}
+
+/**
+ * @brief 检查队列是否已满
+ * @param queue 队列指针
+ * @return 1:队列已满 0:队列未满
+ */
+uint8_t NetworkQueue_IsFull(NetworkQueue_t *queue)
+{
+    return (queue->count >= NETWORK_QUEUE_SIZE);
+}
+
+/**
+ * @brief 获取队列中的请求数量
+ * @param queue 队列指针
+ * @return 队列中的请求数量
+ */
+uint16_t NetworkQueue_GetCount(NetworkQueue_t *queue)
+{
+    return queue->count;
+}
+
+/**
+ * @brief 清空队列
+ * @param queue 队列指针
+ */
+void NetworkQueue_Clear(NetworkQueue_t *queue)
+{
+    queue->head = 0;
+    queue->tail = 0;
+    queue->count = 0;
+    memset(queue->requests, 0, sizeof(queue->requests));
+    printf("[Queue] 队列已清空\r\n");
+}
+
+// ==================== 服务器通信模块初始化 ====================
 
 /**
  * @brief 初始化服务器通信模块
@@ -20,12 +159,17 @@ void ServerComm_Init(void)
 {
     g_tcp_connected = 0;
     g_transparent_mode = 0;
+    g_system_time = 0;
+    
+    // 初始化网络请求队列
+    NetworkQueue_Init(&g_network_queue);
     
     printf("\r\n========================================\r\n");
     printf("[ServerComm] 初始化服务器通信模块\r\n");
     printf("[ServerComm] 服务器地址: %s:%s\r\n", SERVER_IP, SERVER_PORT);
     printf("[ServerComm] 上传间隔: %d ms\r\n", UPLOAD_INTERVAL_MS);
-    printf("[ServerComm] 长连接模式已启用\r\n");
+    printf("[ServerComm] 队列大小: %d\r\n", NETWORK_QUEUE_SIZE);
+    printf("[ServerComm] 队列模式已启用\r\n");
     printf("========================================\r\n\r\n");
 }
 
@@ -163,12 +307,13 @@ static uint8_t ServerComm_EnsureConnection(void)
     return ServerComm_Connect();
 }
 
-/**
+/*
  * @brief 上传单个传感器数据到服务器
  * @param sensor_id 传感器ID
  * @param value 传感器值
  * @return 0:成功 1:连接失败 2:发送失败 3:响应异常
  */
+/*
 uint8_t ServerComm_UploadSensorData(const char *sensor_id, float value)
 {
     char url[64];
@@ -257,10 +402,12 @@ uint8_t ServerComm_UploadSensorData(const char *sensor_id, float value)
     
     return success ? 0 : 3;
 }
+*/
 
-/**
+/*
  * @brief 测试发送固定HTTP请求
  */
+/*
 void ServerComm_TestFixedRequest(void)
 {
     if (atk_mb026_connect_tcp_server((char *)SERVER_IP, (char *)SERVER_PORT) != ATK_MB026_EOK) {
@@ -290,6 +437,7 @@ void ServerComm_TestFixedRequest(void)
     
     atk_mb026_send_at_cmd("AT+CIPCLOSE", "OK", 2000);
 }
+*/
 
 /**
  * @brief 发送传感器数据并检查服务器响应
@@ -370,10 +518,11 @@ static uint8_t ServerComm_SendSensorDataWithCheck(const char *sensor_id, const c
     return success;
 }
 
-/**
+/*
  * @brief 使用长连接模式发送传感器数据（不断开连接）
  * @return 成功上传的传感器数量
  */
+/*
 uint8_t ServerComm_SendData_KeepAlive(void)
 {
     uint8_t success_count = 0;
@@ -489,6 +638,7 @@ uint8_t ServerComm_SendData_KeepAlive(void)
     
     return success_count;
 }
+*/
 
 /**
  * @brief 静默发送单个传感器数据（不打印日志）
@@ -855,15 +1005,6 @@ uint8_t ServerComm_UploadAllSensors_Transparent(void)
 }
 
 /**
- * @brief 上传所有传感器数据
- * @return 成功上传的传感器数量
- */
-uint8_t ServerComm_UploadAllSensors(void)
-{
-    return ServerComm_SendData_KeepAlive();
-}
-
-/**
  * @brief 上传执行器状态到服务器
  * @param actuator_id 执行器ID
  * @param state 执行器状态 (0:关闭, 1:开启)
@@ -899,24 +1040,16 @@ uint8_t ServerComm_UploadActuatorStatus(const char *actuator_id, uint8_t state, 
     }
     
     atk_mb026_uart_rx_restart();
-    delay_ms(100);
     atk_mb026_uart_rx_restart();
-    delay_ms(50);
     
     printf("[Actuator] 发送HTTP请求...\r\n");
     
     atk_mb026_uart_printf_blocking("PATCH /api/actuators/%s HTTP/1.1\r\n", actuator_id);
-    delay_ms(10);
     atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
-    delay_ms(10);
     atk_mb026_uart_printf_blocking("Content-Type: application/json\r\n");
-    delay_ms(10);
     atk_mb026_uart_printf_blocking("Content-Length: %d\r\n", json_len);
-    delay_ms(10);
     atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
-    delay_ms(10);
     atk_mb026_uart_printf_blocking("\r\n");
-    delay_ms(10);
     atk_mb026_uart_printf_blocking("%s", json_buf);
     
     printf("[Actuator] HTTP请求已发送，等待响应...\r\n");
@@ -1212,4 +1345,321 @@ uint8_t ServerComm_ConfirmCommand(const char *actuator_id, int command_id, const
     
     printf("[Command] 重试%d次后仍未确认成功\r\n", max_retries);
     return 1;
+}
+
+// ==================== 队列处理函数实现 ====================
+
+/**
+ * @brief 处理单个网络请求
+ * @param request 请求指针
+ * @return 0:成功 1:失败
+ * @note 根据请求类型调用相应的处理函数
+ */
+static uint8_t ServerComm_ProcessRequest(NetworkRequest_t *request)
+{
+    uint8_t result = SERVER_COMM_OK;
+    
+    switch (request->type) {
+        case REQ_TYPE_SENSOR_DATA: {
+            // 处理传感器数据上传
+            printf("[Queue] 处理传感器数据: %s = %.2f\r\n", 
+                   request->data.sensor_data.sensor_id, 
+                   request->data.sensor_data.value);
+            // 直接使用已建立的长连接发送数据，而不是重新建立连接
+            char json_buf[32];
+            uint8_t json_len;
+            sprintf(json_buf, "{\"value\":%.2f}", request->data.sensor_data.value);
+            json_len = strlen(json_buf);
+            
+            printf("[DEBUG] 发送传感器数据: %s\r\n", request->data.sensor_data.sensor_id);
+            printf("[DEBUG] JSON: %s (len=%d)\r\n", json_buf, json_len);
+            
+            // 发送HTTP请求
+            atk_mb026_uart_printf_blocking("POST /api/sensors/%s/data HTTP/1.1\r\n", request->data.sensor_data.sensor_id);
+            atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
+            atk_mb026_uart_printf_blocking("Content-Type: application/json\r\n");
+            atk_mb026_uart_printf_blocking("Content-Length: %d\r\n", json_len);
+            atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
+            atk_mb026_uart_printf_blocking("\r\n");
+            atk_mb026_uart_printf_blocking("%s", json_buf);
+            
+            result = SERVER_COMM_OK;
+            break;
+        }
+            
+        case REQ_TYPE_ACTUATOR_STATUS:
+            // 处理执行器状态上传
+            printf("[Queue] 处理执行器状态: %s\r\n", 
+                   request->data.actuator_status.actuator_id);
+            result = ServerComm_UploadActuatorStatus(
+                request->data.actuator_status.actuator_id,
+                request->data.actuator_status.state,
+                request->data.actuator_status.mode);
+            break;
+            
+        case REQ_TYPE_COMMAND_QUERY:
+            // 处理指令查询
+            printf("[Queue] 处理指令查询: %s\r\n", 
+                   request->data.command_query.actuator_id);
+            result = ServerComm_CheckAndExecuteCommand(
+                request->data.command_query.actuator_id,
+                request->data.command_query.command_id_ptr,
+                request->data.command_query.command_ptr);
+            break;
+            
+        case REQ_TYPE_COMMAND_CONFIRM:
+            // 处理指令确认
+            printf("[Queue] 处理指令确认: %s, ID: %d\r\n", 
+                   request->data.command_confirm.actuator_id,
+                   request->data.command_confirm.command_id);
+            result = ServerComm_ConfirmCommand(
+                request->data.command_confirm.actuator_id,
+                request->data.command_confirm.command_id,
+                request->data.command_confirm.status);
+            break;
+            
+        case REQ_TYPE_HEARTBEAT:
+            // 处理心跳保活
+            printf("[Queue] 处理心跳请求\r\n");
+            // 心跳请求可以发送简单的HTTP请求或空数据
+            // 这里暂时不做处理
+            break;
+            
+        default:
+            printf("[Queue] 未知请求类型: %d\r\n", request->type);
+            result = SERVER_COMM_ERROR_INVALID_PARAM;
+            break;
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 处理队列中的所有请求
+ * @note 从队列中依次取出请求并处理，直到队列为空
+ */
+void ServerComm_ProcessQueue(void)
+{
+    NetworkRequest_t request;
+    uint8_t process_count = 0;
+    
+    printf("\r\n[Queue] ========== 开始处理队列 ==========\r\n");
+    printf("[Queue] 队列中的请求数量: %d\r\n", NetworkQueue_GetCount(&g_network_queue));
+    
+    // 循环处理队列中的所有请求
+    while (!NetworkQueue_IsEmpty(&g_network_queue)) {
+        // 从队列中取出请求
+        if (NetworkQueue_Dequeue(&g_network_queue, &request) != SERVER_COMM_OK) {
+            printf("[Queue] 取出请求失败\r\n");
+            break;
+        }
+        
+        // 处理请求
+        uint8_t result = ServerComm_ProcessRequest(&request);
+        
+        if (result == SERVER_COMM_OK) {
+            printf("[Queue] 请求处理成功\r\n");
+        } else {
+            printf("[Queue] 请求处理失败，错误码: %d\r\n", result);
+            
+            // 如果未达到最大重试次数，重新加入队列
+            if (request.retry_count < MAX_RETRY_COUNT) {
+                request.retry_count++;
+                printf("[Queue] 重新加入队列，重试次数: %d\r\n", request.retry_count);
+                NetworkQueue_Enqueue(&g_network_queue, &request);
+            } else {
+                printf("[Queue] 已达到最大重试次数，放弃请求\r\n");
+            }
+        }
+        
+        process_count++;
+        
+        // 避免一次处理太多请求，影响其他任务
+        if (process_count >= 5) {
+            printf("[Queue] 已处理%d个请求，暂停处理\r\n", process_count);
+            break;
+        }
+    }
+    
+    printf("[Queue] ========== 队列处理完成 ==========\r\n");
+    printf("[Queue] 处理的请求数量: %d, 剩余: %d\r\n\r\n", 
+           process_count, NetworkQueue_GetCount(&g_network_queue));
+}
+
+/**
+ * @brief 批量处理队列中的请求
+ * @param max_count 最大处理数量
+ * @return 实际处理的请求数量
+ * @note 一次最多处理max_count个请求，避免长时间占用CPU
+ */
+uint8_t ServerComm_ProcessBatch(uint8_t max_count)
+{
+    NetworkRequest_t request;
+    uint8_t process_count = 0;
+    uint16_t queue_count = NetworkQueue_GetCount(&g_network_queue);
+    
+    // 如果队列为空，直接返回
+    if (queue_count == 0) {
+        return 0;
+    }
+    
+    printf("\r\n[Queue] ========== 批量处理队列 ==========\r\n");
+    printf("[Queue] 最大处理数量: %d, 队列中的请求数量: %d\r\n", 
+           max_count, queue_count);
+    
+    // 循环处理队列中的请求，最多处理max_count个
+    while (process_count < max_count && !NetworkQueue_IsEmpty(&g_network_queue)) {
+        // 从队列中取出请求
+        if (NetworkQueue_Dequeue(&g_network_queue, &request) != SERVER_COMM_OK) {
+            printf("[Queue] 取出请求失败\r\n");
+            break;
+        }
+        
+        // 处理请求
+        uint8_t result = ServerComm_ProcessRequest(&request);
+        
+        if (result == SERVER_COMM_OK) {
+            printf("[Queue] 请求处理成功\r\n");
+        } else {
+            printf("[Queue] 请求处理失败，错误码: %d\r\n", result);
+            
+            // 如果未达到最大重试次数，重新加入队列
+            if (request.retry_count < MAX_RETRY_COUNT) {
+                request.retry_count++;
+                printf("[Queue] 重新加入队列，重试次数: %d\r\n", request.retry_count);
+                NetworkQueue_Enqueue(&g_network_queue, &request);
+            } else {
+                printf("[Queue] 已达到最大重试次数，放弃请求\r\n");
+            }
+        }
+        
+        process_count++;
+    }
+    
+    printf("[Queue] ========== 批量处理完成 ==========\r\n");
+    printf("[Queue] 实际处理的请求数量: %d, 剩余: %d\r\n\r\n", 
+           process_count, NetworkQueue_GetCount(&g_network_queue));
+    
+    return process_count;
+}
+
+/**
+ * @brief 上传单个传感器数据（队列方式）
+ * @param sensor_id 传感器ID
+ * @param value 传感器值
+ * @return 0:成功 1:失败
+ * @note 将传感器数据请求添加到队列中
+ */
+uint8_t ServerComm_UploadSensorData(const char *sensor_id, float value)
+{
+    NetworkRequest_t request;
+    
+    // 构造传感器数据请求
+    request.type = REQ_TYPE_SENSOR_DATA;
+    request.priority = REQ_PRIORITY_NORMAL;
+    request.timestamp = g_system_time;
+    request.retry_count = 0;
+    strcpy(request.data.sensor_data.sensor_id, sensor_id);
+    request.data.sensor_data.value = value;
+    
+    // 添加到队列
+    uint8_t result = NetworkQueue_Enqueue(&g_network_queue, &request);
+    
+    if (result == SERVER_COMM_OK) {
+        printf("[ServerComm] 传感器数据已加入队列: %s = %.2f\r\n", sensor_id, value);
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 上传所有传感器数据（队列方式）
+ * @return 0:成功 1:失败
+ * @note 将所有传感器数据请求批量添加到队列中
+ */
+uint8_t ServerComm_UploadAllSensors(void)
+{
+    uint8_t dht_temp, dht_humi;
+    uint16_t light_lux;
+    float soil_moisture, soil_temp, soil_ec, soil_ph;
+    uint16_t ec_value;
+    uint8_t success_count = 0;
+    
+    printf("\r\n[ServerComm] ========== 批量上传传感器数据 ==========\r\n");
+    
+    // 读取DHT11数据
+    if (DHT11_ReadData() == 0) {
+        dht_temp = DHT11_GetTemperature();
+        dht_humi = DHT11_GetHumidity();
+        printf("[DHT11] T=%dC, H=%d%%\r\n", dht_temp, dht_humi);
+        
+        // 添加温度数据到队列
+        if (dht_temp > 0) {
+            if (ServerComm_UploadSensorData(SENSOR_ID_AIR_TEMP, (float)dht_temp) == SERVER_COMM_OK) {
+                success_count++;
+            }
+        }
+        
+        // 添加湿度数据到队列
+        if (dht_humi > 0) {
+            if (ServerComm_UploadSensorData(SENSOR_ID_AIR_HUMIDITY, (float)dht_humi) == SERVER_COMM_OK) {
+                success_count++;
+            }
+        }
+    } else {
+        printf("[ERROR] DHT11读取失败\r\n");
+    }
+    
+    // 读取光照数据
+    light_lux = LightSensor_GetLux();
+    printf("[Light] %d Lux\r\n", light_lux);
+    
+    // 添加光照数据到队列
+    if (light_lux > 0) {
+        if (ServerComm_UploadSensorData(SENSOR_ID_LIGHT, (float)light_lux) == SERVER_COMM_OK) {
+            success_count++;
+        }
+    }
+    
+    // 读取土壤传感器数据
+    if (SoilSensor_ReadData(&soil_moisture, &soil_temp, &ec_value, &soil_ph) == 0) {
+        soil_ec = (float)ec_value;
+        printf("[Soil] M=%.1f%%, T=%.1fC, EC=%.0f, pH=%.1f\r\n", 
+               soil_moisture, soil_temp, soil_ec, soil_ph);
+        
+        // 添加土壤含水率数据到队列
+        if (soil_moisture > 0) {
+            if (ServerComm_UploadSensorData(SENSOR_ID_SOIL_MOISTURE, soil_moisture) == SERVER_COMM_OK) {
+                success_count++;
+            }
+        }
+        
+        // 添加土壤温度数据到队列
+        if (soil_temp > 0) {
+            if (ServerComm_UploadSensorData(SENSOR_ID_SOIL_TEMP, soil_temp) == SERVER_COMM_OK) {
+                success_count++;
+            }
+        }
+        
+        // 添加土壤EC数据到队列
+        if (soil_ec > 0) {
+            if (ServerComm_UploadSensorData(SENSOR_ID_SOIL_EC, soil_ec) == SERVER_COMM_OK) {
+                success_count++;
+            }
+        }
+        
+        // 添加土壤pH数据到队列
+        if (soil_ph > 0) {
+            if (ServerComm_UploadSensorData(SENSOR_ID_SOIL_PH, soil_ph) == SERVER_COMM_OK) {
+                success_count++;
+            }
+        }
+    } else {
+        printf("[ERROR] 土壤传感器读取失败\r\n");
+    }
+    
+    printf("[ServerComm] ========== 批量上传完成 ==========\r\n");
+    printf("[ServerComm] 成功添加%d个传感器数据到队列\r\n\r\n", success_count);
+    
+    return (success_count > 0) ? SERVER_COMM_OK : SERVER_COMM_ERROR_SENSOR;
 }

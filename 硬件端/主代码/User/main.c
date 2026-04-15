@@ -19,6 +19,7 @@
 #include "../Hardware/RELAY/relay.h"
 #include "../Hardware/TOUCH_KEY/touch_key.h"
 #include "../Hardware/OLED.h"
+#include "../Hardware/OLED_Display.h"
 #include "../Hardware/dht11.h"
 #include "../Hardware/LightSensor.h"
 #include "../Hardware/RS485.h"
@@ -142,7 +143,7 @@ uint8_t connect_wifi(void)
 
 /* ==================== 服务器通信功能 ==================== */
 
-/**
+/*
  * @brief   发送数据到服务器
  * @details 通过TCP连接发送数据到服务器
  * @param   data 要发送的数据
@@ -152,6 +153,7 @@ uint8_t connect_wifi(void)
  * @retval  0: 发送失败
  * @note    使用AT+CIPSEND命令发送数据
  */
+/*
 uint8_t send_data_to_server(char *data, uint16_t len)
 {
     uint8_t ret = 0;
@@ -181,6 +183,7 @@ uint8_t send_data_to_server(char *data, uint16_t len)
     
     return ret;
 }
+*/
 
 /**
  * @brief   Ping服务器功能
@@ -226,7 +229,7 @@ uint32_t ping_server(const char *server_address)
     return 0; // 失败返回0
 }
 
-/**
+/*
  * @brief   发送HTTP请求到服务器
  * @details 建立TCP连接并发送HTTP请求，支持重试机制
  * @param   server_url 服务器地址
@@ -237,6 +240,7 @@ uint32_t ping_server(const char *server_address)
  * @retval  0: 发送失败
  * @note    最大重试次数由MAX_SERVER_RETRY定义
  */
+/*
 uint8_t send_http_request(char *server_url, char *server_port, char *request)
 {
     uint8_t ret = 0;
@@ -391,6 +395,7 @@ uint8_t send_http_request(char *server_url, char *server_port, char *request)
     
     return ret;
 }
+*/
 
 /* ==================== 测试功能 ==================== */
 
@@ -503,7 +508,8 @@ void test_server_health(void)
         // 发送HTTP请求
         OLED_ShowString(3, 1, "  Sending");
         OLED_ShowString(4, 1, "  Request");
-        uint8_t result = send_http_request((char *)SERVER_URL, (char *)SERVER_PORT, request);
+        // uint8_t result = send_http_request((char *)SERVER_URL, (char *)SERVER_PORT, request);
+        uint8_t result = 0; // 暂时返回0，因为send_http_request已被注释
         
         // 显示状态返回值
         printf("[Server Test] 状态返回值: %d\r\n", result);
@@ -572,6 +578,9 @@ int main(void)
 	// 初始化服务器通信模块
 	ServerComm_Init();
 	
+	// 初始化OLED显示管理
+	OLED_Display_Init();
+	
 	// 清屏
 	OLED_Clear();
 	OLED_ShowString(1, 1, "  System Init");
@@ -618,65 +627,44 @@ int main(void)
 		timecount++;
 		
 		// 检测触摸按键
-		uint8_t key = TOUCH_KEY_Scan();
-		if (key == 3) {
-			RELAY_2(1);
-			printf("[Key] 触摸按键C按下，打开继电器2（水泵）\r\n");
-			// 上传执行器状态
-			if (g_wifi_connected && ServerComm_IsConnected()) {
-				ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1);
-			}
-		} else if (key == 4) {
-			RELAY_2(0);
-			printf("[Key] 触摸按键D按下，关闭继电器2（水泵）\r\n");
-			// 上传执行器状态
-			if (g_wifi_connected && ServerComm_IsConnected()) {
-				ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1);
-			}
+	uint8_t key = TOUCH_KEY_Scan();
+	if (key == 1) {
+		// 触摸按键A：切换显示模式
+		OLED_Display_CycleMode();
+	} else if (key == 3) {
+		RELAY_2(1);
+		printf("[Key] 触摸按键C按下，打开继电器2（水泵）\r\n");
+		// 上传执行器状态
+		if (g_wifi_connected && ServerComm_IsConnected()) {
+			ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1);
 		}
-		
-		// 每10秒上传一次传感器数据（后台静默运行）
-		if (timecount % UPLOAD_INTERVAL_MS == 0) {
-			if (g_wifi_connected) {
-				// 静默上传传感器数据，不打印详细日志
-				ServerComm_SendData_KeepAlive_Silent();
-			}
+	} else if (key == 4) {
+		RELAY_2(0);
+		printf("[Key] 触摸按键D按下，关闭继电器2（水泵）\r\n");
+		// 上传执行器状态
+		if (g_wifi_connected && ServerComm_IsConnected()) {
+			ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1);
 		}
-		
-		// 每500ms查询一次控制指令（更快的响应）
-		if (timecount % 500 == 0) {
-			if (g_wifi_connected && ServerComm_IsConnected()) {
-				int cmd_id = 0;
-				char cmd[16] = {0};
-				uint8_t cmd_result = ServerComm_CheckAndExecuteCommand(ACTUATOR_ID_PUMP, &cmd_id, cmd);
-				if (cmd_result == 1 && cmd_id > 0) {
-					printf("[Command] ========== 执行控制指令 ==========\r\n");
-					printf("[Command] 指令ID: %d, 指令: %s\r\n", cmd_id, cmd);
-					
-					if (strcmp(cmd, "on") == 0) {
-						printf("[Command] 执行打开水泵指令\r\n");
-						RELAY_2(1);
-						OLED_ShowString(4, 1, "  Pump: ON ");
-						delay_ms(100);
-						ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1);
-						ServerComm_ConfirmCommand(ACTUATOR_ID_PUMP, cmd_id, "executed");
-						printf("[Command] 指令执行完成\r\n");
-					} else if (strcmp(cmd, "off") == 0) {
-						printf("[Command] 执行关闭水泵指令\r\n");
-						RELAY_2(0);
-						OLED_ShowString(4, 1, "  Pump: OFF");
-						delay_ms(100);
-						ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1);
-						ServerComm_ConfirmCommand(ACTUATOR_ID_PUMP, cmd_id, "executed");
-						printf("[Command] 指令执行完成\r\n");
-					} else {
-						printf("[Command] 未知指令: %s\r\n", cmd);
-						ServerComm_ConfirmCommand(ACTUATOR_ID_PUMP, cmd_id, "failed");
-					}
-				}
-			}
+	}
+	
+	// 更新OLED显示
+	OLED_Display_Update();
+	
+	// 每10秒上传一次传感器数据（使用队列方式）
+	if (timecount % UPLOAD_INTERVAL_MS == 0) {
+		if (g_wifi_connected) {
+			// 将所有传感器数据添加到队列
+			ServerComm_UploadAllSensors();
 		}
-		
-		delay_ms(1);
+	}
+	
+	// 实时处理队列中的请求（只要队列有数据就处理）
+	if (g_wifi_connected) {
+		// 检查队列是否有数据
+		// 这里简化处理，直接调用处理函数
+		ServerComm_ProcessBatch(5);
+	}
+	
+	delay_ms(1);
 	}
 }
