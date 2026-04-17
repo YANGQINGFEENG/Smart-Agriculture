@@ -964,6 +964,26 @@
               <FilePath>.\Hardware\ServerComm.h</FilePath>
             </File>
             <File>
+              <FileName>command_manager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\command_manager.c</FilePath>
+            </File>
+            <File>
+              <FileName>command_manager.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\command_manager.h</FilePath>
+            </File>
+            <File>
+              <FileName>state_manager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\state_manager.c</FilePath>
+            </File>
+            <File>
+              <FileName>state_manager.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\state_manager.h</FilePath>
+            </File>
+            <File>
               <FileName>PrintManager.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\PrintManager.c</FilePath>

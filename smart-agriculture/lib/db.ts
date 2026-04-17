@@ -63,6 +63,57 @@ async function createTables() {
       timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // 执行器类型表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS actuator_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // 执行器设备表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS actuators (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type_id INTEGER NOT NULL,
+      location TEXT NOT NULL,
+      status TEXT DEFAULT 'offline',
+      state TEXT DEFAULT 'off',
+      mode TEXT DEFAULT 'auto',
+      last_update TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      locked INTEGER DEFAULT 0
+    );
+  `);
+
+  // 执行器状态历史表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS actuator_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actuator_id TEXT NOT NULL,
+      state TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      trigger_source TEXT DEFAULT 'user',
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // 执行器控制指令表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS actuator_commands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actuator_id TEXT NOT NULL,
+      command TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      executed_at TIMESTAMP NULL
+    );
+  `);
   
   // 插入初始数据
   await insertInitialData();
@@ -135,6 +186,50 @@ async function insertInitialData() {
       );
     }
   }
+
+  // 检查是否已有执行器类型数据
+  const actuatorTypesCount = await databaseInstance.get<{ count: number }>('SELECT COUNT(*) as count FROM actuator_types');
+  if (actuatorTypesCount && actuatorTypesCount.count === 0) {
+    // 插入执行器类型
+    await databaseInstance.run(
+      'INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)',
+      ['water_pump', '水泵', '灌溉用水泵设备']
+    );
+    await databaseInstance.run(
+      'INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)',
+      ['fan', '风扇', '通风降温设备']
+    );
+    await databaseInstance.run(
+      'INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)',
+      ['light', '补光灯', '植物补光设备']
+    );
+    await databaseInstance.run(
+      'INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)',
+      ['valve', '电磁阀', '管路控制阀门']
+    );
+  }
+
+  // 检查是否已有执行器数据
+  const actuatorsCount = await databaseInstance.get<{ count: number }>('SELECT COUNT(*) as count FROM actuators');
+  if (actuatorsCount && actuatorsCount.count === 0) {
+    // 插入执行器
+    await databaseInstance.run(
+      "INSERT INTO actuators (id, name, type_id, location, status, state, mode, last_update) VALUES (?, ?, ?, ?, 'online', 'off', 'auto', CURRENT_TIMESTAMP)",
+      ['WP-001', 'A区温室1号水泵', 1, 'A区温室']
+    );
+    await databaseInstance.run(
+      "INSERT INTO actuators (id, name, type_id, location, status, state, mode, last_update) VALUES (?, ?, ?, ?, 'online', 'off', 'auto', CURRENT_TIMESTAMP)",
+      ['FN-001', 'A区温室1号风扇', 2, 'A区温室']
+    );
+    await databaseInstance.run(
+      "INSERT INTO actuators (id, name, type_id, location, status, state, mode, last_update) VALUES (?, ?, ?, ?, 'offline', 'off', 'auto', CURRENT_TIMESTAMP)",
+      ['LT-001', 'A区温室1号补光灯', 3, 'A区温室']
+    );
+    await databaseInstance.run(
+      "INSERT INTO actuators (id, name, type_id, location, status, state, mode, last_update) VALUES (?, ?, ?, ?, 'online', 'off', 'auto', CURRENT_TIMESTAMP)",
+      ['VL-001', 'A区温室1号电磁阀', 4, 'A区温室']
+    );
+  }
 }
 
 // 测试连接
@@ -159,6 +254,22 @@ export const db = {
     const database = await initDatabase();
     const result = await database.run(sql, params);
     return result;
+  },
+  executeWithRetry: async <T>(sql: string, params?: any[], maxRetries: number = 3): Promise<T> => {
+    const database = await initDatabase();
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await database.run(sql, params);
+        return result as T;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 200 * attempt));
+        }
+      }
+    }
+    throw lastError;
   },
   testConnection
 };

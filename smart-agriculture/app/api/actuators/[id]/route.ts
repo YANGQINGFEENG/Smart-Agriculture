@@ -269,7 +269,7 @@ export async function PATCH(
       const newState = body.state === 1 ? 'on' : body.state === 0 ? 'off' : body.state
       await db.executeWithRetry(
         `INSERT INTO actuator_commands (actuator_id, command, status, created_at) 
-         VALUES (?, ?, 'pending', NOW())`,
+         VALUES (?, ?, 'pending', CURRENT_TIMESTAMP)`,
         [id, newState]
       )
       console.log(`[Actuator] 用户操作已锁定 - ID: ${id}, 新状态: ${newState}, 已下发控制指令`)
@@ -404,14 +404,14 @@ export async function POST(
       // 记录硬件上报的状态到历史表（用于追踪硬件实际状态变化）
       await db.executeWithRetry(
         `INSERT INTO actuator_status_history (actuator_id, state, mode, trigger_source, timestamp) 
-         VALUES (?, ?, ?, 'hardware_report', NOW())`,
+         VALUES (?, ?, ?, 'hardware_report', CURRENT_TIMESTAMP)`,
         [id, hardwareState || serverState, hardwareMode || serverMode]
       )
 
       // 同时下发一条控制指令到指令表（双保险：即使硬件不处理force_sync响应，下次查询指令也能获取）
       await db.executeWithRetry(
         `INSERT INTO actuator_commands (actuator_id, command, status, created_at) 
-         VALUES (?, ?, 'pending', NOW())`,
+         VALUES (?, ?, 'pending', CURRENT_TIMESTAMP)`,
         [id, serverState]
       )
 

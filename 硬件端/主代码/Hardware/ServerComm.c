@@ -544,6 +544,7 @@ void ServerComm_TestFixedRequest(void)
 }
 */
 
+#if 0
 /**
  * @brief 发送传感器数据并检查服务器响应
  * @param sensor_id 传感器ID
@@ -622,6 +623,7 @@ static uint8_t ServerComm_SendSensorDataWithCheck(const char *sensor_id, const c
     
     return success;
 }
+#endif
 
 /*
  * @brief 使用长连接模式发送传感器数据（不断开连接）
@@ -1543,7 +1545,7 @@ static uint8_t ServerComm_ProcessRequest(NetworkRequest_t *request)
             break;
         }
             
-        case REQ_TYPE_ACTUATOR_STATUS:
+        case REQ_TYPE_ACTUATOR_STATUS: {
             // 处理执行器状态上传
             // 构造JSON数据
             char json_buf[64];
@@ -1638,6 +1640,7 @@ static uint8_t ServerComm_ProcessRequest(NetworkRequest_t *request)
             
             result = SERVER_COMM_OK;
             break;
+        }
             
         case REQ_TYPE_COMMAND_QUERY:
             // 处理指令查询

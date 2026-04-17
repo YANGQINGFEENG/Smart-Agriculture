@@ -30,7 +30,7 @@ export async function GET(
       `UPDATE actuator_commands 
        SET status = 'failed', executed_at = CURRENT_TIMESTAMP 
        WHERE actuator_id = ? AND status = 'pending' 
-       AND created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+       AND created_at < datetime('now', '-5 minutes')`,
       [id]
     )
 
