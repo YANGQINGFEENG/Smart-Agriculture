@@ -8,6 +8,8 @@
 #include "OLED.h"
 #include "RELAY/relay.h"
 #include "PrintManager.h"
+#include "command_manager.h"
+#include "state_manager.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1270,14 +1272,8 @@ uint8_t ServerComm_CheckAndExecuteCommand(const char *actuator_id, int *command_
     atk_mb026_uart_rx_restart();
     
     if (got_command) {
-        uint8_t result = ServerComm_ExecuteCommand(actuator_id, command);
-        
-        if (result == 0) {
-            ServerComm_ConfirmCommand(actuator_id, *command_id, "executed");
-        } else {
-            ServerComm_ConfirmCommand(actuator_id, *command_id, "failed");
-        }
-        
+        // 使用命令管理器处理命令
+        command_manager_handle_command(actuator_id, command, *command_id);
         return 1;
     }
     
@@ -1474,12 +1470,16 @@ uint8_t ServerComm_ExecuteCommand(const char *actuator_id, const char *command)
             RELAY_1(1); // 打开继电器1（风扇）
             // 上传执行器状态
             ServerComm_UploadActuatorStatus(ACTUATOR_ID_FAN, 1, 1); // 1:手动模式
+            // 更新状态管理器中的执行器状态
+            state_manager_update_actuator_state(ACTUATOR_ID_FAN, 1, 1);
             return 0;
         } else if (strcmp(command, "OFF") == 0) {
             PRINT_INFO(PRINT_MODULE_ACTUATOR, "关闭风扇\r\n");
             RELAY_1(0); // 关闭继电器1（风扇）
             // 上传执行器状态
             ServerComm_UploadActuatorStatus(ACTUATOR_ID_FAN, 0, 1); // 1:手动模式
+            // 更新状态管理器中的执行器状态
+            state_manager_update_actuator_state(ACTUATOR_ID_FAN, 0, 1);
             return 0;
         }
     }
@@ -1491,12 +1491,16 @@ uint8_t ServerComm_ExecuteCommand(const char *actuator_id, const char *command)
             RELAY_2(1); // 打开继电器2（水泵）
             // 上传执行器状态
             ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1); // 1:手动模式
+            // 更新状态管理器中的执行器状态
+            state_manager_update_actuator_state(ACTUATOR_ID_PUMP, 1, 1);
             return 0;
         } else if (strcmp(command, "OFF") == 0) {
             PRINT_INFO(PRINT_MODULE_ACTUATOR, "关闭水泵\r\n");
             RELAY_2(0); // 关闭继电器2（水泵）
             // 上传执行器状态
             ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1); // 1:手动模式
+            // 更新状态管理器中的执行器状态
+            state_manager_update_actuator_state(ACTUATOR_ID_PUMP, 0, 1);
             return 0;
         }
     }
