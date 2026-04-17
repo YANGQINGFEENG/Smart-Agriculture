@@ -33,12 +33,12 @@ export function ChartsClient() {
 
   const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp)
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
 
   const fetchChartData = async () => {
     try {
-      const tempResponse = await fetch('/api/sensors/T-001/data?limit=24')
+      const tempResponse = await fetch('/api/sensors/T-001/data?limit=60')
       const tempResult = await tempResponse.json()
       
       if (tempResult.success && tempResult.data) {
@@ -51,10 +51,10 @@ export function ChartsClient() {
         setTemperatureData(formattedData)
       }
 
-      const airHumidityResponse = await fetch('/api/sensors/H-001/data?limit=24')
+      const airHumidityResponse = await fetch('/api/sensors/H-001/data?limit=60')
       const airHumidityResult = await airHumidityResponse.json()
       
-      const soilHumidityResponse = await fetch('/api/sensors/S-001/data?limit=24')
+      const soilHumidityResponse = await fetch('/api/sensors/S-001/data?limit=60')
       const soilHumidityResult = await soilHumidityResponse.json()
       
       if (airHumidityResult.success && soilHumidityResult.success) {

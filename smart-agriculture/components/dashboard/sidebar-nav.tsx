@@ -28,6 +28,8 @@ const navItems = [
   { id: "analysis", label: "数据分析", icon: BarChart3 },
   { id: "export", label: "数据导出", icon: Download },
   { id: "devices", label: "设备连接", icon: Wifi },
+  { id: "actuators", label: "执行器控制", icon: Power },
+  { id: "compare", label: "数据对比", icon: TrendingUp },
 ]
 
 const sensorTypes = [
@@ -74,26 +76,6 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
                 </button>
               </li>
             ))}
-            <li>
-              <Link
-                  href="/compare"
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200"
-                  aria-label="数据对比"
-                >
-                <TrendingUp className="w-4 h-4" aria-hidden="true" />
-                数据对比
-              </Link>
-            </li>
-            <li>
-              <Link
-                  href="/actuators"
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200"
-                  aria-label="执行器控制"
-                >
-                <Power className="w-4 h-4" aria-hidden="true" />
-                执行器控制
-              </Link>
-            </li>
           </ul>
         </div>
 

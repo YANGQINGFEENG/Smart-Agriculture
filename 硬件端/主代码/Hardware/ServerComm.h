@@ -4,13 +4,13 @@
 #include "stm32f10x.h"
 
 // 服务器配置
-#define SERVER_IP "192.168.128.43"
+#define SERVER_IP "192.168.137.1"
 #define SERVER_PORT "3000"
 #define SERVER_URL SERVER_IP
 #define SERVER_PATH "/api/sensors"
 
 // 数据上传间隔（毫秒）- 10秒
-#define UPLOAD_INTERVAL_MS 1000
+#define UPLOAD_INTERVAL_MS 500
 
 // TCP连接超时时间（毫秒）
 #define TCP_CONNECT_TIMEOUT 5000
@@ -134,6 +134,23 @@ typedef struct {
 // 继电器2 - 水泵
 #define ACTUATOR_ID_PUMP "WP-002"
 
+// 指令队列相关定义
+#define COMMAND_QUEUE_SIZE   16          // 指令队列大小
+
+// 指令结构体
+typedef struct {
+    char actuator_id[16];                // 执行器ID
+    char command[16];                    // 指令内容
+} Command_t;
+
+// 指令队列结构体
+typedef struct {
+    Command_t commands[COMMAND_QUEUE_SIZE];  // 指令队列
+    uint16_t head;                           // 队列头指针
+    uint16_t tail;                           // 队列尾指针
+    uint16_t count;                          // 队列计数
+} CommandQueue_t;
+
 // 函数声明
 void ServerComm_Init(void);
 uint8_t ServerComm_Connect(void);
@@ -148,6 +165,15 @@ uint8_t ServerComm_UploadActuatorStatus(const char *actuator_id, uint8_t state, 
 uint8_t ServerComm_CheckAndExecuteCommand(const char *actuator_id, int *command_id, char *command);
 uint8_t ServerComm_ConfirmCommand(const char *actuator_id, int command_id, const char *status);
 void ServerComm_TestFixedRequest(void);
+
+// WiFi数据接收和指令处理函数
+void ServerComm_ProcessWiFiData(void);
+uint8_t ServerComm_ExecuteCommand(const char *actuator_id, const char *command);
+
+// 指令队列操作函数
+void ServerComm_InitCommandQueue(void);
+uint8_t ServerComm_AddToCommandQueue(const char *actuator_id, const char *command);
+void ServerComm_ProcessCommandQueue(void);
 
 // ==================== 队列操作函数声明 ====================
 

@@ -189,7 +189,7 @@ export default function SensorDetailPage({
 
   const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp)
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
 
   const fetchData = async () => {
@@ -197,7 +197,7 @@ export default function SensorDetailPage({
 
     try {
       const sensorId = config.sensorIds[0]
-      const dataResponse = await fetch(`/api/sensors/${sensorId}/data?limit=24`)
+      const dataResponse = await fetch(`/api/sensors/${sensorId}/data?limit=60`)
       const dataResult = await dataResponse.json()
 
       if (dataResult.success && dataResult.data) {

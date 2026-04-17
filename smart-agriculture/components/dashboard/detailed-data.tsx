@@ -62,82 +62,115 @@ export function DetailedData() {
 
   const fetchSensorData = async () => {
     try {
+      console.log('开始获取传感器数据...')
       const response = await fetch('/api/sensors')
+      console.log('传感器列表响应状态:', response.status)
       const result = await response.json()
+      console.log('传感器列表响应数据:', result)
       
       if (result.success && result.data) {
-        const dataPromises = result.data.map(async (sensor: SensorInfo) => {
-          const dataResponse = await fetch(`/api/sensors/${sensor.id}/data?limit=1`)
-          const dataResult = await dataResponse.json()
-          
-          const latestData = dataResult.data?.[0] as SensorDataPoint | undefined
-          
-          const now = new Date()
-          const lastUpdate = sensor.last_update ? new Date(sensor.last_update) : null
-          const timeDiff = lastUpdate ? Math.floor((now.getTime() - lastUpdate.getTime()) / 1000 / 60) : 999
-          
-          let status = '离线'
-          if (sensor.status === 'online') {
-            if (timeDiff < 5) {
-              status = '正常'
-            } else if (timeDiff < 30) {
-              status = '延迟'
-            } else {
-              status = '异常'
+        console.log('传感器列表数据:', result.data)
+        const dataPromises = result.data.map(async (sensor: any) => {
+          try {
+            console.log('获取传感器', sensor.id, '的数据...')
+            const dataResponse = await fetch(`/api/sensors/${sensor.id}/data?limit=1`)
+            console.log('传感器数据响应状态:', dataResponse.status)
+            const dataResult = await dataResponse.json()
+            console.log('传感器数据响应数据:', dataResult)
+            
+            const latestData = dataResult.data?.[0]
+            
+            const now = new Date()
+            const lastUpdate = sensor.last_update ? new Date(sensor.last_update) : null
+            const timeDiff = lastUpdate ? Math.floor((now.getTime() - lastUpdate.getTime()) / 1000 / 60) : 999
+            
+            let status = '离线'
+            if (sensor.status === 'online') {
+              if (timeDiff < 5) {
+                status = '正常'
+              } else if (timeDiff < 30) {
+                status = '延迟'
+              } else {
+                status = '异常'
+              }
             }
-          }
-          
-          const formatValue = (value: number, type: string): string => {
-            if (type === 'light') {
-              return `${value.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} Lux`
-            } else if (type === 'ec') {
-              return `${value.toFixed(0)} μS/cm`
-            } else if (type === 'ph') {
-              return `${value.toFixed(2)} pH`
-            } else {
-              return `${value.toFixed(1)} ${sensor.unit}`
+            
+            const formatValue = (value: any, type: string): string => {
+              const numValue = typeof value === 'string' ? parseFloat(value) : value
+              if (isNaN(numValue)) return '--'
+              
+              if (type === 'light') {
+                return `${numValue.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} Lux`
+              } else if (type === 'ec') {
+                return `${numValue.toFixed(0)} μS/cm`
+              } else if (type === 'ph') {
+                return `${numValue.toFixed(2)} pH`
+              } else {
+                return `${numValue.toFixed(1)} ${sensor.unit || ''}`
+              }
             }
-          }
-          
-          const getValueColor = (value: number, type: string): string => {
-            if (type === 'temperature') {
-              if (value > 30) return 'text-chart-4';
-              if (value < 10) return 'text-chart-2';
+            
+            const getValueColor = (value: any, type: string): string => {
+              const numValue = typeof value === 'string' ? parseFloat(value) : value
+              if (isNaN(numValue)) return 'text-muted-foreground'
+              
+              if (type === 'temperature') {
+                if (numValue > 30) return 'text-chart-4';
+                if (numValue < 10) return 'text-chart-2';
+                return 'text-foreground';
+              } else if (type === 'humidity' || type === 'soil') {
+                if (numValue > 80) return 'text-chart-4';
+                if (numValue < 30) return 'text-chart-4';
+                return 'text-foreground';
+              } else if (type === 'light') {
+                if (numValue > 10000) return 'text-chart-3';
+                if (numValue < 1000) return 'text-chart-2';
+                return 'text-foreground';
+              } else if (type === 'ph') {
+                if (numValue > 7.5 || numValue < 5.5) return 'text-chart-4';
+                return 'text-foreground';
+              }
               return 'text-foreground';
-            } else if (type === 'humidity' || type === 'soil') {
-              if (value > 80) return 'text-chart-4';
-              if (value < 30) return 'text-chart-4';
-              return 'text-foreground';
-            } else if (type === 'light') {
-              if (value > 10000) return 'text-chart-3';
-              if (value < 1000) return 'text-chart-2';
-              return 'text-foreground';
-            } else if (type === 'ph') {
-              if (value > 7.5 || value < 5.5) return 'text-chart-4';
-              return 'text-foreground';
-            }
-            return 'text-foreground';
-          };
+            };
 
-          return {
-            id: sensor.id,
-            name: sensor.name,
-            type: sensor.type,
-            type_name: sensor.type_name,
-            value: latestData ? formatValue(latestData.value, sensor.type) : '--',
-            valueColor: latestData ? getValueColor(latestData.value, sensor.type) : 'text-muted-foreground',
-            location: sensor.location,
-            time: latestData 
-              ? new Date(latestData.timestamp).toLocaleString('zh-CN')
-              : '暂无数据',
-            status: status,
-            unit: sensor.unit,
+            return {
+              id: sensor.id,
+              name: sensor.name,
+              type: sensor.type || 'unknown',
+              type_name: sensor.type_name || '未知类型',
+              value: latestData ? formatValue(latestData.value, sensor.type || 'unknown') : '--',
+              valueColor: latestData ? getValueColor(latestData.value, sensor.type || 'unknown') : 'text-muted-foreground',
+              location: sensor.location,
+              time: latestData 
+                ? new Date(latestData.timestamp).toLocaleString('zh-CN')
+                : '暂无数据',
+              status: status,
+              unit: sensor.unit || '',
+            }
+          } catch (error) {
+            console.error('获取传感器', sensor.id, '数据失败:', error)
+            // 返回默认数据，确保表格能正常显示
+            return {
+              id: sensor.id,
+              name: sensor.name,
+              type: sensor.type || 'unknown',
+              type_name: sensor.type_name || '未知类型',
+              value: '--',
+              valueColor: 'text-muted-foreground',
+              location: sensor.location,
+              time: '暂无数据',
+              status: '离线',
+              unit: sensor.unit || '',
+            }
           }
         })
         
         const resolvedData = await Promise.all(dataPromises)
+        console.log('处理后的数据:', resolvedData)
         setSensorData(resolvedData)
         setLastUpdate(new Date())
+      } else {
+        console.error('获取传感器列表失败:', result.error)
       }
     } catch (error) {
       console.error('获取传感器数据失败:', error)

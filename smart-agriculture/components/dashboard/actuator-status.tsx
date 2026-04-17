@@ -15,7 +15,14 @@ import {
   RefreshCw,
   AlertCircle,
   Zap,
+  MoreVertical,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 /**
  * 执行器数据接口
@@ -68,18 +75,7 @@ export function ActuatorStatus() {
       const result = await response.json()
       
       if (result.success && result.data) {
-        const now = Date.now()
-        
-        const validActuators = result.data.filter((a: Actuator) => {
-          if (!a.last_update) return false
-          
-          const updateTime = new Date(a.last_update).getTime()
-          const hoursDiff = (now - updateTime) / (1000 * 60 * 60)
-          
-          return hoursDiff < 1
-        })
-        
-        setActuators(validActuators)
+        setActuators(result.data)
         setLastUpdate(new Date())
       }
     } catch (error) {
@@ -98,31 +94,36 @@ export function ActuatorStatus() {
   }, [fetchActuators])
 
   /**
-   * 切换执行器开关状态
+   * 切换执行器开关状态（服务器状态锁定机制）
+   * 
+   * 核心原则：服务器状态由用户操作锁定，不受硬件上报状态影响
+   * 
+   * 流程说明：
+   * 1. 用户点击按钮 → 向服务器发送控制指令 + 更新服务器状态
+   * 2. 服务器状态立即锁定为用户期望的状态
+   * 3. 前端立即更新UI显示，不等待硬件确认
+   * 4. 硬件端通过以下方式同步：
+   *    - 方式A：定期查询待执行指令（每5秒）
+   *    - 方式B：上传状态时触发强制同步
+   * 5. 无论硬件当前是什么状态，最终都必须与服务器锁定状态一致
    */
   const toggleState = async (actuatorId: string, currentState: 'on' | 'off') => {
     const newState = currentState === 'on' ? 'off' : 'on'
     
     setUpdating(actuatorId)
     
+    // 立即更新前端UI（乐观更新），锁定用户期望的状态
+    setActuators(prev => 
+      prev.map(a => 
+        a.id === actuatorId 
+          ? { ...a, state: newState, last_update: new Date().toISOString() }
+          : a
+      )
+    )
+    
     try {
-      const commandResponse = await fetch(`/api/actuators/${actuatorId}/commands`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          command: newState,
-        }),
-      })
-      
-      const commandResult = await commandResponse.json()
-      
-      if (!commandResult.success) {
-        alert('发送控制指令失败: ' + commandResult.error)
-        setUpdating(null)
-        return
-      }
+      // 步骤1：更新服务器执行器状态（锁定为用户期望的状态）
+      console.log(`[ActuatorControl] 用户操作 - ID: ${actuatorId}, 锁定状态: ${newState}`)
       
       const response = await fetch(`/api/actuators/${actuatorId}`, {
         method: 'PATCH',
@@ -138,25 +139,37 @@ export function ActuatorStatus() {
       const result = await response.json()
       
       if (result.success) {
+        console.log(`[ActuatorControl] 服务器状态已锁定 - ID: ${actuatorId}, 状态: ${newState}`)
+        console.log(`[ActuatorControl] 等待硬件同步服务器锁定状态...`)
+      } else {
+        // 服务器操作失败，回滚前端UI
+        console.error(`[ActuatorControl] 服务器操作失败:`, result.error)
         setActuators(prev => 
           prev.map(a => 
             a.id === actuatorId 
-              ? { ...a, state: newState, last_update: new Date().toISOString() }
+              ? { ...a, state: currentState }
               : a
           )
         )
-        
-        setTimeout(() => fetchActuators(), 500)
-      } else {
         alert('操作失败: ' + result.error)
       }
     } catch (error) {
-      console.error('切换执行器状态失败:', error)
-      alert('操作失败')
+      // 网络错误，回滚前端UI
+      console.error('[ActuatorControl] 网络错误:', error)
+      setActuators(prev => 
+        prev.map(a => 
+          a.id === actuatorId 
+            ? { ...a, state: currentState }
+            : a
+        )
+      )
+      alert('操作失败，请检查网络连接')
     } finally {
       setUpdating(null)
     }
   }
+
+
 
   /**
    * 格式化最后更新时间
@@ -179,6 +192,55 @@ export function ActuatorStatus() {
    */
   const onlineCount = actuators.filter(a => a.status === 'online').length
   const onCount = actuators.filter(a => a.state === 'on').length
+  const [activeMenu, setActiveMenu] = useState<string | null>(null)
+
+  /**
+   * 查看设备详情
+   */
+  const viewDeviceDetails = (actuatorId: string) => {
+    alert(`查看设备 ${actuatorId} 的详细信息`)
+    setActiveMenu(null)
+  }
+
+  /**
+   * 部署设备策略
+   */
+  const deployDevicePolicy = (actuatorId: string) => {
+    alert(`为设备 ${actuatorId} 部署策略`)
+    setActiveMenu(null)
+  }
+
+  /**
+   * 删除设备
+   */
+  const deleteDevice = async (actuatorId: string, actuatorName: string) => {
+    if (!confirm(`确定要删除设备 "${actuatorName}" 吗？`)) {
+      return
+    }
+    
+    setUpdating(actuatorId)
+    
+    try {
+      const response = await fetch(`/api/actuators/${actuatorId}`, {
+        method: 'DELETE',
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // 从界面上移除设备卡片
+        setActuators(prev => prev.filter(a => a.id !== actuatorId))
+        setActiveMenu(null)
+      } else {
+        alert('删除失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('删除设备失败:', error)
+      alert('删除失败')
+    } finally {
+      setUpdating(null)
+    }
+  }
 
   return (
     <Card className="bg-card border-border">
@@ -190,7 +252,7 @@ export function ActuatorStatus() {
               执行器状态
             </CardTitle>
             <CardDescription>
-              实时监控和控制农业设备（每2秒自动刷新，显示1小时内有数据的设备）
+              实时监控和控制农业设备（每2秒自动刷新）
             </CardDescription>
           </div>
           <div className="flex items-center gap-4">
@@ -224,7 +286,6 @@ export function ActuatorStatus() {
             <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
             <p className="text-sm">暂无执行器数据</p>
             <p className="text-xs mt-2">等待硬件设备上传数据...</p>
-            <p className="text-xs mt-1 text-muted-foreground">（只显示1小时内有更新的设备）</p>
           </div>
         ) : (
           <>
@@ -255,106 +316,124 @@ export function ActuatorStatus() {
                 const isOnline = actuator.status === 'online'
                 
                 return (
-                  <div
+                  <Card
                     key={actuator.id}
                     className={`
-                      relative p-5 rounded-xl border-2 transition-all duration-300
-                      ${isOn 
-                        ? 'bg-accent/10 border-accent shadow-lg shadow-accent/20' 
-                        : 'bg-muted/30 border-border hover:border-primary/50'
-                      }
+                      bg-card border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200
                       ${isUpdating ? 'opacity-75' : ''}
                     `}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-4 flex-1">
-                        <div className={`
-                          p-3 rounded-xl transition-all duration-300
-                          ${isOn 
-                            ? 'bg-accent/30 shadow-lg shadow-accent/30' 
-                            : 'bg-muted'
-                          }
-                        `}>
-                          <Icon className={`
-                            w-6 h-6 transition-all duration-300
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <div className="flex items-center gap-3">
+                        <DropdownMenu open={activeMenu === actuator.id} onOpenChange={(open) => setActiveMenu(open ? actuator.id : null)}>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1.5 rounded-md text-muted-foreground hover:bg-muted transition-colors">
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-48">
+                            <DropdownMenuItem onClick={() => viewDeviceDetails(actuator.id)}>
+                              设备详情
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => deployDevicePolicy(actuator.id)}>
+                              部署该设备策略
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => deleteDevice(actuator.id, actuator.name)} className="text-destructive">
+                              删除该设备
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">
+                          {actuator.name}
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`
+                            p-2.5 rounded-lg transition-all duration-300
                             ${isOn 
-                              ? 'text-accent-foreground animate-pulse' 
-                              : 'text-muted-foreground'
+                              ? 'bg-accent/30 shadow-lg shadow-accent/30' 
+                              : 'bg-muted'
                             }
-                          `} />
+                          `}>
+                            <Icon className={`
+                              w-5 h-5 transition-all duration-300
+                              ${isOn 
+                                ? 'text-accent-foreground animate-pulse' 
+                                : 'text-muted-foreground'
+                              }
+                            `} />
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              {isOnline ? (
+                                <Badge className="bg-primary/20 text-primary text-xs border border-primary/30">
+                                  在线
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-destructive/20 text-destructive text-xs border border-destructive/30">
+                                  离线
+                                </Badge>
+                              )}
+                              <Badge 
+                                variant="outline" 
+                                className={`
+                                  text-xs
+                                  ${actuator.mode === 'auto' 
+                                    ? 'border-blue-500 text-blue-500' 
+                                    : 'border-orange-500 text-orange-500'
+                                  }
+                                `}
+                              >
+                                {actuator.mode === 'auto' ? '自动' : '手动'}
+                              </Badge>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span>{actuator.location}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
+                              <RefreshCw className="w-3 h-3" />
+                              <span>{formatLastUpdate(actuator.last_update)}</span>
+                            </div>
+                          </div>
                         </div>
                         
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <p className="text-base font-semibold text-foreground truncate">
-                              {actuator.name}
-                            </p>
-                            {isOnline ? (
-                              <Badge className="bg-primary/20 text-primary text-xs border border-primary/30">
-                                在线
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-destructive/20 text-destructive text-xs border border-destructive/30">
-                                离线
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-muted-foreground">
-                              {actuator.location}
-                            </span>
-                            <Badge 
-                              variant="outline" 
-                              className={`
-                                text-xs
-                                ${actuator.mode === 'auto' 
-                                  ? 'border-blue-500 text-blue-500' 
-                                  : 'border-orange-500 text-orange-500'
-                                }
-                              `}
-                            >
-                              {actuator.mode === 'auto' ? '自动' : '手动'}
-                            </Badge>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <RefreshCw className="w-3 h-3" />
-                            <span>{formatLastUpdate(actuator.last_update)}</span>
-                          </div>
-                        </div>
+                        <button
+                          onClick={() => toggleState(actuator.id, actuator.state)}
+                          disabled={!isOnline || isUpdating}
+                          className={`
+                            relative w-14 h-14 rounded-xl transition-all duration-300
+                            flex items-center justify-center
+                            ${isOn 
+                              ? 'bg-accent hover:bg-accent/90 shadow-lg shadow-accent/50' 
+                              : 'bg-muted hover:bg-muted/80'
+                            }
+                            ${!isOnline || isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                            ${isUpdating ? 'animate-pulse' : ''}
+                          `}
+                        >
+                          {isUpdating ? (
+                            <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                          ) : isOn ? (
+                            <Power className="w-6 h-6 text-white" />
+                          ) : (
+                            <PowerOff className="w-6 h-6 text-muted-foreground" />
+                          )}
+                        </button>
                       </div>
                       
-                      <button
-                        onClick={() => toggleState(actuator.id, actuator.state)}
-                        disabled={!isOnline || isUpdating}
-                        className={`
-                          relative w-16 h-16 rounded-2xl transition-all duration-300
-                          flex items-center justify-center
-                          ${isOn 
-                            ? 'bg-accent hover:bg-accent/90 shadow-lg shadow-accent/50' 
-                            : 'bg-muted hover:bg-muted/80'
-                          }
-                          ${!isOnline || isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                          ${isUpdating ? 'animate-pulse' : ''}
-                        `}
-                      >
-                        {isUpdating ? (
-                          <RefreshCw className="w-6 h-6 text-white animate-spin" />
-                        ) : isOn ? (
-                          <Power className="w-7 h-7 text-white" />
-                        ) : (
-                          <PowerOff className="w-7 h-7 text-muted-foreground" />
-                        )}
-                      </button>
-                    </div>
-                    
-                    {isOn && (
-                      <div className="absolute top-2 right-2">
-                        <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
-                      </div>
-                    )}
-                  </div>
+                      {isOn && (
+                        <div className="absolute top-3 right-3">
+                          <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>

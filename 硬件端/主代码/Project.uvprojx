@@ -953,6 +953,16 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\ServerComm.h</FilePath>
             </File>
+            <File>
+              <FileName>PrintManager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\PrintManager.c</FilePath>
+            </File>
+            <File>
+              <FileName>PrintManager.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\PrintManager.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

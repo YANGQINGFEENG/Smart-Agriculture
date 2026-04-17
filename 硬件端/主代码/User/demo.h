@@ -15,7 +15,7 @@
 
 /* ==================== WiFi配置参数 ==================== */
 
-#define DEMO_WIFI_SSID          "vivoS18"           // WiFi SSID
+#define DEMO_WIFI_SSID          "8848"           // WiFi SSID
 #define DEMO_WIFI_PWD           "12345678"          // WiFi密码
 
 /* ==================== 全局变量声明 ==================== */

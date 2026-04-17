@@ -93,17 +93,15 @@ void Serial_SendNumber(uint32_t Number, uint8_t Length)
 //	return ch;
 //}
 
-//void Serial_Printf(char *format, ...)
-//{
-//	Serial_SendByte(0X40); //°üÍ·
-//	char String[100];
-//	va_list arg;
-//	va_start(arg, format);
-//	vsprintf(String, format, arg);
-//	va_end(arg);
-//	Serial_SendString(String);
-//	Serial_SendByte('&');        //°üÎ²
-//}
+void Serial_Printf(char *format, ...)
+{
+	char String[100];
+	va_list arg;
+	va_start(arg, format);
+	vsprintf(String, format, arg);
+	va_end(arg);
+	Serial_SendString(String);
+}
 
 
 

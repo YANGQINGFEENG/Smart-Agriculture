@@ -14,12 +14,8 @@ void RELAY_Init(void){ //继电器接口初始化
 }
 
 void RELAY_1(u8 c){ //继电器1控制 c=0继电器关闭 c=1继电器开启
-	printf("[Relay] 继电器1设置为: %d\r\n", c);
 	GPIO_WriteBit(RELAYPORT,RELAY1,(BitAction)(c));//通过位带操作写端口
 }
 void RELAY_2(u8 c){ //继电器2控制 c=0继电器关闭 c=1继电器开启
-	printf("[Relay] 继电器2设置为: %d\r\n", c);
 	GPIO_WriteBit(RELAYPORT,RELAY2,(BitAction)(c));//通过位带操作写端口
-	// 读取实际状态并打印
-	printf("[Relay] 继电器2实际状态: %d\r\n", GPIO_ReadOutputDataBit(RELAYPORT, RELAY2));
 }

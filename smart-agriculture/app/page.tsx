@@ -10,6 +10,8 @@ import { DataAnalysis } from "@/components/dashboard/data-analysis"
 import { DataExport } from "@/components/dashboard/data-export"
 import { DeviceStatus } from "@/components/dashboard/device-status"
 import { ActuatorStatus } from "@/components/dashboard/actuator-status"
+import { ActuatorControl } from "@/components/dashboard/actuator-control"
+import { DataCompare } from "@/components/dashboard/data-compare"
 import { Menu, X } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
@@ -65,6 +67,10 @@ export default function DashboardPage() {
           {activeTab === "export" && <DataExport />}
           
           {activeTab === "devices" && <DeviceStatus />}
+          
+          {activeTab === "actuators" && <ActuatorControl />}
+          
+          {activeTab === "compare" && <DataCompare />}
         </main>
         
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">

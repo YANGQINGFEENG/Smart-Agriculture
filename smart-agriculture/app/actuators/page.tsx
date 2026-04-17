@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Link from "next/link"
+import { SidebarNav } from "@/components/dashboard/sidebar-nav"
+import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -15,19 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  ArrowLeft,
   RefreshCw,
   Power,
   PowerOff,
-  Settings,
   Droplets,
   Wind,
   Flame,
   Lightbulb,
   CircleDot,
   AlertCircle,
+  Menu,
 } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 /**
  * 执行器数据接口
@@ -61,10 +59,20 @@ const actuatorIcons: Record<string, typeof Power> = {
  * 显示所有执行器状态，支持开关控制和模式切换
  */
 export default function ActuatorsPage() {
+  const [activeTab, setActiveTab] = useState("actuators")
+  const [currentTime, setCurrentTime] = useState<string>("")
   const [actuators, setActuators] = useState<Actuator[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [updating, setUpdating] = useState<string | null>(null)
+
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleString("zh-CN"))
+    const interval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleString("zh-CN"))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   /**
    * 获取执行器列表
@@ -211,186 +219,207 @@ export default function ActuatorsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
+    <div className="flex min-h-screen bg-background">
+      {/* 侧边栏 - 在大屏幕上显示，小屏幕上隐藏 */}
+      <div className="hidden lg:flex">
+        <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
+      
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* 移动端导航按钮 */}
+        <div className="lg:hidden fixed top-4 left-4 z-50">
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="p-2 rounded-lg bg-card border border-border shadow-lg">
+                <Menu className="w-6 h-6" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-[280px] p-0">
+              <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
+            </SheetContent>
+          </Sheet>
+        </div>
+        
+        <Header activeTab={activeTab} />
+        
+        <main className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-foreground">执行器控制</h1>
               <p className="text-sm text-muted-foreground">
                 管理和控制农业设备执行器
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <RefreshCw className="w-3 h-3" />
-              <span>最后更新: {lastUpdate.toLocaleTimeString('zh-CN')}</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <RefreshCw className="w-3 h-3" />
+                <span>最后更新: {lastUpdate.toLocaleTimeString('zh-CN')}</span>
+              </div>
             </div>
-            <ThemeToggle />
           </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <Button onClick={fetchActuators} disabled={loading} size="sm">
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            刷新数据
-          </Button>
-        </div>
+          <div className="flex items-center gap-4">
+            <Button onClick={fetchActuators} disabled={loading} size="sm">
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              刷新数据
+            </Button>
+          </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-[400px]">
-            <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : actuators.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
-            <AlertCircle className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-lg font-medium">暂无执行器</p>
-            <p className="text-sm">系统中还没有配置执行器设备</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {actuators.map((actuator) => {
-              const Icon = actuatorIcons[actuator.type] || Power
-              const isUpdating = updating === actuator.id
-              
-              return (
-                <Card key={actuator.id} className="bg-card border-border">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          actuator.state === 'on' 
-                            ? 'bg-chart-3/20' 
-                            : 'bg-muted'
-                        }`}>
-                          <Icon className={`w-5 h-5 ${
+          {loading ? (
+            <div className="flex items-center justify-center h-[400px]">
+              <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : actuators.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
+              <AlertCircle className="w-16 h-16 mb-4 opacity-50" />
+              <p className="text-lg font-medium">暂无执行器</p>
+              <p className="text-sm">系统中还没有配置执行器设备</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {actuators.map((actuator) => {
+                const Icon = actuatorIcons[actuator.type] || Power
+                const isUpdating = updating === actuator.id
+                
+                return (
+                  <Card key={actuator.id} className="bg-card border-border">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${
                             actuator.state === 'on' 
-                              ? 'text-chart-3' 
-                              : 'text-muted-foreground'
-                          }`} />
+                              ? 'bg-chart-3/20' 
+                              : 'bg-muted'
+                          }`}>
+                            <Icon className={`w-5 h-5 ${
+                              actuator.state === 'on' 
+                                ? 'text-chart-3' 
+                                : 'text-muted-foreground'
+                            }`} />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{actuator.name}</CardTitle>
+                            <CardDescription className="text-xs">
+                              {actuator.type_name} · {actuator.location}
+                            </CardDescription>
+                          </div>
                         </div>
-                        <div>
-                          <CardTitle className="text-base">{actuator.name}</CardTitle>
-                          <CardDescription className="text-xs">
-                            {actuator.type_name} · {actuator.location}
-                          </CardDescription>
+                        {getStatusBadge(actuator.status)}
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">开关状态</span>
+                          {getStateBadge(actuator.state)}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={actuator.state === 'on' ? 'destructive' : 'default'}
+                          onClick={() => toggleState(actuator.id, actuator.state)}
+                          disabled={actuator.status === 'offline' || isUpdating}
+                        >
+                          {isUpdating ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : actuator.state === 'on' ? (
+                            <>
+                              <PowerOff className="w-4 h-4 mr-2" />
+                              关闭
+                            </>
+                          ) : (
+                            <>
+                              <Power className="w-4 h-4 mr-2" />
+                              开启
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">控制模式</span>
+                          {getModeBadge(actuator.mode)}
+                        </div>
+                        <Select
+                          value={actuator.mode}
+                          onValueChange={(value) => toggleMode(actuator.id, actuator.mode)}
+                          disabled={actuator.status === 'offline' || isUpdating}
+                        >
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">自动</SelectItem>
+                            <SelectItem value="manual">手动</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="pt-4 border-t border-border">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>最后更新</span>
+                          <span>{formatLastUpdate(actuator.last_update)}</span>
                         </div>
                       </div>
-                      {getStatusBadge(actuator.status)}
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">开关状态</span>
-                        {getStateBadge(actuator.state)}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={actuator.state === 'on' ? 'destructive' : 'default'}
-                        onClick={() => toggleState(actuator.id, actuator.state)}
-                        disabled={actuator.status === 'offline' || isUpdating}
-                      >
-                        {isUpdating ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : actuator.state === 'on' ? (
-                          <>
-                            <PowerOff className="w-4 h-4 mr-2" />
-                            关闭
-                          </>
-                        ) : (
-                          <>
-                            <Power className="w-4 h-4 mr-2" />
-                            开启
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">控制模式</span>
-                        {getModeBadge(actuator.mode)}
-                      </div>
-                      <Select
-                        value={actuator.mode}
-                        onValueChange={(value) => toggleMode(actuator.id, actuator.mode)}
-                        disabled={actuator.status === 'offline' || isUpdating}
-                      >
-                        <SelectTrigger className="w-[100px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="auto">自动</SelectItem>
-                          <SelectItem value="manual">手动</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="pt-4 border-t border-border">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>最后更新</span>
-                        <span>{formatLastUpdate(actuator.last_update)}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        )}
-
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-base">执行器说明</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-              <div className="flex items-start gap-2">
-                <Droplets className="w-4 h-4 text-chart-1 mt-0.5" />
-                <div>
-                  <p className="font-medium">水泵</p>
-                  <p className="text-muted-foreground">用于灌溉和排水控制</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Wind className="w-4 h-4 text-chart-2 mt-0.5" />
-                <div>
-                  <p className="font-medium">风扇</p>
-                  <p className="text-muted-foreground">用于通风和温度调节</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Flame className="w-4 h-4 text-chart-4 mt-0.5" />
-                <div>
-                  <p className="font-medium">加热器</p>
-                  <p className="text-muted-foreground">用于温度控制</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CircleDot className="w-4 h-4 text-chart-3 mt-0.5" />
-                <div>
-                  <p className="font-medium">电磁阀</p>
-                  <p className="text-muted-foreground">用于水流控制</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Lightbulb className="w-4 h-4 text-chart-5 mt-0.5" />
-                <div>
-                  <p className="font-medium">补光灯</p>
-                  <p className="text-muted-foreground">用于光照调节</p>
-                </div>
-              </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
-          </CardContent>
-        </Card>
+          )}
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-base">执行器说明</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <Droplets className="w-4 h-4 text-chart-1 mt-0.5" />
+                  <div>
+                    <p className="font-medium">水泵</p>
+                    <p className="text-muted-foreground">用于灌溉和排水控制</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Wind className="w-4 h-4 text-chart-2 mt-0.5" />
+                  <div>
+                    <p className="font-medium">风扇</p>
+                    <p className="text-muted-foreground">用于通风和温度调节</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Flame className="w-4 h-4 text-chart-4 mt-0.5" />
+                  <div>
+                    <p className="font-medium">加热器</p>
+                    <p className="text-muted-foreground">用于温度控制</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CircleDot className="w-4 h-4 text-chart-3 mt-0.5" />
+                  <div>
+                    <p className="font-medium">电磁阀</p>
+                    <p className="text-muted-foreground">用于水流控制</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Lightbulb className="w-4 h-4 text-chart-5 mt-0.5" />
+                  <div>
+                    <p className="font-medium">补光灯</p>
+                    <p className="text-muted-foreground">用于光照调节</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+        
+        <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">
+          <p className="text-xs text-muted-foreground text-center">
+            智慧农业物联网监控平台 v1.0.0 | 数据更新时间: {currentTime || "--"}
+          </p>
+        </footer>
       </div>
     </div>
   )

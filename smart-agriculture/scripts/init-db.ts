@@ -93,22 +93,21 @@ async function initDatabase() {
   // 插入传感器类型
   console.log('📝 插入传感器类型...')
   await connection.query(`
-    INSERT INTO sensor_types (type, name, unit) VALUES
-    ('temperature', '温度传感器', '°C'),
-    ('humidity', '空气湿度传感器', '%'),
-    ('light', '光照传感器', 'Lux'),
-    ('soil', '土壤湿度传感器', '%'),
-    ('soil_temperature', '土壤温度传感器', '°C'),
-    ('ec', '土壤电导率传感器', 'μS/cm'),
-    ('ph', '土壤pH值传感器', 'pH')
-    ON DUPLICATE KEY UPDATE name = VALUES(name), unit = VALUES(unit)
+    INSERT IGNORE INTO sensor_types (id, type, name, unit) VALUES
+    (1, 'temperature', '温度传感器', '°C'),
+    (2, 'humidity', '空气湿度传感器', '%'),
+    (3, 'light', '光照传感器', 'Lux'),
+    (4, 'soil', '土壤湿度传感器', '%'),
+    (5, 'soil_temperature', '土壤温度传感器', '°C'),
+    (6, 'ec', '土壤电导率传感器', 'μS/cm'),
+    (7, 'ph', '土壤pH值传感器', 'pH')
   `)
   console.log('✅ 传感器类型插入成功')
 
   // 插入传感器设备
   console.log('📝 插入传感器设备...')
   await connection.query(`
-    INSERT INTO sensors (id, name, type_id, location, status, battery, last_update) VALUES
+    INSERT IGNORE INTO sensors (id, name, type_id, location, status, battery, last_update) VALUES
     ('T-001', 'A区温室1号温度传感器', 1, 'A区温室', 'online', 95, CURRENT_TIMESTAMP),
     ('T-003', 'B区温室1号温度传感器', 1, 'B区温室', 'online', 88, CURRENT_TIMESTAMP),
     ('H-001', 'A区温室1号湿度传感器', 2, 'A区温室', 'online', 90, CURRENT_TIMESTAMP),
@@ -121,7 +120,6 @@ async function initDatabase() {
     ('T-002', 'A区温室1号土壤温度传感器', 5, 'A区温室', 'online', 92, CURRENT_TIMESTAMP),
     ('E-001', 'A区温室1号土壤EC传感器', 6, 'A区温室', 'online', 90, CURRENT_TIMESTAMP),
     ('P-001', 'A区温室1号土壤pH传感器', 7, 'A区温室', 'online', 88, CURRENT_TIMESTAMP)
-    ON DUPLICATE KEY UPDATE name = VALUES(name), type_id = VALUES(type_id), location = VALUES(location), status = VALUES(status), battery = VALUES(battery), last_update = VALUES(last_update)
   `)
   console.log('✅ 传感器设备插入成功')
 

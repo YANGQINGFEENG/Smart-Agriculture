@@ -25,6 +25,7 @@
 #include "../Hardware/RS485.h"
 #include "../Hardware/SoilSensor.h"
 #include "../Hardware/ServerComm.h"
+#include "../Hardware/PrintManager.h"
 #include <stdio.h>
 
 /* ==================== 全局变量定义 ==================== */
@@ -575,6 +576,16 @@ int main(void)
 	atk_mb026_send_at_cmd("AT+CIPMODE=0", "OK", 2000); // 正常传输模式
 	printf("[System] TCP长连接模式配置完成\r\n");
 	
+	// 初始化打印管理器
+	PrintManager_Init();
+	
+	// 配置打印管理器：只打印服务器和WiFi模块的信息
+	PrintManager_SetLevel(PRINT_LEVEL_INFO);  // 设置打印级别为INFO，不打印DEBUG信息
+	PrintManager_SetModule(PRINT_MODULE_ALL, 0);  // 先禁用所有模块
+	PrintManager_SetModule(PRINT_MODULE_SERVER, 1);  // 启用服务器通信模块
+	PrintManager_SetModule(PRINT_MODULE_WIFI, 1);  // 启用WiFi模块
+	PrintManager_SetModule(PRINT_MODULE_ACTUATOR, 1);  // 启用执行器模块
+	
 	// 初始化服务器通信模块
 	ServerComm_Init();
 	
@@ -622,6 +633,9 @@ int main(void)
 	}
 	
 	// 主循环
+	// 双保险机制：
+	// 1. 主动推送：定期查询服务器待执行指令（每5秒）
+	// 2. 被动同步：上传状态时触发强制同步
 	while (1)
 	{
 		timecount++;
@@ -632,19 +646,18 @@ int main(void)
 		// 触摸按键A：切换显示模式
 		OLED_Display_CycleMode();
 	} else if (key == 3) {
-		RELAY_2(1);
-		printf("[Key] 触摸按键C按下，打开继电器2（水泵）\r\n");
-		// 上传执行器状态
-		if (g_wifi_connected && ServerComm_IsConnected()) {
-			ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1);
-		}
+		// 触摸按键C：已禁用直接控制
+		// 所有执行器控制完全由服务器指令通过WiFi驱动
+		//printf("[Main] 触摸按键C按下（水泵控制已禁用，请使用网页端控制）\r\n");
 	} else if (key == 4) {
-		RELAY_2(0);
-		printf("[Key] 触摸按键D按下，关闭继电器2（水泵）\r\n");
-		// 上传执行器状态
-		if (g_wifi_connected && ServerComm_IsConnected()) {
-			ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1);
-		}
+		// 触摸按键D：已禁用直接控制
+		// 所有执行器控制完全由服务器指令通过WiFi驱动
+		//printf("[Main] 触摸按键D按下（水泵控制已禁用，请使用网页端控制）\r\n");
+	}
+	
+	// 处理WiFi模块接收到的数据
+	if (g_wifi_connected) {
+		ServerComm_ProcessWiFiData();
 	}
 	
 	// 更新OLED显示
@@ -658,11 +671,46 @@ int main(void)
 		}
 	}
 	
+	// 每5秒主动查询一次待执行的控制指令（主动推送机制）
+	// 这确保即使硬件端不上传状态，也能及时接收服务器的控制指令
+	if (timecount % 500 == 0) {
+		if (g_wifi_connected) {
+			printf("[Main] 定期查询待执行指令...\r\n");
+			
+			// 查询风扇指令
+			int fan_command_id = 0;
+			char fan_command[16] = {0};
+			uint8_t fan_result = ServerComm_CheckAndExecuteCommand(
+				ACTUATOR_ID_FAN, &fan_command_id, fan_command);
+			
+			if (fan_result == 1) {
+				// 有待执行的指令，已自动执行并确认
+				printf("[Main] 风扇指令已执行: ID=%d, 指令=%s\r\n", 
+					   fan_command_id, fan_command);
+			}
+			
+			// 查询水泵指令
+			int pump_command_id = 0;
+			char pump_command[16] = {0};
+			uint8_t pump_result = ServerComm_CheckAndExecuteCommand(
+				ACTUATOR_ID_PUMP, &pump_command_id, pump_command);
+			
+			if (pump_result == 1) {
+				// 有待执行的指令，已自动执行并确认
+				printf("[Main] 水泵指令已执行: ID=%d, 指令=%s\r\n", 
+					   pump_command_id, pump_command);
+			}
+		}
+	}
+	
 	// 实时处理队列中的请求（只要队列有数据就处理）
 	if (g_wifi_connected) {
 		// 检查队列是否有数据
 		// 这里简化处理，直接调用处理函数
 		ServerComm_ProcessBatch(5);
+		
+		// 处理指令队列中的指令
+		ServerComm_ProcessCommandQueue();
 	}
 	
 	delay_ms(1);

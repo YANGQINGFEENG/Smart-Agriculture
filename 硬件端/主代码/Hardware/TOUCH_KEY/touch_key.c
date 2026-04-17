@@ -12,7 +12,8 @@ volatile uint8_t touch_key_status = 0; // 0-无按键，1-A，2-B，3-C，4-D
 
 void TOUCH_KEY_Init(void){ //触摸按键初始化
 	GPIO_InitTypeDef  GPIO_InitStructure; //定义GPIO的初始化结构体
-    GPIO_InitStructure.GPIO_Pin = TOUCH_KEY_A | TOUCH_KEY_B | TOUCH_KEY_C | TOUCH_KEY_D; //选择端口位                        
+    // 不初始化触摸按键B（PA1），释放该引脚给LED使用
+    GPIO_InitStructure.GPIO_Pin = TOUCH_KEY_A | TOUCH_KEY_C | TOUCH_KEY_D; //选择端口位（移除TOUCH_KEY_B）                        
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; //选择IO接口工作方式 //上拉输入       
 	GPIO_Init(TOUCH_KEYPORT,&GPIO_InitStructure);
 }
@@ -73,34 +74,63 @@ void TOUCH_KEY_EXTI_Init(void){
 // 返回值：0-无按键，1-A，2-B，3-C，4-D
 uint8_t TOUCH_KEY_Scan(void)
 {
+    static uint8_t key_pressed = 0; // 记录按键是否已经被按下
+    static uint32_t last_press_time = 0; // 记录上次按键时间
+    uint32_t current_time = 0; // 当前时间（简化处理，使用循环计数）
+    
+    // 检测A键
     if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_A) == 0) {
         delay_ms(10); // 消抖
         if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_A) == 0) {
-            while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_A) == 0); // 等待释放
-            return 1; // A键
+            if (key_pressed != 1) { // 只有按键状态改变时才返回
+                key_pressed = 1;
+                while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_A) == 0); // 等待释放
+                key_pressed = 0; // 释放后重置状态
+                return 1; // A键
+            }
         }
     }
-    if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_B) == 0) {
+    // 检测B键
+    else if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_B) == 0) {
         delay_ms(10); // 消抖
         if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_B) == 0) {
-            while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_B) == 0); // 等待释放
-            return 2; // B键
+            if (key_pressed != 2) { // 只有按键状态改变时才返回
+                key_pressed = 2;
+                while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_B) == 0); // 等待释放
+                key_pressed = 0; // 释放后重置状态
+                return 2; // B键
+            }
         }
     }
-    if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_C) == 0) {
+    // 检测C键
+    else if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_C) == 0) {
         delay_ms(10); // 消抖
         if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_C) == 0) {
-            while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_C) == 0); // 等待释放
-            return 3; // C键
+            if (key_pressed != 3) { // 只有按键状态改变时才返回
+                key_pressed = 3;
+                while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_C) == 0); // 等待释放
+                key_pressed = 0; // 释放后重置状态
+                return 3; // C键
+            }
         }
     }
-    if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_D) == 0) {
+    // 检测D键
+    else if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_D) == 0) {
         delay_ms(10); // 消抖
         if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_D) == 0) {
-            while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_D) == 0); // 等待释放
-            return 4; // D键
+            if (key_pressed != 4) { // 只有按键状态改变时才返回
+                key_pressed = 4;
+                while (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_D) == 0); // 等待释放
+                key_pressed = 0; // 释放后重置状态
+                return 4; // D键
+            }
         }
     }
+    else {
+        // 所有按键都未按下，重置状态
+        key_pressed = 0;
+    }
+    
     return 0; // 无按键
 }
 

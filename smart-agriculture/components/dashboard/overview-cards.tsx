@@ -86,6 +86,12 @@ export function OverviewCards() {
   const [sensorData, setSensorData] = useState<SensorData[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [clientTime, setClientTime] = useState<string>('')
+
+  // 修复水合错误：在客户端渲染后更新时间
+  useEffect(() => {
+    setClientTime(lastUpdate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+  }, [lastUpdate])
 
   const fetchSensorData = async () => {
     try {
@@ -149,7 +155,7 @@ export function OverviewCards() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <RefreshCw className="w-3 h-3" />
-          <span>最后更新: {lastUpdate.toLocaleTimeString('zh-CN')}</span>
+          <span>最后更新: {clientTime}</span>
         </div>
       </div>
       

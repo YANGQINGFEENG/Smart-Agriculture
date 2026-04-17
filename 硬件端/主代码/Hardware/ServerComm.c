@@ -6,16 +6,56 @@
 #include "LightSensor.h"
 #include "SoilSensor.h"
 #include "OLED.h"
+#include "RELAY/relay.h"
+#include "PrintManager.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+// DWT周期计数器相关定义
+#define DWT_CYCCNT  ((volatile uint32_t *)0xE0001004)
+#define DWT_CTRL    ((volatile uint32_t *)0xE0001000)
+#define DWT_CTRL_CYCCNTENA_Msk  (1UL << 0)
 
 // ==================== 全局变量定义 ====================
 
 static uint8_t g_tcp_connected = 0;                    // TCP连接状态标志
 static uint8_t g_transparent_mode = 0;                 // 透传模式标志
 NetworkQueue_t g_network_queue;                         // 网络请求队列（全局变量，供OLED显示使用）
+
+CommandQueue_t command_queue;                           // 指令队列
 static uint32_t g_system_time = 0;                      // 系统时间计数器
+
+// ==================== 时间统计函数 ====================
+
+/**
+ * @brief 初始化DWT周期计数器
+ */
+static void DWT_Init(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    *DWT_CYCCNT = 0;
+    *DWT_CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+/**
+ * @brief 获取当前周期计数
+ * @return 当前周期计数值
+ */
+static inline uint32_t DWT_GetCycles(void)
+{
+    return *DWT_CYCCNT;
+}
+
+/**
+ * @brief 将周期数转换为毫秒
+ * @param cycles 周期数
+ * @return 毫秒数
+ */
+static inline uint32_t CyclesToMs(uint32_t cycles)
+{
+    return cycles / (SystemCoreClock / 1000);
+}
 
 // ==================== 队列操作函数实现 ====================
 
@@ -78,8 +118,6 @@ uint8_t NetworkQueue_Enqueue(NetworkQueue_t *queue, NetworkRequest_t *request)
     }
     
     queue->count++;
-    printf("[Queue] 请求已添加，类型: %d, 优先级: %d, 队列数量: %d\r\n", 
-           request->type, request->priority, queue->count);
     
     return SERVER_COMM_OK;
 }
@@ -93,16 +131,12 @@ uint8_t NetworkQueue_Enqueue(NetworkQueue_t *queue, NetworkRequest_t *request)
 uint8_t NetworkQueue_Dequeue(NetworkQueue_t *queue, NetworkRequest_t *request)
 {
     if (NetworkQueue_IsEmpty(queue)) {
-        printf("[Queue] 队列为空，无法取出请求\r\n");
         return SERVER_COMM_ERROR_QUEUE_EMPTY;
     }
     
     *request = queue->requests[queue->head];
     queue->head = (queue->head + 1) % NETWORK_QUEUE_SIZE;
     queue->count--;
-    
-    printf("[Queue] 请求已取出，类型: %d, 队列数量: %d\r\n", 
-           request->type, queue->count);
     
     return SERVER_COMM_OK;
 }
@@ -150,6 +184,69 @@ void NetworkQueue_Clear(NetworkQueue_t *queue)
     printf("[Queue] 队列已清空\r\n");
 }
 
+// ==================== 指令队列操作函数实现 ====================
+
+/**
+ * @brief 初始化指令队列
+ */
+void ServerComm_InitCommandQueue(void)
+{
+    command_queue.head = 0;
+    command_queue.tail = 0;
+    command_queue.count = 0;
+    memset(command_queue.commands, 0, sizeof(command_queue.commands));
+    PRINT_INFO(PRINT_MODULE_SERVER, "指令队列初始化完成，大小: %d\r\n", COMMAND_QUEUE_SIZE);
+}
+
+/**
+ * @brief 添加指令到队列
+ * @param actuator_id 执行器ID
+ * @param command 指令内容
+ * @return 0:成功 1:队列已满
+ */
+uint8_t ServerComm_AddToCommandQueue(const char *actuator_id, const char *command)
+{
+    if (command_queue.count >= COMMAND_QUEUE_SIZE) {
+        PRINT_WARNING(PRINT_MODULE_SERVER, "指令队列已满，无法添加新指令\r\n");
+        return 1;
+    }
+    
+    // 添加到队列尾部
+    strncpy(command_queue.commands[command_queue.tail].actuator_id, actuator_id, sizeof(command_queue.commands[command_queue.tail].actuator_id) - 1);
+    strncpy(command_queue.commands[command_queue.tail].command, command, sizeof(command_queue.commands[command_queue.tail].command) - 1);
+    
+    command_queue.tail = (command_queue.tail + 1) % COMMAND_QUEUE_SIZE;
+    command_queue.count++;
+    
+    PRINT_INFO(PRINT_MODULE_SERVER, "指令已添加到队列: 执行器=%s, 指令=%s\r\n", actuator_id, command);
+    return 0;
+}
+
+/**
+ * @brief 处理队列中的指令
+ */
+void ServerComm_ProcessCommandQueue(void)
+{
+    if (command_queue.count == 0) {
+        return;
+    }
+    
+    // 处理队列中的所有指令
+    while (command_queue.count > 0) {
+        // 取出队列头部的指令
+        Command_t cmd = command_queue.commands[command_queue.head];
+        command_queue.head = (command_queue.head + 1) % COMMAND_QUEUE_SIZE;
+        command_queue.count--;
+        
+        // 执行指令
+        PRINT_INFO(PRINT_MODULE_ACTUATOR, "执行队列中的指令: 执行器=%s, 指令=%s\r\n", cmd.actuator_id, cmd.command);
+        ServerComm_ExecuteCommand(cmd.actuator_id, cmd.command);
+        
+        // 短暂延迟，避免处理过快
+        delay_ms(10);
+    }
+}
+
 // ==================== 服务器通信模块初始化 ====================
 
 /**
@@ -161,8 +258,14 @@ void ServerComm_Init(void)
     g_transparent_mode = 0;
     g_system_time = 0;
     
+    // 初始化DWT周期计数器
+    DWT_Init();
+    
     // 初始化网络请求队列
     NetworkQueue_Init(&g_network_queue);
+    
+    // 初始化指令队列
+    ServerComm_InitCommandQueue();
     
     printf("\r\n========================================\r\n");
     printf("[ServerComm] 初始化服务器通信模块\r\n");
@@ -1015,101 +1118,33 @@ uint8_t ServerComm_UploadActuatorStatus(const char *actuator_id, uint8_t state, 
 {
     char json_buf[64];
     uint8_t json_len;
-    uint8_t *response;
-    uint16_t timeout;
-    uint8_t success = 0;
     
-    printf("\r\n[Actuator] ========== 上传执行器状态 ==========\r\n");
-    printf("[Actuator] 执行器ID: %s\r\n", actuator_id);
-    printf("[Actuator] state参数: %d\r\n", state);
-    printf("[Actuator] mode参数: %d\r\n", mode);
+    PRINT_INFO(PRINT_MODULE_ACTUATOR, "上传执行器状态: 执行器=%s, 状态=%s, 模式=%s\r\n", 
+              actuator_id, state ? "on" : "off", mode ? "manual" : "auto");
     
     sprintf(json_buf, "{\"state\":\"%s\",\"mode\":\"%s\"}", 
             state ? "on" : "off", 
             mode ? "manual" : "auto");
     json_len = strlen(json_buf);
     
-    printf("[Actuator] JSON数据: %s (长度: %d)\r\n", json_buf, json_len);
-    printf("[Actuator] state转换: %d -> \"%s\"\r\n", state, state ? "on" : "off");
-    printf("[Actuator] mode转换: %d -> \"%s\"\r\n", mode, mode ? "manual" : "auto");
-    printf("[Actuator] =====================================\r\n");
+    PRINT_INFO(PRINT_MODULE_ACTUATOR, "JSON数据: %s (长度: %d)\r\n", json_buf, json_len);
     
-    if (ServerComm_EnsureConnection() != 0) {
-        printf("[Actuator] 连接不可用，无法上传\r\n");
+    // 创建网络请求
+    NetworkRequest_t request;
+    request.type = REQ_TYPE_ACTUATOR_STATUS;
+    request.priority = REQ_PRIORITY_NORMAL;
+    strncpy(request.data.actuator_status.actuator_id, actuator_id, sizeof(request.data.actuator_status.actuator_id) - 1);
+    request.data.actuator_status.state = state;
+    request.data.actuator_status.mode = mode;
+    
+    // 添加到队列
+    if (NetworkQueue_Enqueue(&g_network_queue, &request) != SERVER_COMM_OK) {
+        PRINT_ERROR(PRINT_MODULE_ACTUATOR, "无法添加执行器状态上传请求到队列\r\n");
         return 1;
     }
     
-    atk_mb026_uart_rx_restart();
-    atk_mb026_uart_rx_restart();
-    
-    printf("[Actuator] 发送HTTP请求...\r\n");
-    
-    atk_mb026_uart_printf_blocking("PATCH /api/actuators/%s HTTP/1.1\r\n", actuator_id);
-    atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
-    atk_mb026_uart_printf_blocking("Content-Type: application/json\r\n");
-    atk_mb026_uart_printf_blocking("Content-Length: %d\r\n", json_len);
-    atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
-    atk_mb026_uart_printf_blocking("\r\n");
-    atk_mb026_uart_printf_blocking("%s", json_buf);
-    
-    printf("[Actuator] HTTP请求已发送，等待响应...\r\n");
-    
-    uint8_t got_200 = 0;
-    timeout = 3000;
-    while (timeout > 0) {
-        response = atk_mb026_uart_rx_get_frame();
-        if (response != NULL) {
-            if (strstr((const char *)response, "HTTP/1.1 200") != NULL) {
-                printf("[Actuator] 服务器响应: HTTP 200 OK\r\n");
-                got_200 = 1;
-            }
-            else if (strstr((const char *)response, "HTTP/1.1 400") != NULL) {
-                printf("[Actuator] 收到HTTP 400 (可能是旧响应，继续等待...)\r\n");
-            }
-            else if (strstr((const char *)response, "HTTP/1.1 404") != NULL) {
-                printf("[Actuator] 执行器不存在 (404)\r\n");
-                break;
-            }
-            else if (strstr((const char *)response, "HTTP/1.1 500") != NULL) {
-                printf("[Actuator] 服务器内部错误 (500)\r\n");
-                break;
-            }
-            
-            if (strstr((const char *)response, "\"success\":true") != NULL ||
-                strstr((const char *)response, "\"success\": true") != NULL) {
-                printf("[Actuator] 执行器状态更新成功!\r\n");
-                success = 1;
-                break;
-            }
-            
-            if (got_200 && strstr((const char *)response, "}") != NULL) {
-                delay_ms(100);
-                response = atk_mb026_uart_rx_get_frame();
-                if (response != NULL && 
-                    (strstr((const char *)response, "\"success\":true") != NULL ||
-                     strstr((const char *)response, "\"success\": true") != NULL)) {
-                    printf("[Actuator] 执行器状态更新成功!\r\n");
-                    success = 1;
-                }
-                break;
-            }
-            
-            atk_mb026_uart_rx_restart();
-        }
-        timeout--;
-        delay_ms(1);
-    }
-    
-    if (success) {
-        printf("[Actuator] 执行器状态已成功同步到服务器\r\n");
-    } else if (got_200) {
-        printf("[Actuator] 收到200响应，但未收到确认数据\r\n");
-        success = 1;
-    } else {
-        printf("[Actuator] 执行器状态发送完成（未收到确认）\r\n");
-    }
-    
-    return success ? 0 : 2;
+    PRINT_INFO(PRINT_MODULE_ACTUATOR, "执行器状态上传请求已添加到队列\r\n");
+    return 0;
 }
 
 /**
@@ -1123,128 +1158,130 @@ uint8_t ServerComm_CheckAndExecuteCommand(const char *actuator_id, int *command_
 {
     uint8_t *response;
     uint16_t timeout;
-    char *cmd_ptr;
-    char *id_ptr;
-    uint8_t result = 0;
-    uint8_t retry_count = 0;
-    uint8_t max_retries = 3;  // 最多重试3次
+    uint8_t got_command = 0;
     
     if (command_id == NULL || command == NULL) {
-        printf("[Command] 参数错误\r\n");
         return 2;
     }
     
     *command_id = 0;
     command[0] = '\0';
     
-    printf("\r\n[Command] ========== 查询控制指令 ==========\r\n");
-    printf("[Command] 执行器ID: %s\r\n", actuator_id);
-    
     if (ServerComm_EnsureConnection() != 0) {
-        printf("[Command] 连接不可用，无法查询指令\r\n");
         return 2;
     }
     
-    // 重试循环
-    for (retry_count = 0; retry_count < max_retries; retry_count++) {
-        if (retry_count > 0) {
-            printf("[Command] 第 %d 次重试...\r\n", retry_count + 1);
+    atk_mb026_uart_rx_restart();
+    delay_ms(50);
+    atk_mb026_uart_rx_restart();
+    delay_ms(20);
+    
+    atk_mb026_uart_printf_blocking("GET /api/actuators/%s/commands HTTP/1.1\r\n", actuator_id);
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("\r\n");
+    
+    // 等待服务器处理请求
+    delay_ms(200);
+    
+    static char response_buffer[2048] = {0};
+    uint16_t buffer_index = 0;
+    
+    timeout = 3000;
+    while (timeout > 0) {
+        response = atk_mb026_uart_rx_get_frame();
+        if (response != NULL) {
+            uint16_t frame_len = strlen((char *)response);
+            
+            if (buffer_index + frame_len < sizeof(response_buffer) - 1) {
+                strcpy(&response_buffer[buffer_index], (const char *)response);
+                buffer_index += frame_len;
+                response_buffer[buffer_index] = '\0';
+            }
         }
         
-        // 清空接收缓冲区
-        atk_mb026_uart_rx_restart();
-        delay_ms(50);
-        atk_mb026_uart_rx_restart();
-        delay_ms(30);
+        if (strstr(response_buffer, "\r\n\r\n") != NULL) {
+            break;
+        }
         
-        printf("[Command] 发送查询请求...\r\n");
-        
-        atk_mb026_uart_printf_blocking("GET /api/actuators/%s/commands HTTP/1.1\r\n", actuator_id);
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("\r\n");
-        
-        printf("[Command] 等待服务器响应...\r\n");
-        
-        delay_ms(300);
-        
-        uint8_t got_response = 0;
-        timeout = 3000;  // 每次等待3秒
-        while (timeout > 0) {
-            response = atk_mb026_uart_rx_get_frame();
-            if (response != NULL) {
-                printf("[Command] 收到响应帧 (%d字节)\r\n", strlen((char*)response));
-                
-                if (strstr((const char *)response, "HTTP/1.1 200") != NULL) {
-                    printf("[Command] 收到HTTP 200 OK\r\n");
-                    got_response = 1;
-                }
-                
-                if (strstr((const char *)response, "\"data\":null") != NULL ||
-                    strstr((const char *)response, "\"data\": null") != NULL) {
-                    printf("[Command] 没有待执行的指令\r\n");
+        timeout--;
+        delay_ms(2);
+    }
+    
+    if (strlen(response_buffer) > 0) {
+        if (strstr(response_buffer, "HTTP/1.1 200") != NULL) {
+            char *data_ptr = strstr(response_buffer, "\"data\":");
+            if (data_ptr != NULL) {
+                if (strstr(data_ptr, "null") != NULL) {
+                    memset(response_buffer, 0, sizeof(response_buffer));
+                    atk_mb026_uart_rx_restart();
                     return 0;
                 }
                 
-                if (strstr((const char *)response, "\"command\"") != NULL) {
-                    cmd_ptr = strstr((const char *)response, "\"command\"");
-                    if (cmd_ptr != NULL) {
-                        char *colon = strchr(cmd_ptr, ':');
-                        if (colon != NULL) {
-                            char *quote1 = strchr(colon + 1, '"');
-                            char *quote2 = quote1 ? strchr(quote1 + 1, '"') : NULL;
-                            if (quote1 && quote2 && (quote2 - quote1 - 1) < 8) {
-                                strncpy(command, quote1 + 1, quote2 - quote1 - 1);
-                                command[quote2 - quote1 - 1] = '\0';
+                char *id_ptr = strstr(data_ptr, "\"id\":");
+                char *cmd_ptr = strstr(data_ptr, "\"command\":");
+                
+                if (id_ptr != NULL && cmd_ptr != NULL) {
+                    sscanf(id_ptr, "\"id\":%d", command_id);
+                    
+                    char cmd_buf[16] = {0};
+                    char *cmd_start = strstr(cmd_ptr, "\"command\":\"");
+                    if (cmd_start != NULL) {
+                        cmd_start += strlen("\"command\":\"");
+                        char *cmd_end = strstr(cmd_start, "\"");
+                        if (cmd_end != NULL) {
+                            uint8_t cmd_len = cmd_end - cmd_start;
+                            if (cmd_len < sizeof(cmd_buf)) {
+                                strncpy(cmd_buf, cmd_start, cmd_len);
+                                cmd_buf[cmd_len] = '\0';
+                                
+                                if (strcmp(cmd_buf, "on") == 0) {
+                                    strcpy(command, "ON");
+                                } else if (strcmp(cmd_buf, "off") == 0) {
+                                    strcpy(command, "OFF");
+                                } else {
+                                    strncpy(command, cmd_buf, 15);
+                                    command[15] = '\0';
+                                }
+                                
+                                got_command = 1;
                             }
                         }
                     }
-                    
-                    id_ptr = strstr((const char *)response, "\"id\"");
-                    if (id_ptr != NULL) {
-                        char *colon = strchr(id_ptr, ':');
-                        if (colon != NULL) {
-                            *command_id = atoi(colon + 1);
-                        }
-                    }
-                    
-                    printf("[Command] 解析结果: id=%d, command=%s\r\n", *command_id, command);
-                    
-                    if (strlen(command) > 0 && *command_id > 0) {
-                        printf("[Command] 收到指令: id=%d, command=%s\r\n", *command_id, command);
-                        result = 1;
-                        break;
-                    }
                 }
-                
-                atk_mb026_uart_rx_restart();
             }
-            
-            delay_ms(10);
-            timeout -= 10;
         }
-        
-        if (result == 1) {
-            printf("[Command] 指令解析成功\r\n");
-            return 1;
-        }
-        
-        if (got_response && result == 0) {
-            // 收到响应但没有指令，说明真的没有待执行指令
-            printf("[Command] 无待执行指令\r\n");
+        else if (strstr(response_buffer, "HTTP/1.1 404") != NULL) {
+            memset(response_buffer, 0, sizeof(response_buffer));
+            atk_mb026_uart_rx_restart();
             return 0;
         }
-        
-        // 没有收到响应，继续重试
-        printf("[Command] 未收到响应，准备重试...\r\n");
-        delay_ms(200);  // 重试前等待
+        else if (strstr(response_buffer, "HTTP/1.1 500") != NULL) {
+            memset(response_buffer, 0, sizeof(response_buffer));
+            atk_mb026_uart_rx_restart();
+            return 0;
+        }
     }
     
-    printf("[Command] 重试%d次后仍未收到响应\r\n", max_retries);
-    return 2;
+    memset(response_buffer, 0, sizeof(response_buffer));
+    atk_mb026_uart_rx_restart();
+    
+    if (got_command) {
+        uint8_t result = ServerComm_ExecuteCommand(actuator_id, command);
+        
+        if (result == 0) {
+            ServerComm_ConfirmCommand(actuator_id, *command_id, "executed");
+        } else {
+            ServerComm_ConfirmCommand(actuator_id, *command_id, "failed");
+        }
+        
+        return 1;
+    }
+    
+    return 0;
 }
 
 /**
@@ -1256,94 +1293,215 @@ uint8_t ServerComm_CheckAndExecuteCommand(const char *actuator_id, int *command_
  */
 uint8_t ServerComm_ConfirmCommand(const char *actuator_id, int command_id, const char *status)
 {
-    uint8_t *response;
-    uint16_t timeout;
     char json_buf[64];
     uint8_t json_len;
+    uint8_t *response;
+    uint16_t timeout;
     uint8_t success = 0;
-    uint8_t retry_count = 0;
-    uint8_t max_retries = 3;  // 最多重试3次
-    
-    printf("\r\n[Command] ========== 确认指令执行 ==========\r\n");
-    printf("[Command] 执行器ID: %s, 指令ID: %d, 状态: %s\r\n", actuator_id, command_id, status);
-    
-    if (ServerComm_EnsureConnection() != 0) {
-        printf("[Command] 连接不可用，无法确认指令\r\n");
-        return 1;
-    }
     
     sprintf(json_buf, "{\"command_id\":%d,\"status\":\"%s\"}", command_id, status);
     json_len = strlen(json_buf);
     
-    printf("[Command] JSON数据: %s\r\n", json_buf);
-    
-    // 重试循环
-    for (retry_count = 0; retry_count < max_retries; retry_count++) {
-        if (retry_count > 0) {
-            printf("[Command] 第 %d 次重试确认...\r\n", retry_count + 1);
-        }
-        
-        // 清空接收缓冲区
-        atk_mb026_uart_rx_restart();
-        delay_ms(50);
-        atk_mb026_uart_rx_restart();
-        delay_ms(30);
-        
-        printf("[Command] 发送确认请求...\r\n");
-        
-        atk_mb026_uart_printf_blocking("PATCH /api/actuators/%s/commands HTTP/1.1\r\n", actuator_id);
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("Content-Type: application/json\r\n");
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("Content-Length: %d\r\n", json_len);
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("\r\n");
-        delay_ms(10);
-        atk_mb026_uart_printf_blocking("%s", json_buf);
-        
-        printf("[Command] 等待服务器响应...\r\n");
-        
-        delay_ms(300);
-        
-        timeout = 3000;  // 每次等待3秒
-        while (timeout > 0) {
-            response = atk_mb026_uart_rx_get_frame();
-            if (response != NULL) {
-                printf("[Command] 收到确认响应 (%d字节)\r\n", strlen((char*)response));
-                
-                if (strstr((const char *)response, "HTTP/1.1 200") != NULL) {
-                    printf("[Command] 服务器响应: HTTP 200 OK\r\n");
-                }
-                
-                if (strstr((const char *)response, "\"success\":true") != NULL ||
-                    strstr((const char *)response, "\"success\": true") != NULL) {
-                    printf("[Command] 指令确认成功!\r\n");
-                    success = 1;
-                    break;
-                }
-                
-                atk_mb026_uart_rx_restart();
-            }
-            
-            delay_ms(10);
-            timeout -= 10;
-        }
-        
-        if (success) {
-            printf("[Command] 指令确认完成\r\n");
-            return 0;
-        }
-        
-        // 没有收到响应，继续重试
-        printf("[Command] 未收到确认响应，准备重试...\r\n");
-        delay_ms(200);
+    if (ServerComm_EnsureConnection() != 0) {
+        return 1;
     }
     
-    printf("[Command] 重试%d次后仍未确认成功\r\n", max_retries);
+    atk_mb026_uart_rx_restart();
+    delay_ms(50);
+    atk_mb026_uart_rx_restart();
+    delay_ms(20);
+    
+    atk_mb026_uart_printf_blocking("PATCH /api/actuators/%s/commands HTTP/1.1\r\n", actuator_id);
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("Content-Type: application/json\r\n");
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("Content-Length: %d\r\n", json_len);
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("\r\n");
+    delay_ms(5);
+    atk_mb026_uart_printf_blocking("%s", json_buf);
+    
+    static char response_buffer[2048] = {0};
+    uint16_t buffer_index = 0;
+    
+    timeout = 3000;
+    while (timeout > 0) {
+        response = atk_mb026_uart_rx_get_frame();
+        if (response != NULL) {
+            uint16_t frame_len = strlen((char *)response);
+            
+            if (buffer_index + frame_len < sizeof(response_buffer) - 1) {
+                strcpy(&response_buffer[buffer_index], (char *)response);
+                buffer_index += frame_len;
+                response_buffer[buffer_index] = '\0';
+            }
+        }
+        
+        if (strstr(response_buffer, "\r\n\r\n") != NULL) {
+            if (strstr(response_buffer, "HTTP/1.1 200") != NULL) {
+                success = 1;
+            }
+            break;
+        }
+        
+        timeout--;
+        delay_ms(1);
+    }
+    
+    memset(response_buffer, 0, sizeof(response_buffer));
+    atk_mb026_uart_rx_restart();
+    
+    return success ? 0 : 1;
+}
+
+/**
+ * @brief 处理WiFi模块接收到的数据
+ * @note 从WiFi模块读取数据并解析指令
+ */
+void ServerComm_ProcessWiFiData(void)
+{
+    static char wifi_buffer[2048] = {0};
+    static uint16_t buffer_index = 0;
+    uint8_t *response;
+    
+    response = atk_mb026_uart_rx_get_frame();
+    if (response != NULL) {
+        uint16_t response_len = strlen((char *)response);
+        
+        for (uint16_t i = 0; i < response_len; i++) {
+            if (buffer_index < sizeof(wifi_buffer) - 1) {
+                wifi_buffer[buffer_index++] = response[i];
+                wifi_buffer[buffer_index] = '\0';
+            }
+        }
+        
+        if (strstr(wifi_buffer, "\r\n\r\n") != NULL) {
+            if (buffer_index > 0) {
+                char *cmd_ptr = strstr(wifi_buffer, "CMD:");
+                if (cmd_ptr != NULL) {
+                    PRINT_INFO(PRINT_MODULE_WIFI, "接收到格式1控制指令\r\n");
+                    
+                    char *actuator_id = strstr(cmd_ptr, "ACTUATOR:");
+                    char *command = strstr(cmd_ptr, "ACTION:");
+                    
+                    if (actuator_id != NULL && command != NULL) {
+                        char actuator_id_buf[16] = {0};
+                        sscanf(actuator_id, "ACTUATOR:%s", actuator_id_buf);
+                        
+                        char command_buf[16] = {0};
+                        sscanf(command, "ACTION:%s", command_buf);
+                        
+                        PRINT_INFO(PRINT_MODULE_ACTUATOR, "添加指令到队列: 执行器=%s, 指令=%s\r\n", actuator_id_buf, command_buf);
+                        ServerComm_AddToCommandQueue(actuator_id_buf, command_buf);
+                    }
+                }
+                else if (strstr(wifi_buffer, "\"command\":") != NULL && strstr(wifi_buffer, "\"success\":true") != NULL) {
+                    PRINT_INFO(PRINT_MODULE_WIFI, "接收到格式2控制指令\r\n");
+                    
+                    char *data_ptr = strstr(wifi_buffer, "\"data\":");
+                    if (data_ptr != NULL && strstr(data_ptr, "null") == NULL) {
+                        char *actuator_id_ptr = strstr(data_ptr, "\"actuator_id\":\"");
+                        char actuator_id_buf[16] = {0};
+                        if (actuator_id_ptr != NULL) {
+                            actuator_id_ptr += strlen("\"actuator_id\":\"");
+                            char *actuator_id_end = strstr(actuator_id_ptr, "\"");
+                            if (actuator_id_end != NULL) {
+                                uint8_t id_len = actuator_id_end - actuator_id_ptr;
+                                if (id_len < sizeof(actuator_id_buf)) {
+                                    strncpy(actuator_id_buf, actuator_id_ptr, id_len);
+                                    actuator_id_buf[id_len] = '\0';
+                                }
+                            }
+                        }
+                        
+                        char *cmd_ptr_json = strstr(data_ptr, "\"command\":\"");
+                        char command_buf[16] = {0};
+                        if (cmd_ptr_json != NULL) {
+                            cmd_ptr_json += strlen("\"command\":\"");
+                            char *cmd_end = strstr(cmd_ptr_json, "\"");
+                            if (cmd_end != NULL) {
+                                uint8_t cmd_len = cmd_end - cmd_ptr_json;
+                                if (cmd_len < sizeof(command_buf)) {
+                                    strncpy(command_buf, cmd_ptr_json, cmd_len);
+                                    command_buf[cmd_len] = '\0';
+                                    
+                                    if (strcmp(command_buf, "on") == 0) {
+                                        strcpy(command_buf, "ON");
+                                    } else if (strcmp(command_buf, "off") == 0) {
+                                        strcpy(command_buf, "OFF");
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (strlen(actuator_id_buf) > 0 && strlen(command_buf) > 0) {
+                            PRINT_INFO(PRINT_MODULE_ACTUATOR, "添加指令到队列: 执行器=%s, 指令=%s\r\n", actuator_id_buf, command_buf);
+                            ServerComm_AddToCommandQueue(actuator_id_buf, command_buf);
+                        }
+                    }
+                }
+                
+                memset(wifi_buffer, 0, sizeof(wifi_buffer));
+                buffer_index = 0;
+            }
+        }
+        
+        atk_mb026_uart_rx_restart();
+    }
+}
+
+/**
+ * @brief 执行服务器下发的指令
+ * @param actuator_id 执行器ID
+ * @param command 指令内容
+ * @return 0:成功 1:失败
+ */
+uint8_t ServerComm_ExecuteCommand(const char *actuator_id, const char *command)
+{
+    if (actuator_id == NULL || command == NULL) {
+        PRINT_ERROR(PRINT_MODULE_ACTUATOR, "参数错误\r\n");
+        return 1;
+    }
+    
+    // 处理风扇指令
+    if (strcmp(actuator_id, ACTUATOR_ID_FAN) == 0) {
+        if (strcmp(command, "ON") == 0) {
+            PRINT_INFO(PRINT_MODULE_ACTUATOR, "打开风扇\r\n");
+            RELAY_1(1); // 打开继电器1（风扇）
+            // 上传执行器状态
+            ServerComm_UploadActuatorStatus(ACTUATOR_ID_FAN, 1, 1); // 1:手动模式
+            return 0;
+        } else if (strcmp(command, "OFF") == 0) {
+            PRINT_INFO(PRINT_MODULE_ACTUATOR, "关闭风扇\r\n");
+            RELAY_1(0); // 关闭继电器1（风扇）
+            // 上传执行器状态
+            ServerComm_UploadActuatorStatus(ACTUATOR_ID_FAN, 0, 1); // 1:手动模式
+            return 0;
+        }
+    }
+    
+    // 处理水泵指令
+    if (strcmp(actuator_id, ACTUATOR_ID_PUMP) == 0) {
+        if (strcmp(command, "ON") == 0) {
+            PRINT_INFO(PRINT_MODULE_ACTUATOR, "打开水泵\r\n");
+            RELAY_2(1); // 打开继电器2（水泵）
+            // 上传执行器状态
+            ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 1, 1); // 1:手动模式
+            return 0;
+        } else if (strcmp(command, "OFF") == 0) {
+            PRINT_INFO(PRINT_MODULE_ACTUATOR, "关闭水泵\r\n");
+            RELAY_2(0); // 关闭继电器2（水泵）
+            // 上传执行器状态
+            ServerComm_UploadActuatorStatus(ACTUATOR_ID_PUMP, 0, 1); // 1:手动模式
+            return 0;
+        }
+    }
+    
+    PRINT_WARNING(PRINT_MODULE_ACTUATOR, "未知指令: 执行器=%s, 指令=%s\r\n", actuator_id, command);
     return 1;
 }
 
@@ -1362,17 +1520,11 @@ static uint8_t ServerComm_ProcessRequest(NetworkRequest_t *request)
     switch (request->type) {
         case REQ_TYPE_SENSOR_DATA: {
             // 处理传感器数据上传
-            printf("[Queue] 处理传感器数据: %s = %.2f\r\n", 
-                   request->data.sensor_data.sensor_id, 
-                   request->data.sensor_data.value);
             // 直接使用已建立的长连接发送数据，而不是重新建立连接
             char json_buf[32];
             uint8_t json_len;
             sprintf(json_buf, "{\"value\":%.2f}", request->data.sensor_data.value);
             json_len = strlen(json_buf);
-            
-            printf("[DEBUG] 发送传感器数据: %s\r\n", request->data.sensor_data.sensor_id);
-            printf("[DEBUG] JSON: %s (len=%d)\r\n", json_buf, json_len);
             
             // 发送HTTP请求
             atk_mb026_uart_printf_blocking("POST /api/sensors/%s/data HTTP/1.1\r\n", request->data.sensor_data.sensor_id);
@@ -1389,12 +1541,98 @@ static uint8_t ServerComm_ProcessRequest(NetworkRequest_t *request)
             
         case REQ_TYPE_ACTUATOR_STATUS:
             // 处理执行器状态上传
-            printf("[Queue] 处理执行器状态: %s\r\n", 
-                   request->data.actuator_status.actuator_id);
-            result = ServerComm_UploadActuatorStatus(
-                request->data.actuator_status.actuator_id,
-                request->data.actuator_status.state,
-                request->data.actuator_status.mode);
+            // 构造JSON数据
+            char json_buf[64];
+            uint8_t json_len;
+            sprintf(json_buf, "{\"state\":\"%s\",\"mode\":\"%s\"}", 
+                    request->data.actuator_status.state ? "on" : "off", 
+                    request->data.actuator_status.mode ? "manual" : "auto");
+            json_len = strlen(json_buf);
+            
+            // 清空接收缓冲区
+            atk_mb026_uart_rx_restart();
+            delay_ms(10);
+            
+            // 发送HTTP请求
+            atk_mb026_uart_printf_blocking("POST /api/actuators/%s HTTP/1.1\r\n", request->data.actuator_status.actuator_id);
+            delay_ms(5);
+            atk_mb026_uart_printf_blocking("Host: %s:%s\r\n", SERVER_IP, SERVER_PORT);
+            delay_ms(5);
+            atk_mb026_uart_printf_blocking("Content-Type: application/json\r\n");
+            delay_ms(5);
+            atk_mb026_uart_printf_blocking("Content-Length: %d\r\n", json_len);
+            delay_ms(5);
+            atk_mb026_uart_printf_blocking("Connection: keep-alive\r\n");
+            delay_ms(5);
+            atk_mb026_uart_printf_blocking("\r\n");
+            delay_ms(5);
+            atk_mb026_uart_printf_blocking("%s", json_buf);
+            
+            delay_ms(500);
+            
+            uint16_t timeout = 3000;
+            uint8_t *response;
+            uint8_t got_response = 0;
+            
+            while (timeout > 0 && !got_response) {
+                response = atk_mb026_uart_rx_get_frame();
+                if (response != NULL) {
+                    if (strstr((const char *)response, "HTTP/1.1 200") != NULL) {
+                        PRINT_INFO(PRINT_MODULE_SERVER, "服务器响应: 200 OK\r\n");
+                        got_response = 1;
+                    } else if (strstr((const char *)response, "HTTP/1.1 4") != NULL ||
+                               strstr((const char *)response, "HTTP/1.1 5") != NULL) {
+                        PRINT_ERROR(PRINT_MODULE_SERVER, "服务器响应错误\r\n");
+                        got_response = 1;
+                    }
+                    
+                    if (strstr((const char *)response, "\"action\":\"force_sync\"") != NULL) {
+                        PRINT_INFO(PRINT_MODULE_SERVER, "收到强制同步指令\r\n");
+                        
+                        char *server_state_ptr = strstr((const char *)response, "\"server_state\":\"");
+                        char *server_mode_ptr = strstr((const char *)response, "\"server_mode\":\"");
+                        
+                        if (server_state_ptr != NULL && server_mode_ptr != NULL) {
+                            server_state_ptr += strlen("\"server_state\":\"");
+                            char *state_end = strstr(server_state_ptr, "\"");
+                            char server_state[10] = {0};
+                            if (state_end != NULL) {
+                                strncpy(server_state, server_state_ptr, state_end - server_state_ptr);
+                                server_state[state_end - server_state_ptr] = '\0';
+                            }
+                            
+                            server_mode_ptr += strlen("\"server_mode\":\"");
+                            char *mode_end = strstr(server_mode_ptr, "\"");
+                            char server_mode[10] = {0};
+                            if (mode_end != NULL) {
+                                strncpy(server_mode, server_mode_ptr, mode_end - server_mode_ptr);
+                                server_mode[mode_end - server_mode_ptr] = '\0';
+                            }
+                            
+                            uint8_t new_state = strcmp(server_state, "on") == 0 ? 1 : 0;
+                            uint8_t new_mode = strcmp(server_mode, "manual") == 0 ? 1 : 0;
+                            
+                            if (strcmp(request->data.actuator_status.actuator_id, ACTUATOR_ID_FAN) == 0) {
+                                RELAY_1(new_state);
+                            } else if (strcmp(request->data.actuator_status.actuator_id, ACTUATOR_ID_PUMP) == 0) {
+                                RELAY_2(new_state);
+                            }
+                            
+                            delay_ms(100);
+                            ServerComm_UploadActuatorStatus(
+                                request->data.actuator_status.actuator_id,
+                                new_state, new_mode);
+                        }
+                    }
+                    
+                    atk_mb026_uart_rx_restart();
+                    break;
+                }
+                timeout--;
+                delay_ms(1);
+            }
+            
+            result = SERVER_COMM_OK;
             break;
             
         case REQ_TYPE_COMMAND_QUERY:
@@ -1443,32 +1681,21 @@ void ServerComm_ProcessQueue(void)
     NetworkRequest_t request;
     uint8_t process_count = 0;
     
-    printf("\r\n[Queue] ========== 开始处理队列 ==========\r\n");
-    printf("[Queue] 队列中的请求数量: %d\r\n", NetworkQueue_GetCount(&g_network_queue));
-    
     // 循环处理队列中的所有请求
     while (!NetworkQueue_IsEmpty(&g_network_queue)) {
         // 从队列中取出请求
         if (NetworkQueue_Dequeue(&g_network_queue, &request) != SERVER_COMM_OK) {
-            printf("[Queue] 取出请求失败\r\n");
             break;
         }
         
         // 处理请求
         uint8_t result = ServerComm_ProcessRequest(&request);
         
-        if (result == SERVER_COMM_OK) {
-            printf("[Queue] 请求处理成功\r\n");
-        } else {
-            printf("[Queue] 请求处理失败，错误码: %d\r\n", result);
-            
+        if (result != SERVER_COMM_OK) {
             // 如果未达到最大重试次数，重新加入队列
             if (request.retry_count < MAX_RETRY_COUNT) {
                 request.retry_count++;
-                printf("[Queue] 重新加入队列，重试次数: %d\r\n", request.retry_count);
                 NetworkQueue_Enqueue(&g_network_queue, &request);
-            } else {
-                printf("[Queue] 已达到最大重试次数，放弃请求\r\n");
             }
         }
         
@@ -1476,14 +1703,9 @@ void ServerComm_ProcessQueue(void)
         
         // 避免一次处理太多请求，影响其他任务
         if (process_count >= 5) {
-            printf("[Queue] 已处理%d个请求，暂停处理\r\n", process_count);
             break;
         }
     }
-    
-    printf("[Queue] ========== 队列处理完成 ==========\r\n");
-    printf("[Queue] 处理的请求数量: %d, 剩余: %d\r\n\r\n", 
-           process_count, NetworkQueue_GetCount(&g_network_queue));
 }
 
 /**
@@ -1498,10 +1720,18 @@ uint8_t ServerComm_ProcessBatch(uint8_t max_count)
     uint8_t process_count = 0;
     uint16_t queue_count = NetworkQueue_GetCount(&g_network_queue);
     
+    // 时间统计变量
+    uint32_t start_cycles, end_cycles, total_cycles;
+    uint32_t request_start, request_end;
+    uint32_t total_ms;
+    
     // 如果队列为空，直接返回
     if (queue_count == 0) {
         return 0;
     }
+    
+    // 记录开始时间
+    start_cycles = DWT_GetCycles();
     
     printf("\r\n[Queue] ========== 批量处理队列 ==========\r\n");
     printf("[Queue] 最大处理数量: %d, 队列中的请求数量: %d\r\n", 
@@ -1515,13 +1745,24 @@ uint8_t ServerComm_ProcessBatch(uint8_t max_count)
             break;
         }
         
+        // 记录单个请求开始时间
+        request_start = DWT_GetCycles();
+        
         // 处理请求
         uint8_t result = ServerComm_ProcessRequest(&request);
         
+        // 记录单个请求结束时间
+        request_end = DWT_GetCycles();
+        
+        // 计算单个请求耗时
+        uint32_t request_cycles = request_end - request_start;
+        uint32_t request_ms = CyclesToMs(request_cycles);
+        
         if (result == SERVER_COMM_OK) {
-            printf("[Queue] 请求处理成功\r\n");
+            printf("[Queue] 请求#%d 处理成功, 耗时: %lu ms\r\n", process_count + 1, request_ms);
         } else {
-            printf("[Queue] 请求处理失败，错误码: %d\r\n", result);
+            printf("[Queue] 请求#%d 处理失败(错误:%d), 耗时: %lu ms\r\n", 
+                   process_count + 1, result, request_ms);
             
             // 如果未达到最大重试次数，重新加入队列
             if (request.retry_count < MAX_RETRY_COUNT) {
@@ -1536,9 +1777,18 @@ uint8_t ServerComm_ProcessBatch(uint8_t max_count)
         process_count++;
     }
     
+    // 记录结束时间
+    end_cycles = DWT_GetCycles();
+    
+    // 计算总耗时
+    total_cycles = end_cycles - start_cycles;
+    total_ms = CyclesToMs(total_cycles);
+    
     printf("[Queue] ========== 批量处理完成 ==========\r\n");
-    printf("[Queue] 实际处理的请求数量: %d, 剩余: %d\r\n\r\n", 
+    printf("[Queue] 实际处理的请求数量: %d, 剩余: %d\r\n", 
            process_count, NetworkQueue_GetCount(&g_network_queue));
+    printf("[Queue] 总耗时: %lu ms, 平均每个请求: %lu ms\r\n\r\n", 
+           total_ms, process_count > 0 ? total_ms / process_count : 0);
     
     return process_count;
 }
