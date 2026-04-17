@@ -17,6 +17,7 @@ import {
   Zap,
   MoreVertical,
   Undo2,
+  X,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -48,11 +49,10 @@ interface Strategy {
   id: string
   name: string
   actuator_id: string
-  actuator_name: string
   enabled: boolean
   trigger_condition: {
-    type: 'humidity' | 'temperature' | 'time'
-    operator: '<' | '>' | '=' | '<=' | '>='
+    type: string
+    operator: string
     value: number
     unit: string
   }
@@ -62,7 +62,7 @@ interface Strategy {
   }
   action: 'on' | 'off'
   stop_condition?: {
-    type: 'humidity' | 'temperature' | 'duration'
+    type: string
     value: number
     unit: string
   }
@@ -71,6 +71,7 @@ interface Strategy {
     cooldown_time: number
   }
   created_at: string
+  updated_at?: string
 }
 
 /**
@@ -92,7 +93,13 @@ export function ActuatorStatus() {
   const [actuators, setActuators] = useState<Actuator[]>([])
   const [deletedActuators, setDeletedActuators] = useState<Actuator[]>([])
   const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  // 初始值设置为null，避免服务器端渲染时间
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+
+  // 只在客户端设置初始时间
+  useEffect(() => {
+    setLastUpdate(new Date())
+  }, [])
   const [updating, setUpdating] = useState<string | null>(null)
   const [formattedTimes, setFormattedTimes] = useState<Record<string, string>>({})
   const [showRestoreModal, setShowRestoreModal] = useState(false)
@@ -100,8 +107,11 @@ export function ActuatorStatus() {
   // 策略相关状态
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [showStrategyModal, setShowStrategyModal] = useState(false)
+  const [showLogModal, setShowLogModal] = useState(false)
   const [selectedActuatorId, setSelectedActuatorId] = useState<string | null>(null)
   const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null)
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null)
+  const [strategyLogs, setStrategyLogs] = useState<any[]>([])
 
   // 在客户端加载已删除设备列表
   useEffect(() => {
@@ -140,6 +150,9 @@ export function ActuatorStatus() {
         )
         setActuators(filteredActuators)
         setLastUpdate(new Date())
+        
+        // 获取策略列表
+        fetchStrategies()
       }
     } catch (error) {
       console.error('获取执行器列表失败:', error)
@@ -147,6 +160,60 @@ export function ActuatorStatus() {
       setLoading(false)
     }
   }, [deletedActuators])
+
+  /**
+   * 获取策略列表
+   */
+  const fetchStrategies = useCallback(async () => {
+    try {
+      const response = await fetch('/api/strategies', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        setStrategies(result.data)
+      }
+    } catch (error) {
+      console.error('获取策略列表失败:', error)
+    }
+  }, [])
+
+  /**
+   * 获取策略执行日志
+   */
+  const fetchStrategyLogs = useCallback(async (strategyId: string | null, actuatorId: string | null) => {
+    try {
+      let url = '/api/strategies/execution-logs'
+      const params = new URLSearchParams()
+      if (strategyId) {
+        params.append('strategy_id', strategyId)
+      }
+      if (actuatorId) {
+        params.append('actuator_id', actuatorId)
+      }
+      if (params.toString()) {
+        url += `?${params.toString()}`
+      }
+      
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        setStrategyLogs(result.data.logs)
+      }
+    } catch (error) {
+      console.error('获取策略执行日志失败:', error)
+    }
+  }, [])
 
   useEffect(() => {
     fetchActuators()
@@ -321,55 +388,110 @@ export function ActuatorStatus() {
   /**
    * 添加策略
    */
-  const addStrategy = (strategy: Omit<Strategy, 'id' | 'created_at'>) => {
-    const newStrategy: Strategy = {
-      ...strategy,
-      id: `STR-${Date.now()}`,
-      created_at: new Date().toISOString(),
+  const addStrategy = async (strategy: Omit<Strategy, 'id' | 'created_at'>) => {
+    try {
+      const response = await fetch('/api/strategies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(strategy),
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchStrategies()
+        setShowStrategyModal(false)
+        alert('策略添加成功')
+      } else {
+        alert(`策略添加失败: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('添加策略失败:', error)
+      alert('策略添加失败，请稍后重试')
     }
-    setStrategies(prev => [...prev, newStrategy])
-    setShowStrategyModal(false)
-    alert('策略添加成功')
   }
 
   /**
    * 更新策略
    */
-  const updateStrategy = (strategyId: string, updatedStrategy: Omit<Strategy, 'id' | 'created_at'>) => {
-    setStrategies(prev => 
-      prev.map(s => 
-        s.id === strategyId 
-          ? { ...s, ...updatedStrategy }
-          : s
-      )
-    )
-    setShowStrategyModal(false)
-    setEditingStrategy(null)
-    alert('策略更新成功')
+  const updateStrategy = async (strategyId: string, updatedStrategy: Omit<Strategy, 'id' | 'created_at'>) => {
+    try {
+      const response = await fetch(`/api/strategies/${strategyId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedStrategy),
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchStrategies()
+        setShowStrategyModal(false)
+        setEditingStrategy(null)
+        alert('策略更新成功')
+      } else {
+        alert(`策略更新失败: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('更新策略失败:', error)
+      alert('策略更新失败，请稍后重试')
+    }
   }
 
   /**
    * 删除策略
    */
-  const deleteStrategy = (strategyId: string) => {
+  const deleteStrategy = async (strategyId: string) => {
     if (!confirm('确定要删除此策略吗？')) {
       return
     }
-    setStrategies(prev => prev.filter(s => s.id !== strategyId))
-    alert('策略删除成功')
+    
+    try {
+      const response = await fetch(`/api/strategies/${strategyId}`, {
+        method: 'DELETE',
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchStrategies()
+        alert('策略删除成功')
+      } else {
+        alert(`策略删除失败: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('删除策略失败:', error)
+      alert('策略删除失败，请稍后重试')
+    }
   }
 
   /**
    * 切换策略启用状态
    */
-  const toggleStrategyEnabled = (strategyId: string) => {
-    setStrategies(prev => 
-      prev.map(s => 
-        s.id === strategyId 
-          ? { ...s, enabled: !s.enabled }
-          : s
-      )
-    )
+  const toggleStrategyEnabled = async (strategyId: string) => {
+    try {
+      const strategy = strategies.find(s => s.id === strategyId)
+      if (!strategy) return
+      
+      const response = await fetch(`/api/strategies/${strategyId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: !strategy.enabled }),
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchStrategies()
+      } else {
+        alert(`切换策略状态失败: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('切换策略状态失败:', error)
+      alert('切换策略状态失败，请稍后重试')
+    }
   }
 
   /**
@@ -438,7 +560,7 @@ export function ActuatorStatus() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <RefreshCw className="w-3 h-3 animate-spin" />
-              <span>{lastUpdate.toLocaleTimeString('zh-CN')}</span>
+              <span>{lastUpdate ? lastUpdate.toLocaleTimeString('zh-CN') : ''}</span>
             </div>
             {deletedActuators.length > 0 && (
               <Button 
@@ -650,7 +772,12 @@ export function ActuatorStatus() {
                                 >
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <div className={`w-2 h-2 rounded-full ${strategy.enabled ? 'bg-primary' : 'bg-muted-foreground'}`} />
-                                    <span className="text-xs truncate">{strategy.name}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-xs truncate font-medium">{strategy.name}</div>
+                                      <div className="text-xs text-muted-foreground truncate">
+                                        {strategy.enabled ? '已启用' : '已禁用'}
+                                      </div>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <button
@@ -673,6 +800,22 @@ export function ActuatorStatus() {
                                       <div className={`w-3 h-3 rounded-full ${strategy.enabled ? 'bg-primary' : 'bg-muted-foreground'}`} />
                                     </button>
                                     <button
+                                      onClick={() => {
+                                        setSelectedStrategyId(strategy.id)
+                                        fetchStrategyLogs(strategy.id, null)
+                                        setShowLogModal(true)
+                                      }}
+                                      className="p-1 rounded hover:bg-background transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                      </svg>
+                                    </button>
+                                    <button
                                       onClick={() => deleteStrategy(strategy.id)}
                                       className="p-1 rounded hover:bg-destructive/20 text-destructive transition-colors"
                                     >
@@ -685,6 +828,20 @@ export function ActuatorStatus() {
                                   </div>
                                 </div>
                               ))}
+                          </div>
+                          
+                          {/* 查看日志按钮 */}
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              onClick={() => {
+                                setSelectedStrategyId(null)
+                                fetchStrategyLogs(null, actuator.id)
+                                setShowLogModal(true)
+                              }}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              查看所有策略执行日志
+                            </button>
                           </div>
                         </div>
                       )}
@@ -750,6 +907,70 @@ export function ActuatorStatus() {
         }}
       />
     )}
+
+    {/* 策略执行日志模态框 */}
+    {showLogModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-card rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h3 className="text-lg font-semibold">策略执行日志</h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowLogModal(false)}
+              className="shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {strategyLogs.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                暂无执行日志
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {strategyLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-500' : log.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                        <span className="text-sm font-medium">
+                          {log.status === 'success' ? '执行成功' : log.status === 'failed' ? '执行失败' : '执行中'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(log.execution_time).toLocaleString('zh-CN')}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">策略ID:</span> {log.strategy_id}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">设备ID:</span> {log.actuator_id}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">动作:</span> {log.action === 'on' ? '开启' : '关闭'}
+                      </div>
+                    </div>
+                    {log.error_message && (
+                      <div className="mt-2 text-xs text-destructive bg-destructive/10 p-2 rounded">
+                        错误信息: {log.error_message}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
     </>
   )
 }
@@ -768,10 +989,10 @@ function StrategyModal({
   onSave: (strategy: Omit<Strategy, 'id' | 'created_at'>) => void
   onCancel: () => void 
 }) {
+  const [sensorTypes, setSensorTypes] = useState<any[]>([])
   const [formData, setFormData] = useState({
     name: editingStrategy?.name || '',
     actuator_id: editingStrategy?.actuator_id || actuator?.id || '',
-    actuator_name: editingStrategy?.actuator_name || actuator?.name || '',
     enabled: editingStrategy?.enabled ?? true,
     trigger_condition: editingStrategy?.trigger_condition || {
       type: 'humidity' as const,
@@ -795,6 +1016,58 @@ function StrategyModal({
     }
   })
 
+  /**
+   * 获取传感器类型列表
+   */
+  useEffect(() => {
+    const fetchSensorTypes = async () => {
+      try {
+        const response = await fetch('/api/sensors')
+        const result = await response.json()
+        
+        if (result.success && result.data) {
+          // 提取唯一的传感器类型，确保每个类型只有一个选项
+          const uniqueTypes = result.data.reduce((acc: any[], sensor: any) => {
+            const existing = acc.find(item => item.type === sensor.type)
+            if (!existing) {
+              acc.push({
+                type: sensor.type,
+                name: sensor.name,
+                unit: sensor.unit
+              })
+            }
+            return acc
+          }, [])
+          setSensorTypes(uniqueTypes)
+          
+          // 如果是新策略，设置默认传感器类型和单位
+          if (!editingStrategy) {
+            if (uniqueTypes.length > 0) {
+              const defaultSensor = uniqueTypes[0]
+              setFormData(prev => ({
+                ...prev,
+                trigger_condition: {
+                  ...prev.trigger_condition,
+                  type: defaultSensor.type,
+                  unit: defaultSensor.unit
+                },
+                stop_condition: {
+                  ...prev.stop_condition,
+                  type: 'duration',
+                  unit: '分钟'
+                }
+              }))
+            }
+          }
+        }
+      } catch (error) {
+        console.error('获取传感器类型列表失败:', error)
+      }
+    }
+    
+    fetchSensorTypes()
+  }, [editingStrategy])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave(formData)
@@ -810,7 +1083,19 @@ function StrategyModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 基本信息 */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">策略名称</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">策略名称</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">启用</span>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, enabled: !formData.enabled })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.enabled ? 'bg-primary' : 'bg-muted'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
             <input
               type="text"
               value={formData.name}
@@ -819,57 +1104,84 @@ function StrategyModal({
               placeholder="如：土壤湿度自动灌溉"
               required
             />
+            <p className="text-xs text-muted-foreground">请输入一个描述性的策略名称，以便于识别。</p>
           </div>
 
           {/* 触发条件 */}
           <div className="space-y-2">
             <label className="text-sm font-medium">触发条件</label>
-            <div className="grid grid-cols-3 gap-2">
-              <select
-                value={formData.trigger_condition.type}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  trigger_condition: { 
-                    ...formData.trigger_condition, 
-                    type: e.target.value as any 
-                  }
-                })}
-                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="humidity">土壤湿度</option>
-                <option value="temperature">环境温度</option>
-                <option value="time">时间</option>
-              </select>
-              <select
-                value={formData.trigger_condition.operator}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  trigger_condition: { 
-                    ...formData.trigger_condition, 
-                    operator: e.target.value as any 
-                  }
-                })}
-                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              >
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">传感器类型</label>
+                  <select
+                    value={formData.trigger_condition.type}
+                    onChange={(e) => {
+                      const selectedType = sensorTypes.find(st => st.type === e.target.value)
+                      setFormData({ 
+                        ...formData, 
+                        trigger_condition: { 
+                          ...formData.trigger_condition, 
+                          type: e.target.value as any,
+                          unit: selectedType?.unit || '%'
+                        }
+                      })
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                {sensorTypes.length === 0 ? (
+                  <option value="">加载中...</option>
+                ) : (
+                  sensorTypes.map(sensorType => (
+                    <option key={sensorType.type} value={sensorType.type}>
+                      {sensorType.name}
+                    </option>
+                  ))
+                )}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">操作符</label>
+                  <select
+                    value={formData.trigger_condition.operator}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      trigger_condition: { 
+                        ...formData.trigger_condition, 
+                        operator: e.target.value as any 
+                      }
+                    })}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
                 <option value="<">&lt;</option>
                 <option value="<=">&le;</option>
                 <option value="=">=</option>
                 <option value=">=">&ge;</option>
                 <option value=">">&gt;</option>
-              </select>
-              <input
-                type="number"
-                value={formData.trigger_condition.value}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  trigger_condition: { 
-                    ...formData.trigger_condition, 
-                    value: parseFloat(e.target.value) 
-                  }
-                })}
-                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              />
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">阈值</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={formData.trigger_condition.value}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        trigger_condition: { 
+                          ...formData.trigger_condition, 
+                          value: parseFloat(e.target.value) 
+                        }
+                      })}
+                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                      required
+                    />
+                    <span className="flex items-center px-3 py-2 rounded-lg border border-border bg-background">
+                      {formData.trigger_condition.unit}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -936,50 +1248,78 @@ function StrategyModal({
           {/* 停止条件 */}
           <div className="space-y-2">
             <label className="text-sm font-medium">停止条件</label>
-            <div className="grid grid-cols-3 gap-2">
-              <select
-                value={formData.stop_condition.type}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  stop_condition: { 
-                    ...formData.stop_condition, 
-                    type: e.target.value as any 
-                  }
-                })}
-                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="humidity">土壤湿度</option>
-                <option value="temperature">环境温度</option>
-                <option value="duration">运行时长</option>
-              </select>
-              <input
-                type="number"
-                value={formData.stop_condition.value}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  stop_condition: { 
-                    ...formData.stop_condition, 
-                    value: parseFloat(e.target.value) 
-                  }
-                })}
-                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              />
-              <select
-                value={formData.stop_condition.unit}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  stop_condition: { 
-                    ...formData.stop_condition, 
-                    unit: e.target.value 
-                  }
-                })}
-                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="%">%</option>
-                <option value="℃">℃</option>
-                <option value="分钟">分钟</option>
-              </select>
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">条件类型</label>
+                  <select
+                    value={formData.stop_condition.type}
+                    onChange={(e) => {
+                      const selectedType = sensorTypes.find(st => st.type === e.target.value)
+                      setFormData({ 
+                        ...formData, 
+                        stop_condition: { 
+                          ...formData.stop_condition, 
+                          type: e.target.value as any,
+                          unit: e.target.value === 'duration' ? '分钟' : (selectedType?.unit || '%')
+                        }
+                      })
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="duration">运行时长</option>
+                    {sensorTypes.length > 0 && sensorTypes.map(sensorType => (
+                      <option key={sensorType.type} value={sensorType.type}>
+                        {sensorType.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">阈值</label>
+                  <input
+                    type="number"
+                    value={formData.stop_condition.value}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      stop_condition: { 
+                        ...formData.stop_condition, 
+                        value: parseFloat(e.target.value) 
+                      }
+                    })}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">单位</label>
+                  <select
+                    value={formData.stop_condition.unit}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      stop_condition: { 
+                        ...formData.stop_condition, 
+                        unit: e.target.value 
+                      }
+                    })}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {formData.stop_condition.type === 'duration' ? (
+                      <option value="分钟">分钟</option>
+                    ) : (
+                      <>
+                        {sensorTypes.length > 0 && sensorTypes
+                          .filter(st => st.type === formData.stop_condition.type)
+                          .map(sensorType => (
+                            <option key={sensorType.type} value={sensorType.unit}>
+                              {sensorType.unit}
+                            </option>
+                          ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
