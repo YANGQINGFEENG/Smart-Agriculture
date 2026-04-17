@@ -26,6 +26,8 @@
 #include "../Hardware/SoilSensor.h"
 #include "../Hardware/ServerComm.h"
 #include "../Hardware/PrintManager.h"
+#include "../Hardware/command_manager.h"
+#include "../Hardware/state_manager.h"
 #include <stdio.h>
 
 /* ==================== 全局变量定义 ==================== */
@@ -589,6 +591,12 @@ int main(void)
 	// 初始化服务器通信模块
 	ServerComm_Init();
 	
+	// 初始化命令管理器
+	command_manager_init();
+	
+	// 初始化状态管理器
+	state_manager_init();
+	
 	// 初始化OLED显示管理
 	OLED_Display_Init();
 	
@@ -704,15 +712,21 @@ int main(void)
 	}
 	
 	// 实时处理队列中的请求（只要队列有数据就处理）
-	if (g_wifi_connected) {
-		// 检查队列是否有数据
-		// 这里简化处理，直接调用处理函数
-		ServerComm_ProcessBatch(5);
+		if (g_wifi_connected) {
+			// 检查队列是否有数据
+			// 这里简化处理，直接调用处理函数
+			ServerComm_ProcessBatch(5);
+			
+			// 处理指令队列中的指令
+			ServerComm_ProcessCommandQueue();
+		}
 		
-		// 处理指令队列中的指令
-		ServerComm_ProcessCommandQueue();
-	}
-	
-	delay_ms(1);
+		// 运行命令管理器
+		command_manager_process();
+		
+		// 运行状态管理器
+		state_manager_process();
+		
+		delay_ms(1);
 	}
 }
