@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Zap,
   MoreVertical,
+  Undo2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -57,9 +58,29 @@ const actuatorIcons: Record<string, typeof Power> = {
  */
 export function ActuatorStatus() {
   const [actuators, setActuators] = useState<Actuator[]>([])
+  const [deletedActuators, setDeletedActuators] = useState<Actuator[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [updating, setUpdating] = useState<string | null>(null)
+  const [formattedTimes, setFormattedTimes] = useState<Record<string, string>>({})
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
+
+  // 在客户端加载已删除设备列表
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('deletedActuators')
+      if (saved) {
+        setDeletedActuators(JSON.parse(saved))
+      }
+    }
+  }, [])
+
+  // 监听已删除设备列表变化，保存到localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('deletedActuators', JSON.stringify(deletedActuators))
+    }
+  }, [deletedActuators])
 
   /**
    * 获取执行器列表
@@ -75,7 +96,11 @@ export function ActuatorStatus() {
       const result = await response.json()
       
       if (result.success && result.data) {
-        setActuators(result.data)
+        // 过滤掉已经被删除的设备
+        const filteredActuators = result.data.filter((actuator: Actuator) => 
+          !deletedActuators.some(deleted => deleted.id === actuator.id)
+        )
+        setActuators(filteredActuators)
         setLastUpdate(new Date())
       }
     } catch (error) {
@@ -83,7 +108,7 @@ export function ActuatorStatus() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [deletedActuators])
 
   useEffect(() => {
     fetchActuators()
@@ -92,6 +117,21 @@ export function ActuatorStatus() {
     
     return () => clearInterval(interval)
   }, [fetchActuators])
+
+  useEffect(() => {
+    const updateFormattedTimes = () => {
+      const newTimes: Record<string, string> = {}
+      actuators.forEach(actuator => {
+        newTimes[actuator.id] = formatLastUpdate(actuator.last_update)
+      })
+      setFormattedTimes(newTimes)
+    }
+    
+    updateFormattedTimes()
+    const interval = setInterval(updateFormattedTimes, 1000)
+    
+    return () => clearInterval(interval)
+  }, [actuators])
 
   /**
    * 切换执行器开关状态（服务器状态锁定机制）
@@ -120,6 +160,32 @@ export function ActuatorStatus() {
           : a
       )
     )
+    
+    // 设置超时机制：如果硬件端在10秒内没有确认执行，自动取消锁定
+    const timeoutId = setTimeout(async () => {
+      try {
+        // 发送解锁请求
+        const response = await fetch(`/api/actuators/${actuatorId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            locked: 0,
+            trigger_source: 'timeout',
+          }),
+        })
+        
+        const result = await response.json()
+        if (result.success) {
+          console.log(`[ActuatorControl] 超时自动解锁 - ID: ${actuatorId}`)
+          // 重新获取执行器状态
+          fetchActuators()
+        }
+      } catch (error) {
+        console.error('[ActuatorControl] 超时解锁失败:', error)
+      }
+    }, 10000) // 10秒超时
     
     try {
       // 步骤1：更新服务器执行器状态（锁定为用户期望的状态）
@@ -165,6 +231,8 @@ export function ActuatorStatus() {
       )
       alert('操作失败，请检查网络连接')
     } finally {
+      // 清除超时
+      clearTimeout(timeoutId)
       setUpdating(null)
     }
   }
@@ -211,6 +279,26 @@ export function ActuatorStatus() {
   }
 
   /**
+   * 还原设备
+   */
+  const restoreDevice = async (actuator: Actuator) => {
+    if (!confirm(`确定要还原设备 "${actuator.name}" 吗？`)) {
+      return
+    }
+    
+    try {
+      // 由于我们的删除功能只是从界面上移除，实际数据还在数据库中
+      // 所以还原操作只需要从已删除列表中移除，并添加回执行器列表
+      setActuators(prev => [...prev, actuator])
+      setDeletedActuators(prev => prev.filter(a => a.id !== actuator.id))
+      alert('设备还原成功')
+    } catch (error) {
+      console.error('还原设备失败:', error)
+      alert('还原失败')
+    }
+  }
+
+  /**
    * 删除设备
    */
   const deleteDevice = async (actuatorId: string, actuatorName: string) => {
@@ -221,18 +309,15 @@ export function ActuatorStatus() {
     setUpdating(actuatorId)
     
     try {
-      const response = await fetch(`/api/actuators/${actuatorId}`, {
-        method: 'DELETE',
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
+      // 找到要删除的设备
+      const deletedActuator = actuators.find(a => a.id === actuatorId)
+      if (deletedActuator) {
+        // 将删除的设备添加到已删除列表
+        setDeletedActuators(prev => [...prev, deletedActuator])
         // 从界面上移除设备卡片
         setActuators(prev => prev.filter(a => a.id !== actuatorId))
         setActiveMenu(null)
-      } else {
-        alert('删除失败: ' + result.error)
+        alert('设备已从界面移除，可通过"还原设备"功能恢复')
       }
     } catch (error) {
       console.error('删除设备失败:', error)
@@ -243,7 +328,8 @@ export function ActuatorStatus() {
   }
 
   return (
-    <Card className="bg-card border-border">
+    <>
+      <Card className="bg-card border-border">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -260,6 +346,19 @@ export function ActuatorStatus() {
               <RefreshCw className="w-3 h-3 animate-spin" />
               <span>{lastUpdate.toLocaleTimeString('zh-CN')}</span>
             </div>
+            {deletedActuators.length > 0 && (
+              <Button 
+                onClick={() => {
+                  // 打开还原设备模态框
+                  setShowRestoreModal(true)
+                }} 
+                size="sm" 
+                variant="secondary"
+              >
+                <Undo2 className="w-4 h-4 mr-2" />
+                还原设备
+              </Button>
+            )}
             <Button 
               onClick={() => {
                 setLoading(true)
@@ -314,6 +413,7 @@ export function ActuatorStatus() {
                 const isUpdating = updating === actuator.id
                 const isOn = actuator.state === 'on'
                 const isOnline = actuator.status === 'online'
+                const isLocked = actuator.locked === 1
                 
                 return (
                   <Card
@@ -398,14 +498,14 @@ export function ActuatorStatus() {
                             
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
                               <RefreshCw className="w-3 h-3" />
-                              <span>{formatLastUpdate(actuator.last_update)}</span>
+                              <span suppressHydrationWarning>{formattedTimes[actuator.id] || '计算中...'}</span>
                             </div>
                           </div>
                         </div>
                         
                         <button
                           onClick={() => toggleState(actuator.id, actuator.state)}
-                          disabled={!isOnline || isUpdating}
+                          disabled={!isOnline || isUpdating || isLocked}
                           className={`
                             relative w-14 h-14 rounded-xl transition-all duration-300
                             flex items-center justify-center
@@ -413,12 +513,18 @@ export function ActuatorStatus() {
                               ? 'bg-accent hover:bg-accent/90 shadow-lg shadow-accent/50' 
                               : 'bg-muted hover:bg-muted/80'
                             }
-                            ${!isOnline || isUpdating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                            ${!isOnline || isUpdating || isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                             ${isUpdating ? 'animate-pulse' : ''}
+                            ${isLocked ? 'ring-2 ring-primary/30' : ''}
                           `}
                         >
                           {isUpdating ? (
                             <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                          ) : isLocked ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-primary">
+                              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
                           ) : isOn ? (
                             <Power className="w-6 h-6 text-white" />
                           ) : (
@@ -441,5 +547,39 @@ export function ActuatorStatus() {
         )}
       </CardContent>
     </Card>
+    
+    {/* 还原设备模态框 */}
+    {showRestoreModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-card rounded-xl p-6 max-w-md w-full">
+          <h3 className="text-lg font-semibold mb-4">还原设备</h3>
+          <p className="text-muted-foreground mb-4">请选择要还原的设备：</p>
+          <div className="space-y-2 mb-6">
+            {deletedActuators.map((actuator) => (
+              <button
+                key={actuator.id}
+                className="w-full text-left p-3 rounded-lg hover:bg-muted transition-colors flex justify-between items-center"
+                onClick={() => {
+                  restoreDevice(actuator)
+                  setShowRestoreModal(false)
+                }}
+              >
+                <span>{actuator.name}</span>
+                <span className="text-sm text-muted-foreground">{actuator.id}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setShowRestoreModal(false)}
+            >
+              取消
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

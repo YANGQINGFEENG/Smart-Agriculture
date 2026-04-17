@@ -148,19 +148,13 @@ export async function PATCH(
       [body.status, body.command_id, id]
     )
 
-    if (body.status === 'executed') {
-      const command = await db.query<ActuatorCommand[]>(
-        'SELECT command FROM actuator_commands WHERE id = ?',
-        [body.command_id]
-      )
-
-      if (command.length > 0) {
-        await db.execute<ResultSetHeader>(
-          'UPDATE actuators SET state = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?',
-          [command[0].command, id]
-        )
-      }
-    }
+    // 只有执行成功时才解锁执行器，允许用户继续操作
+    // 注意：不再更新数据库中的执行器状态，因为硬件端确认执行只表示指令已被处理
+    // 执行器的状态应该由前端的用户操作来改变，而不是由硬件端确认指令来改变
+    await db.execute<ResultSetHeader>(
+      'UPDATE actuators SET locked = 0 WHERE id = ?',
+      [id]
+    )
 
     console.log(`[Command] 硬件端确认指令 - 执行器: ${id}, 指令ID: ${body.command_id}, 状态: ${body.status}`)
 

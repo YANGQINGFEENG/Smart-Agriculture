@@ -13,6 +13,7 @@ interface Actuator extends RowDataPacket {
   state: 'on' | 'off'
   mode: 'auto' | 'manual'
   last_update: Date | null
+  locked: number
 }
 
 /**
@@ -102,7 +103,7 @@ export async function PATCH(
     console.log(`[Actuator] 收到用户操作请求 - ID: ${id}, 数据:`, JSON.stringify(body))
 
     const actuators = await db.query<Actuator[]>(
-      'SELECT id, state, mode FROM actuators WHERE id = ?',
+      'SELECT id, state, mode, locked FROM actuators WHERE id = ?',
       [id]
     )
 
@@ -111,6 +112,15 @@ export async function PATCH(
       return NextResponse.json(
         { success: false, error: '执行器不存在' },
         { status: 404 }
+      )
+    }
+
+    // 检查执行器是否被锁定
+    if (actuators[0].locked) {
+      console.log(`[Actuator] 执行器已被锁定，拒绝操作: ${id}`)
+      return NextResponse.json(
+        { success: false, error: '执行器正在执行操作，请稍后再试' },
+        { status: 423 }
       )
     }
 
@@ -192,6 +202,24 @@ export async function PATCH(
       values.push(statusValue)
     }
 
+    if (body.locked !== undefined) {
+      let lockedValue: number
+      
+      if (typeof body.locked === 'number') {
+        lockedValue = body.locked === 1 ? 1 : 0
+      } else if (typeof body.locked === 'boolean') {
+        lockedValue = body.locked ? 1 : 0
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'locked 格式错误' },
+          { status: 400 }
+        )
+      }
+      
+      updates.push('locked = ?')
+      values.push(lockedValue)
+    }
+
     if (updates.length === 0) {
       return NextResponse.json(
         { success: false, error: '没有要更新的字段' },
@@ -199,7 +227,14 @@ export async function PATCH(
       )
     }
 
-    updates.push('last_update = CURRENT_TIMESTAMP')
+    // 只有当不是专门更新 locked 字段时，才自动设置 locked = 1
+    const isLockedUpdateOnly = updates.length === 1 && updates[0].includes('locked')
+    if (!isLockedUpdateOnly) {
+      updates.push('last_update = CURRENT_TIMESTAMP, locked = 1')
+    } else {
+      // 如果是专门更新 locked 字段，只更新时间戳
+      updates.push('last_update = CURRENT_TIMESTAMP')
+    }
     values.push(id)
 
     // 更新服务器执行器状态（锁定为用户期望的状态）

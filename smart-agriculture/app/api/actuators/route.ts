@@ -14,6 +14,7 @@ interface Actuator extends RowDataPacket {
   mode: 'auto' | 'manual'
   last_update: Date | null
   created_at: Date
+  locked: number
   type?: string
   type_name?: string
 }
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
         a.mode,
         a.last_update, 
         a.created_at,
+        a.locked,
         at.type,
         at.name as type_name,
         at.description

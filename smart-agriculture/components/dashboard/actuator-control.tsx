@@ -293,7 +293,8 @@ export function ActuatorControl() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {actuators.map((actuator) => {
             const Icon = actuatorIcons[actuator.type] || Power
-            const isUpdating = updating === actuator.id
+                const isUpdating = updating === actuator.id
+                const isLocked = actuator.locked === 1
             
             return (
               <Card key={actuator.id} className="bg-card border-border relative">
@@ -352,7 +353,7 @@ export function ActuatorControl() {
                       size="sm"
                       variant={actuator.state === 'on' ? 'destructive' : 'default'}
                       onClick={() => toggleState(actuator.id, actuator.state)}
-                      disabled={actuator.status === 'offline' || isUpdating}
+                      disabled={actuator.status === 'offline' || isUpdating || isLocked}
                     >
                       {isUpdating ? (
                         <RefreshCw className="w-4 h-4 animate-spin" />
@@ -378,7 +379,7 @@ export function ActuatorControl() {
                     <Select
                       value={actuator.mode}
                       onValueChange={(value) => toggleMode(actuator.id, actuator.mode)}
-                      disabled={actuator.status === 'offline' || isUpdating}
+                      disabled={actuator.status === 'offline' || isUpdating || isLocked}
                     >
                       <SelectTrigger className="w-[100px]">
                         <SelectValue />
