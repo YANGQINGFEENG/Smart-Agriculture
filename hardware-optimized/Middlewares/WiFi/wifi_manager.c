@@ -10,6 +10,7 @@
 
 #include "wifi_manager.h"
 #include "uart.h"
+#include "command_manager.h"
 #include <string.h>
 
 /* ==================================== 静态变量 ==================================== */
@@ -36,10 +37,95 @@ void wifi_manager_init(void)
     g_wifi_mgr.wifi_state = WIFI_STATE_INIT;
     g_wifi_mgr.tcp_state = TCP_STATE_DISCONNECTED;
     g_wifi_mgr.state_enter_time = sys_get_tick();
+    g_wifi_mgr.rx_buffer_len = 0;
+}
+
+static void process_received_data(void)
+{
+    if (g_wifi_mgr.rx_buffer_len == 0) {
+        return;
+    }
+    
+    /* 查找帧头 */
+    uint16_t frame_start = 0;
+    while (frame_start < g_wifi_mgr.rx_buffer_len) {
+        if (g_wifi_mgr.rx_buffer[frame_start] == PROTOCOL_HEADER) {
+            break;
+        }
+        frame_start++;
+    }
+    
+    if (frame_start >= g_wifi_mgr.rx_buffer_len) {
+        /* 没有找到帧头，清空缓冲区 */
+        g_wifi_mgr.rx_buffer_len = 0;
+        return;
+    }
+    
+    /* 查找帧尾 */
+    uint16_t frame_end = frame_start;
+    while (frame_end < g_wifi_mgr.rx_buffer_len) {
+        if (g_wifi_mgr.rx_buffer[frame_end] == PROTOCOL_FOOTER) {
+            break;
+        }
+        frame_end++;
+    }
+    
+    if (frame_end >= g_wifi_mgr.rx_buffer_len) {
+        /* 没有找到帧尾，等待更多数据 */
+        return;
+    }
+    
+    /* 计算帧长度 */
+    uint16_t frame_len = frame_end - frame_start + 1;
+    
+    /* 处理帧 */
+    if (frame_len > 0) {
+        /* 检查消息类型 */
+        if (frame_start + 1 < g_wifi_mgr.rx_buffer_len) {
+            uint8_t msg_type = g_wifi_mgr.rx_buffer[frame_start + 1];
+            
+            switch (msg_type) {
+                case MSG_TYPE_CONTROL_CMD:
+                    /* 处理控制命令 */
+                    command_manager_handle_command(&g_wifi_mgr.rx_buffer[frame_start], frame_len);
+                    break;
+                    
+                default:
+                    debug_uart_printf("[WiFi] Unknown message type: %d\r\n", msg_type);
+                    break;
+            }
+        }
+    }
+    
+    /* 移除已处理的帧 */
+    if (frame_end + 1 < g_wifi_mgr.rx_buffer_len) {
+        memmove(g_wifi_mgr.rx_buffer, &g_wifi_mgr.rx_buffer[frame_end + 1], 
+                g_wifi_mgr.rx_buffer_len - (frame_end + 1));
+        g_wifi_mgr.rx_buffer_len -= (frame_end + 1);
+    } else {
+        g_wifi_mgr.rx_buffer_len = 0;
+    }
 }
 
 void wifi_manager_run(void)
 {
+    /* 检查是否有数据接收 */
+    if (wifi_manager_is_tcp_connected()) {
+        uint16_t available = wifi_uart_available();
+        if (available > 0) {
+            uint16_t read_len = (available > (sizeof(g_wifi_mgr.rx_buffer) - g_wifi_mgr.rx_buffer_len)) ? 
+                               (sizeof(g_wifi_mgr.rx_buffer) - g_wifi_mgr.rx_buffer_len) : available;
+            
+            if (read_len > 0) {
+                wifi_uart_read(&g_wifi_mgr.rx_buffer[g_wifi_mgr.rx_buffer_len], read_len);
+                g_wifi_mgr.rx_buffer_len += read_len;
+            }
+        }
+        
+        /* 处理接收到的数据 */
+        process_received_data();
+    }
+    
     /* WiFi状态机 */
     switch (g_wifi_mgr.wifi_state) {
         case WIFI_STATE_INIT:

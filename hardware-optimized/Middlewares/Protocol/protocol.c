@@ -146,3 +146,52 @@ uint16_t protocol_frame_to_bytes(const void *frame, uint16_t frame_size,
     memcpy(out_buf, frame, frame_size);
     return frame_size;
 }
+
+sys_error_t protocol_build_command_ack_frame(CommandAckFrame *frame, 
+                                           uint32_t command_id, 
+                                           uint8_t status)
+{
+    if (frame == NULL) {
+        return SYS_INVALID_PARAM;
+    }
+    
+    memset(frame, 0, sizeof(CommandAckFrame));
+    
+    frame->header = PROTOCOL_HEADER;
+    frame->msg_type = MSG_TYPE_ACK;
+    memcpy(frame->device_id, g_device_id, 8);
+    frame->timestamp = (uint32_t)sys_get_tick();
+    frame->command_id = command_id;
+    frame->status = status;
+    
+    /* 计算CRC */
+    uint16_t crc_len = sizeof(CommandAckFrame) - 3;
+    frame->crc16 = protocol_crc16((uint8_t*)&frame->msg_type, crc_len);
+    frame->footer = PROTOCOL_FOOTER;
+    
+    return SYS_OK;
+}
+
+sys_error_t protocol_parse_control_command(const uint8_t *data, 
+                                         uint16_t data_len, 
+                                         ControlCommandFrame *frame)
+{
+    if (data == NULL || frame == NULL || data_len < sizeof(ControlCommandFrame)) {
+        return SYS_INVALID_PARAM;
+    }
+    
+    /* 验证帧头和帧尾 */
+    if (data[0] != PROTOCOL_HEADER || data[data_len - 1] != PROTOCOL_FOOTER) {
+        return SYS_ERROR;
+    }
+    
+    /* 验证CRC */
+    if (!protocol_verify_crc(data, data_len)) {
+        return SYS_ERROR;
+    }
+    
+    /* 复制数据到帧结构 */
+    memcpy(frame, data, sizeof(ControlCommandFrame));
+    
+    return SYS_OK;
+}

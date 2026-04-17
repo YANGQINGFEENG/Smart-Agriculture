@@ -13,6 +13,8 @@
 #include "uart.h"
 #include "wifi_manager.h"
 #include "protocol.h"
+#include "command_manager.h"
+#include "state_manager.h"
 #include "sys_config.h"
 
 /* ==================================== 任务定义 ==================================== */
@@ -158,6 +160,14 @@ static void hardware_init(void)
     protocol_init();
     debug_uart_printf("[Protocol] Protocol module initialized\r\n");
     
+    /* 初始化命令管理器 */
+    command_manager_init();
+    debug_uart_printf("[Command] Command manager initialized\r\n");
+    
+    /* 初始化状态管理器 */
+    state_manager_init();
+    debug_uart_printf("[State] State manager initialized\r\n");
+    
     /* 初始化WiFi管理器 */
     wifi_manager_init();
     debug_uart_printf("[WiFi] WiFi manager initialized\r\n");
@@ -197,5 +207,11 @@ int main(void)
         
         /* 运行WiFi管理器状态机 */
         wifi_manager_run();
+        
+        /* 运行命令管理器状态机 */
+        command_manager_process();
+        
+        /* 运行状态管理器 */
+        state_manager_process();
     }
 }
