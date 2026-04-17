@@ -24,6 +24,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f10x_it.h"
 #include "RS485.h"
+#include "system.h"
 
 /** @addtogroup STM32F10x_StdPeriph_Template
   * @{
@@ -139,6 +140,7 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
+    sys_tick_inc();
 }
 
 /******************************************************************************/

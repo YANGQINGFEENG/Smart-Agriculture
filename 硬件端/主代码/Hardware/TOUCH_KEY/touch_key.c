@@ -75,8 +75,6 @@ void TOUCH_KEY_EXTI_Init(void){
 uint8_t TOUCH_KEY_Scan(void)
 {
     static uint8_t key_pressed = 0; // 记录按键是否已经被按下
-    static uint32_t last_press_time = 0; // 记录上次按键时间
-    uint32_t current_time = 0; // 当前时间（简化处理，使用循环计数）
     
     // 检测A键
     if (GPIO_ReadInputDataBit(TOUCH_KEYPORT, TOUCH_KEY_A) == 0) {

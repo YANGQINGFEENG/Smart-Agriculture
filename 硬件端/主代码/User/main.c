@@ -28,6 +28,7 @@
 #include "../Hardware/PrintManager.h"
 #include "../Hardware/command_manager.h"
 #include "../Hardware/state_manager.h"
+#include "../System/system.h"
 #include <stdio.h>
 
 /* ==================== 全局变量定义 ==================== */
@@ -559,6 +560,7 @@ int main(void)
 	// 初始化系统
 	delay_init(72);              // 初始化延时函数
 	usart_init(115200);          // 初始化串口
+	sys_tick_init();             // 初始化系统tick定时器
 	LED_Init();                  // 初始化LED
 	OLED_Init();                 // 初始化OLED
 	RELAY_Init();                // 初始化继电器
