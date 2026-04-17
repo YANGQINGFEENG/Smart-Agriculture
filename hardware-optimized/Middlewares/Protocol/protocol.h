@@ -33,6 +33,37 @@ typedef enum {
     MSG_TYPE_CONNECT = 0x05
 } MessageType;
 
+/* 控制命令类型 */
+typedef enum {
+    CMD_TYPE_TURN_ON = 0x01,
+    CMD_TYPE_TURN_OFF = 0x02
+} ControlCommandType;
+
+/* 控制命令帧 */
+typedef struct __attribute__((packed)) {
+    uint8_t  header;
+    uint8_t  msg_type;
+    uint8_t  device_id[8];
+    uint32_t timestamp;
+    uint32_t command_id;
+    uint8_t  cmd_type;
+    uint8_t  actuator_id[20];
+    uint16_t crc16;
+    uint8_t  footer;
+} ControlCommandFrame;
+
+/* 命令确认帧 */
+typedef struct __attribute__((packed)) {
+    uint8_t  header;
+    uint8_t  msg_type;
+    uint8_t  device_id[8];
+    uint32_t timestamp;
+    uint32_t command_id;
+    uint8_t  status; /* 0: 失败, 1: 成功 */
+    uint16_t crc16;
+    uint8_t  footer;
+} CommandAckFrame;
+
 /* 传感器数据结构（紧凑二进制格式） */
 typedef struct __attribute__((packed)) {
     uint8_t  header;
@@ -119,6 +150,28 @@ uint8_t protocol_verify_crc(const uint8_t *frame, uint16_t frame_size);
  */
 uint16_t protocol_frame_to_bytes(const void *frame, uint16_t frame_size,
                                   uint8_t *out_buf, uint16_t out_buf_size);
+
+/**
+ * @brief  构建命令确认帧
+ * @param  frame: 输出帧结构
+ * @param  command_id: 命令ID
+ * @param  status: 执行状态 (0: 失败, 1: 成功)
+ * @retval SYS_OK: 成功
+ */
+sys_error_t protocol_build_command_ack_frame(CommandAckFrame *frame, 
+                                           uint32_t command_id, 
+                                           uint8_t status);
+
+/**
+ * @brief  解析控制命令帧
+ * @param  data: 数据指针
+ * @param  data_len: 数据长度
+ * @param  frame: 输出帧结构
+ * @retval SYS_OK: 成功
+ */
+sys_error_t protocol_parse_control_command(const uint8_t *data, 
+                                         uint16_t data_len, 
+                                         ControlCommandFrame *frame);
 
 #ifdef __cplusplus
 }

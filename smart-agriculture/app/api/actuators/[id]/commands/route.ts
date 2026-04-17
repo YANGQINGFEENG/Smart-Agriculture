@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { sendCommandToActuator } from '@/app/api/websocket/route'
 
 /**
  * 控制指令接口
@@ -24,6 +25,15 @@ export async function GET(
   try {
     const { id } = await params
 
+    // 清理超时的命令
+    await db.execute(
+      `UPDATE actuator_commands 
+       SET status = 'failed', executed_at = CURRENT_TIMESTAMP 
+       WHERE actuator_id = ? AND status = 'pending' 
+       AND created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+      [id]
+    )
+
     const commands = await db.query<ActuatorCommand[]>(
       `SELECT id, actuator_id, command, status, created_at 
        FROM actuator_commands 
@@ -41,11 +51,24 @@ export async function GET(
       })
     }
 
-    console.log(`[Command] 硬件端查询指令 - 执行器: ${id}, 指令: ${commands[0].command}`)
+    const command = commands[0]
+    
+    // 将命令状态更新为执行中，避免重复执行
+    await db.execute(
+      `UPDATE actuator_commands 
+       SET status = 'executing' 
+       WHERE id = ? AND actuator_id = ?`,
+      [command.id, id]
+    )
+
+    console.log(`[Command] 硬件端查询指令 - 执行器: ${id}, 指令: ${command.command}, 命令ID: ${command.id}`)
 
     return NextResponse.json({
       success: true,
-      data: commands[0],
+      data: {
+        ...command,
+        status: 'executing'
+      },
       message: 'OK',
     })
   } catch (error) {
@@ -97,15 +120,29 @@ export async function POST(
       [id, body.command]
     )
 
-    console.log(`[Command] 网页端发送指令 - 执行器: ${id}, 指令: ${body.command}`)
+    const commandId = result.insertId
+    
+    // 尝试通过WebSocket发送实时命令
+    const commandData = {
+      id: commandId,
+      actuator_id: id,
+      command: body.command,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    }
+    
+    const sentViaWebSocket = await sendCommandToActuator(id, commandData)
+    
+    console.log(`[Command] 网页端发送指令 - 执行器: ${id}, 指令: ${body.command}, WebSocket: ${sentViaWebSocket}`)
 
     return NextResponse.json({
       success: true,
       data: {
-        id: result.insertId,
+        id: commandId,
         actuator_id: id,
         command: body.command,
         status: 'pending',
+        sent_via_websocket: sentViaWebSocket
       },
       message: 'OK',
     })
@@ -141,6 +178,27 @@ export async function PATCH(
       )
     }
 
+    // 验证命令是否存在且状态为执行中
+    const existingCommand = await db.query<ActuatorCommand[]>(
+      `SELECT id, status FROM actuator_commands 
+       WHERE id = ? AND actuator_id = ?`,
+      [body.command_id, id]
+    )
+
+    if (existingCommand.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '命令不存在' },
+        { status: 404 }
+      )
+    }
+
+    if (existingCommand[0].status !== 'executing' && existingCommand[0].status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: '命令状态不正确' },
+        { status: 400 }
+      )
+    }
+
     await db.execute<ResultSetHeader>(
       `UPDATE actuator_commands 
        SET status = ?, executed_at = CURRENT_TIMESTAMP 
@@ -148,9 +206,7 @@ export async function PATCH(
       [body.status, body.command_id, id]
     )
 
-    // 只有执行成功时才解锁执行器，允许用户继续操作
-    // 注意：不再更新数据库中的执行器状态，因为硬件端确认执行只表示指令已被处理
-    // 执行器的状态应该由前端的用户操作来改变，而不是由硬件端确认指令来改变
+    // 解锁执行器，允许用户继续操作
     await db.execute<ResultSetHeader>(
       'UPDATE actuators SET locked = 0 WHERE id = ?',
       [id]

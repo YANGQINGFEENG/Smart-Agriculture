@@ -56,6 +56,9 @@ typedef struct {
     
     uint8_t ip_address[16];
     uint8_t is_connected;
+    
+    uint8_t rx_buffer[512];       /* 接收缓冲区 */
+    uint16_t rx_buffer_len;       /* 接收缓冲区长度 */
 } WifiManager;
 
 /* ==================================== 函数声明 ==================================== */
