@@ -42,6 +42,38 @@ interface Actuator {
 }
 
 /**
+ * 策略数据接口
+ */
+interface Strategy {
+  id: string
+  name: string
+  actuator_id: string
+  actuator_name: string
+  enabled: boolean
+  trigger_condition: {
+    type: 'humidity' | 'temperature' | 'time'
+    operator: '<' | '>' | '=' | '<=' | '>='
+    value: number
+    unit: string
+  }
+  time_range?: {
+    start: string
+    end: string
+  }
+  action: 'on' | 'off'
+  stop_condition?: {
+    type: 'humidity' | 'temperature' | 'duration'
+    value: number
+    unit: string
+  }
+  safety_config: {
+    max_duration: number
+    cooldown_time: number
+  }
+  created_at: string
+}
+
+/**
  * 执行器图标映射
  */
 const actuatorIcons: Record<string, typeof Power> = {
@@ -64,6 +96,12 @@ export function ActuatorStatus() {
   const [updating, setUpdating] = useState<string | null>(null)
   const [formattedTimes, setFormattedTimes] = useState<Record<string, string>>({})
   const [showRestoreModal, setShowRestoreModal] = useState(false)
+  
+  // 策略相关状态
+  const [strategies, setStrategies] = useState<Strategy[]>([])
+  const [showStrategyModal, setShowStrategyModal] = useState(false)
+  const [selectedActuatorId, setSelectedActuatorId] = useState<string | null>(null)
+  const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null)
 
   // 在客户端加载已删除设备列表
   useEffect(() => {
@@ -274,8 +312,64 @@ export function ActuatorStatus() {
    * 部署设备策略
    */
   const deployDevicePolicy = (actuatorId: string) => {
-    alert(`为设备 ${actuatorId} 部署策略`)
+    setSelectedActuatorId(actuatorId)
+    setEditingStrategy(null)
+    setShowStrategyModal(true)
     setActiveMenu(null)
+  }
+
+  /**
+   * 添加策略
+   */
+  const addStrategy = (strategy: Omit<Strategy, 'id' | 'created_at'>) => {
+    const newStrategy: Strategy = {
+      ...strategy,
+      id: `STR-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    }
+    setStrategies(prev => [...prev, newStrategy])
+    setShowStrategyModal(false)
+    alert('策略添加成功')
+  }
+
+  /**
+   * 更新策略
+   */
+  const updateStrategy = (strategyId: string, updatedStrategy: Omit<Strategy, 'id' | 'created_at'>) => {
+    setStrategies(prev => 
+      prev.map(s => 
+        s.id === strategyId 
+          ? { ...s, ...updatedStrategy }
+          : s
+      )
+    )
+    setShowStrategyModal(false)
+    setEditingStrategy(null)
+    alert('策略更新成功')
+  }
+
+  /**
+   * 删除策略
+   */
+  const deleteStrategy = (strategyId: string) => {
+    if (!confirm('确定要删除此策略吗？')) {
+      return
+    }
+    setStrategies(prev => prev.filter(s => s.id !== strategyId))
+    alert('策略删除成功')
+  }
+
+  /**
+   * 切换策略启用状态
+   */
+  const toggleStrategyEnabled = (strategyId: string) => {
+    setStrategies(prev => 
+      prev.map(s => 
+        s.id === strategyId 
+          ? { ...s, enabled: !s.enabled }
+          : s
+      )
+    )
   }
 
   /**
@@ -538,6 +632,62 @@ export function ActuatorStatus() {
                           <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
                         </div>
                       )}
+
+                      {/* 策略列表 */}
+                      {strategies.filter(s => s.actuator_id === actuator.id).length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Zap className="w-3 h-3 text-primary" />
+                            <span className="text-xs font-medium text-muted-foreground">策略列表</span>
+                          </div>
+                          <div className="space-y-1">
+                            {strategies
+                              .filter(s => s.actuator_id === actuator.id)
+                              .map(strategy => (
+                                <div 
+                                  key={strategy.id}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <div className={`w-2 h-2 rounded-full ${strategy.enabled ? 'bg-primary' : 'bg-muted-foreground'}`} />
+                                    <span className="text-xs truncate">{strategy.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setEditingStrategy(strategy)
+                                        setSelectedActuatorId(actuator.id)
+                                        setShowStrategyModal(true)
+                                      }}
+                                      className="p-1 rounded hover:bg-background transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={() => toggleStrategyEnabled(strategy.id)}
+                                      className="p-1 rounded hover:bg-background transition-colors"
+                                    >
+                                      <div className={`w-3 h-3 rounded-full ${strategy.enabled ? 'bg-primary' : 'bg-muted-foreground'}`} />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteStrategy(strategy.id)}
+                                      className="p-1 rounded hover:bg-destructive/20 text-destructive transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M3 6h18"></path>
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )
@@ -580,6 +730,313 @@ export function ActuatorStatus() {
         </div>
       </div>
     )}
+
+    {/* 策略配置模态框 */}
+    {showStrategyModal && (
+      <StrategyModal
+        actuator={actuators.find(a => a.id === selectedActuatorId)}
+        editingStrategy={editingStrategy}
+        onSave={(strategy) => {
+          if (editingStrategy) {
+            updateStrategy(editingStrategy.id, strategy)
+          } else {
+            addStrategy(strategy)
+          }
+        }}
+        onCancel={() => {
+          setShowStrategyModal(false)
+          setEditingStrategy(null)
+          setSelectedActuatorId(null)
+        }}
+      />
+    )}
     </>
+  )
+}
+
+/**
+ * 策略配置模态框组件
+ */
+function StrategyModal({ 
+  actuator, 
+  editingStrategy, 
+  onSave, 
+  onCancel 
+}: { 
+  actuator?: Actuator
+  editingStrategy: Strategy | null
+  onSave: (strategy: Omit<Strategy, 'id' | 'created_at'>) => void
+  onCancel: () => void 
+}) {
+  const [formData, setFormData] = useState({
+    name: editingStrategy?.name || '',
+    actuator_id: editingStrategy?.actuator_id || actuator?.id || '',
+    actuator_name: editingStrategy?.actuator_name || actuator?.name || '',
+    enabled: editingStrategy?.enabled ?? true,
+    trigger_condition: editingStrategy?.trigger_condition || {
+      type: 'humidity' as const,
+      operator: '<' as const,
+      value: 30,
+      unit: '%'
+    },
+    time_range: editingStrategy?.time_range || {
+      start: '06:00',
+      end: '10:00'
+    },
+    action: editingStrategy?.action || 'on' as const,
+    stop_condition: editingStrategy?.stop_condition || {
+      type: 'humidity' as const,
+      value: 60,
+      unit: '%'
+    },
+    safety_config: editingStrategy?.safety_config || {
+      max_duration: 30,
+      cooldown_time: 10
+    }
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-card rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold mb-4">
+          {editingStrategy ? '编辑策略' : '添加策略'}
+        </h3>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* 基本信息 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">策略名称</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="如：土壤湿度自动灌溉"
+              required
+            />
+          </div>
+
+          {/* 触发条件 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">触发条件</label>
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={formData.trigger_condition.type}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  trigger_condition: { 
+                    ...formData.trigger_condition, 
+                    type: e.target.value as any 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="humidity">土壤湿度</option>
+                <option value="temperature">环境温度</option>
+                <option value="time">时间</option>
+              </select>
+              <select
+                value={formData.trigger_condition.operator}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  trigger_condition: { 
+                    ...formData.trigger_condition, 
+                    operator: e.target.value as any 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="<">&lt;</option>
+                <option value="<=">&le;</option>
+                <option value="=">=</option>
+                <option value=">=">&ge;</option>
+                <option value=">">&gt;</option>
+              </select>
+              <input
+                type="number"
+                value={formData.trigger_condition.value}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  trigger_condition: { 
+                    ...formData.trigger_condition, 
+                    value: parseFloat(e.target.value) 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                required
+              />
+            </div>
+          </div>
+
+          {/* 时间段 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">有效时间段</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="time"
+                value={formData.time_range.start}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  time_range: { 
+                    ...formData.time_range, 
+                    start: e.target.value 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <input
+                type="time"
+                value={formData.time_range.end}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  time_range: { 
+                    ...formData.time_range, 
+                    end: e.target.value 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          {/* 执行动作 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">执行动作</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, action: 'on' })}
+                className={`flex-1 px-3 py-2 rounded-lg border transition-colors ${
+                  formData.action === 'on' 
+                    ? 'bg-primary text-primary-foreground border-primary' 
+                    : 'bg-background border-border hover:bg-muted'
+                }`}
+              >
+                开启设备
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, action: 'off' })}
+                className={`flex-1 px-3 py-2 rounded-lg border transition-colors ${
+                  formData.action === 'off' 
+                    ? 'bg-primary text-primary-foreground border-primary' 
+                    : 'bg-background border-border hover:bg-muted'
+                }`}
+              >
+                关闭设备
+              </button>
+            </div>
+          </div>
+
+          {/* 停止条件 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">停止条件</label>
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={formData.stop_condition.type}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  stop_condition: { 
+                    ...formData.stop_condition, 
+                    type: e.target.value as any 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="humidity">土壤湿度</option>
+                <option value="temperature">环境温度</option>
+                <option value="duration">运行时长</option>
+              </select>
+              <input
+                type="number"
+                value={formData.stop_condition.value}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  stop_condition: { 
+                    ...formData.stop_condition, 
+                    value: parseFloat(e.target.value) 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                required
+              />
+              <select
+                value={formData.stop_condition.unit}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  stop_condition: { 
+                    ...formData.stop_condition, 
+                    unit: e.target.value 
+                  }
+                })}
+                className="px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="%">%</option>
+                <option value="℃">℃</option>
+                <option value="分钟">分钟</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 安全策略 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">安全策略</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">单次最长运行时间（分钟）</label>
+                <input
+                  type="number"
+                  value={formData.safety_config.max_duration}
+                  onChange={(e) => setFormData({ 
+                    ...formData, 
+                    safety_config: { 
+                      ...formData.safety_config, 
+                      max_duration: parseFloat(e.target.value) 
+                    }
+                  })}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">关泵后冷却时间（分钟）</label>
+                <input
+                  type="number"
+                  value={formData.safety_config.cooldown_time}
+                  onChange={(e) => setFormData({ 
+                    ...formData, 
+                    safety_config: { 
+                      ...formData.safety_config, 
+                      cooldown_time: parseFloat(e.target.value) 
+                    }
+                  })}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 按钮 */}
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+            >
+              取消
+            </Button>
+            <Button type="submit">
+              {editingStrategy ? '更新策略' : '添加策略'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
