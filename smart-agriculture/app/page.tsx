@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Header } from "@/components/dashboard/header"
 import { OverviewCards } from "@/components/dashboard/overview-cards"
-import { DataCharts } from "@/components/dashboard/data-charts"
 import { DetailedData } from "@/components/dashboard/detailed-data"
 import { DataAnalysis } from "@/components/dashboard/data-analysis"
 import { DataExport } from "@/components/dashboard/data-export"
@@ -56,7 +55,6 @@ export default function DashboardPage() {
             <div className="space-y-4 md:space-y-6">
               <OverviewCards />
               <ActuatorStatus />
-              <DataCharts />
             </div>
           )}
           

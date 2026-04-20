@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       [strategyId, name, actuator_id, enabled, JSON.stringify(trigger_condition), time_range ? JSON.stringify(time_range) : null, action, stop_condition ? JSON.stringify(stop_condition) : null, JSON.stringify(safety_config)]
     )
 
-    if (result.affectedRows === 0) {
+    if (result.changes === 0) {
       return NextResponse.json({
         success: false,
         data: null,

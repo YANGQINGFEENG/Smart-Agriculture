@@ -176,7 +176,7 @@ export async function POST(
 
     const newData = await db.query<SensorData[]>(
       'SELECT id, sensor_id, value, timestamp FROM sensor_data WHERE id = ?',
-      [result.insertId]
+      [result.lastID]
     )
 
     console.log(`[Sensor] 传感器数据保存成功 - ID: ${id}, 值: ${newData[0].value}`)

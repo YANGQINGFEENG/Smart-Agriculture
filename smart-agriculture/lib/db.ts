@@ -114,6 +114,39 @@ async function createTables() {
       executed_at TIMESTAMP NULL
     );
   `);
+
+  // 为指令表添加 executing 状态的检查约束（SQLite 使用 CHECK）
+  // 注意：SQLite 的 CHECK 约束在建表时定义，此处通过 status 字段的 TEXT 类型支持任意状态值
+
+  // 自动化策略表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS strategies (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      actuator_id TEXT NOT NULL,
+      enabled INTEGER DEFAULT 0,
+      trigger_condition TEXT NOT NULL,
+      time_range TEXT,
+      action TEXT NOT NULL,
+      stop_condition TEXT,
+      safety_config TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // 策略执行日志表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS strategy_execution_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      strategy_id TEXT NOT NULL,
+      actuator_id TEXT NOT NULL,
+      execution_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      action TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      error_message TEXT
+    );
+  `);
   
   // 插入初始数据
   await insertInitialData();

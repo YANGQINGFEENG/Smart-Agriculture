@@ -9,7 +9,7 @@ interface ActuatorCommand extends RowDataPacket {
   id: number
   actuator_id: string
   command: 'on' | 'off'
-  status: 'pending' | 'executed' | 'failed'
+  status: 'pending' | 'executing' | 'executed' | 'failed'
   created_at: Date
   executed_at: Date | null
 }
@@ -120,7 +120,7 @@ export async function POST(
       [id, body.command]
     )
 
-    const commandId = result.insertId
+    const commandId = result.lastID
     
     // 尝试通过WebSocket发送实时命令
     const commandData = {

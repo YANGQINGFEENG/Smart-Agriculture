@@ -123,7 +123,7 @@ export async function PUT(
       updateParams
     )
     
-    if (result.affectedRows === 0) {
+    if (result.changes === 0) {
       return NextResponse.json({
         success: false,
         data: null,
@@ -172,7 +172,7 @@ export async function DELETE(
     // 执行删除
     const result = await db.execute<ResultSetHeader>('DELETE FROM strategies WHERE id = ?', [id])
     
-    if (result.affectedRows === 0) {
+    if (result.changes === 0) {
       return NextResponse.json({
         success: false,
         data: null,
