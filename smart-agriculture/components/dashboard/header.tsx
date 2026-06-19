@@ -29,6 +29,10 @@ const tabTitles: Record<string, string> = {
   analysis: "数据分析",
   export: "数据导出",
   devices: "设备连接",
+  actuators: "执行器控制",
+  compare: "数据对比",
+  "ai-video": "AI视频检测",
+  "ai-command": "AI文字控制",
 }
 
 export function Header({ activeTab }: HeaderProps) {

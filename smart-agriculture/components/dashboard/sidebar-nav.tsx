@@ -15,6 +15,10 @@ import {
   Sun,
   TrendingUp,
   Power,
+  Camera,
+  MessageSquare,
+  Layers,
+  Activity,
 } from "lucide-react"
 
 interface SidebarNavProps {
@@ -30,6 +34,10 @@ const navItems = [
   { id: "devices", label: "设备连接", icon: Wifi },
   { id: "actuators", label: "执行器控制", icon: Power },
   { id: "compare", label: "数据对比", icon: TrendingUp },
+  { id: "ai-video", label: "AI视频检测", icon: Camera },
+  { id: "ai-command", label: "AI文字控制", icon: MessageSquare },
+  { id: "ai-monitor", label: "AI实时监测", icon: Activity },
+  { id: "model-management", label: "模型管理", icon: Layers },
 ]
 
 const sensorTypes = [

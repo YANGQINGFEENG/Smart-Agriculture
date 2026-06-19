@@ -2,6 +2,22 @@
 
 import * as React from 'react'
 
+interface ThemeContextType {
+  theme: 'light' | 'dark'
+  setTheme: (theme: 'light' | 'dark') => void
+  toggleTheme: () => void
+}
+
+const ThemeContext = React.createContext<ThemeContextType | undefined>(undefined)
+
+export function useTheme() {
+  const context = React.useContext(ThemeContext)
+  if (!context) {
+    throw new Error('useTheme must be used within a CustomThemeProvider')
+  }
+  return context
+}
+
 interface ThemeProviderProps {
   children: React.ReactNode
   defaultTheme?: 'light' | 'dark'
@@ -36,6 +52,8 @@ export function CustomThemeProvider({ children, defaultTheme = 'dark' }: ThemePr
   }
 
   return (
-    <div>{children}</div>
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
   )
 }

@@ -3,7 +3,7 @@ import os
 
 # 数据库配置
 DATABASE_CONFIG = {
-    'db_file': os.path.join(os.path.dirname(__file__), '..', 'database', 'agriculture_iot.db')
+    'db_file': os.environ.get('SQLITE_DB_PATH', os.path.join(os.path.dirname(__file__), '..', 'database', 'agriculture_iot.db'))
 }
 
 # TCP服务器配置

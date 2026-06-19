@@ -2,11 +2,11 @@
 
 import { Moon, Sun } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useTheme } from "@/components/custom-theme-provider"
+import { useState, useEffect } from "react"
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const { theme, toggleTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function ThemeToggle() {
     <Button
       variant="outline"
       size="icon"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onClick={toggleTheme}
       className="bg-secondary border-border relative overflow-hidden hover:bg-secondary/80 dark:hover:bg-input/60"
       aria-label={theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
     >

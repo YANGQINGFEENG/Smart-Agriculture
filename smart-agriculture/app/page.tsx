@@ -11,6 +11,10 @@ import { DeviceStatus } from "@/components/dashboard/device-status"
 import { ActuatorStatus } from "@/components/dashboard/actuator-status"
 import { ActuatorControl } from "@/components/dashboard/actuator-control"
 import { DataCompare } from "@/components/dashboard/data-compare"
+import { AIVideoDetection } from "@/components/dashboard/ai-video-detection"
+import { AICommandControl } from "@/components/dashboard/ai-command-control"
+import { AIRealtimeMonitor } from "@/components/dashboard/ai-realtime-monitor"
+import { ModelManagement } from "@/components/dashboard/model-management"
 import { Menu, X } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
@@ -69,6 +73,14 @@ export default function DashboardPage() {
           {activeTab === "actuators" && <ActuatorControl />}
           
           {activeTab === "compare" && <DataCompare />}
+          
+          {activeTab === "ai-video" && <AIVideoDetection />}
+          
+          {activeTab === "ai-command" && <AICommandControl />}
+          
+          {activeTab === "ai-monitor" && <AIRealtimeMonitor />}
+          
+          {activeTab === "model-management" && <ModelManagement />}
         </main>
         
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">

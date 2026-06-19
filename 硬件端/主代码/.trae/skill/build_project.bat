@@ -4,7 +4,7 @@ REM 简单的项目编译脚本
 REM 直接调用Keil MDK的命令行工具
 
 REM 定义Keil MDK路径和项目文件
-set UV4_PATH=E:\keil_v5\UV4\UV4.exe
+set UV4_PATH=D:\Program Files\UV4\UV4.exe
 set PROJECT_FILE=Project.uvprojx
 
 REM 检查Keil MDK是否存在

@@ -16,49 +16,60 @@ export async function GET() {
           success: false,
           error: '数据库连接失败',
           config: {
-            host: process.env.DB_HOST || 'localhost',
-            port: process.env.DB_PORT || '3306',
-            database: process.env.DB_NAME || 'smart_agriculture',
-            user: process.env.DB_USER || 'root',
+            database: process.env.SQLITE_DB_PATH || './smart_agriculture.db',
           }
         },
         { status: 500 }
       )
     }
 
+    // SQLite获取表列表的方法
     const tables = await db.query<any[]>(
-      `SELECT TABLE_NAME 
-       FROM information_schema.TABLES 
-       WHERE TABLE_SCHEMA = ?`,
-      [process.env.DB_NAME || 'smart_agriculture']
+      `SELECT name FROM sqlite_master WHERE type='table'`
     )
 
-    const sensorTypesCount = await db.query<any[]>(
-      'SELECT COUNT(*) as count FROM sensor_types'
-    )
+    let sensorTypesCount = 0
+    let sensorsCount = 0
+    let sensorDataCount = 0
 
-    const sensorsCount = await db.query<any[]>(
-      'SELECT COUNT(*) as count FROM sensors'
-    )
+    try {
+      const sensorTypesResult = await db.query<any[]>(
+        'SELECT COUNT(*) as count FROM sensor_types'
+      )
+      sensorTypesCount = sensorTypesResult[0]?.count || 0
+    } catch (error) {
+      // 表可能还不存在
+    }
 
-    const sensorDataCount = await db.query<any[]>(
-      'SELECT COUNT(*) as count FROM sensor_data'
-    )
+    try {
+      const sensorsResult = await db.query<any[]>(
+        'SELECT COUNT(*) as count FROM sensors'
+      )
+      sensorsCount = sensorsResult[0]?.count || 0
+    } catch (error) {
+      // 表可能还不存在
+    }
+
+    try {
+      const sensorDataResult = await db.query<any[]>(
+        'SELECT COUNT(*) as count FROM sensor_data'
+      )
+      sensorDataCount = sensorDataResult[0]?.count || 0
+    } catch (error) {
+      // 表可能还不存在
+    }
 
     return NextResponse.json({
       success: true,
       message: '数据库连接成功',
       config: {
-        host: process.env.DB_HOST || 'localhost',
-        port: process.env.DB_PORT || '3306',
-        database: process.env.DB_NAME || 'smart_agriculture',
-        user: process.env.DB_USER || 'root',
+        database: process.env.SQLITE_DB_PATH || './smart_agriculture.db',
       },
-      tables: tables.map(t => t.TABLE_NAME),
+      tables: tables.map(t => t.name),
       statistics: {
-        sensorTypes: sensorTypesCount[0]?.count || 0,
-        sensors: sensorsCount[0]?.count || 0,
-        sensorData: sensorDataCount[0]?.count || 0,
+        sensorTypes: sensorTypesCount,
+        sensors: sensorsCount,
+        sensorData: sensorDataCount,
       }
     })
   } catch (error) {
@@ -69,10 +80,7 @@ export async function GET() {
         error: '数据库测试失败',
         details: error instanceof Error ? error.message : '未知错误',
         config: {
-          host: process.env.DB_HOST || 'localhost',
-          port: process.env.DB_PORT || '3306',
-          database: process.env.DB_NAME || 'smart_agriculture',
-          user: process.env.DB_USER || 'root',
+          database: process.env.SQLITE_DB_PATH || './smart_agriculture.db',
         }
       },
       { status: 500 }
