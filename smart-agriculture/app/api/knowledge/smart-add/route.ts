@@ -13,10 +13,10 @@ interface KnowledgeItem extends RowDataPacket {
 
 /**
  * POST /api/knowledge/smart-add
- * 智能添加知识 - 支持多条知识自动拆分
+ * 智能添加知识 - AI自动识别知识点条数
  *
- * 输入: raw_text (粘贴的文字或MD内容)
- * 输出: 拆分后的多条结构化知识 + 每条的冲突检测结果
+ * 输入: raw_text (任意格式的文字)
+ * 输出: AI自动拆分的多条结构化知识 + 冲突检测结果
  */
 export async function POST(request: NextRequest) {
   try {
@@ -30,8 +30,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. 拆分多条知识
-    const knowledgeItems = splitKnowledge(raw_text.trim())
+    // 1. AI自动拆分知识点
+    const knowledgeItems = await splitKnowledgeWithAI(raw_text.trim())
 
     // 2. 对每条知识进行结构化处理和冲突检测
     const results = await Promise.all(
@@ -68,51 +68,85 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 拆分多条知识
- * 支持按段落、句号、编号列表、分隔符拆分
+ * AI自动拆分知识点
+ * 使用Ollama识别文本中包含的知识点数量
  */
-function splitKnowledge(text: string): string[] {
-  // 如果文本很短，当作单条知识
+async function splitKnowledgeWithAI(text: string): Promise<string[]> {
+  // 短文本直接返回
   if (text.length < 30) {
     return [text]
   }
 
+  try {
+    const prompt = `你是一个农业知识整理专家。请分析以下文本，识别其中包含了多少个独立的知识点。
+
+每个知识点应该是一个完整的、独立的信息，可以单独理解。
+
+文本内容：
+${text}
+
+请按以下格式返回（只返回JSON，不要其他内容）：
+{"count": 知识点数量, "items": ["知识点1内容", "知识点2内容", ...]}
+
+注意：
+1. 每个知识点应该是完整的一句话或几句话
+2. 相关的信息应该合并为一个知识点
+3. 如果文本只包含一个知识点，返回count=1`
+
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'qwen3:1.7b-q4_K_M',
+        prompt,
+        stream: false,
+        options: { temperature: 0.1, num_predict: 1024 },
+      }),
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      const text = result.response || ''
+
+      // 尝试解析AI返回的JSON
+      const jsonMatch = text.match(/\{[\s\S]*"count"[\s\S]*\}/)
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
+            console.log(`AI识别到 ${parsed.items.length} 个知识点`)
+            return parsed.items
+          }
+        } catch {}
+      }
+    }
+  } catch (error) {
+    console.log('AI拆分失败，使用规则拆分')
+  }
+
+  // AI失败时使用规则拆分
+  return splitKnowledgeByRules(text)
+}
+
+/**
+ * 基于规则的知识点拆分（AI不可用时的降级方案）
+ */
+function splitKnowledgeByRules(text: string): string[] {
   const items: string[] = []
 
   // 方法1: 按空行分段
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 10)
   if (paragraphs.length > 1) {
-    for (const para of paragraphs) {
-      const trimmed = para.trim()
-      if (trimmed.length > 10) {
-        items.push(trimmed)
-      }
-    }
-    if (items.length > 1) return items
+    return paragraphs.map(p => p.trim())
   }
 
-  // 方法2: 按换行分段
-  const lines = text.split('\n').filter(l => l.trim().length > 10)
-  if (lines.length > 1) {
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (trimmed.length > 10) {
-        items.push(trimmed)
-      }
-    }
-    if (items.length > 1) return items
-  }
-
-  // 方法3: 按句号分段（中文句号）
-  const sentences = text.split(/。/).filter(s => s.trim().length > 10)
+  // 方法2: 按句号分段（中文句号）
+  const sentences = text.split(/[。！？]/).filter(s => s.trim().length > 10)
   if (sentences.length > 2) {
-    // 多个句子，尝试合并相关句子
     let current = ''
     for (const sentence of sentences) {
       const trimmed = sentence.trim()
       if (!trimmed) continue
-
-      // 如果当前句子是新主题的开始
       if (isNewTopic(trimmed) && current.length > 20) {
         items.push(current)
         current = trimmed
@@ -124,13 +158,12 @@ function splitKnowledge(text: string): string[] {
     if (items.length > 1) return items
   }
 
-  // 方法4: 按编号列表拆分
-  const numberedItems = text.split(/\n(?=\d+[.、）)]\s*)/).filter(item => item.trim().length > 10)
-  if (numberedItems.length > 1) {
-    return numberedItems.map(item => item.trim())
+  // 方法3: 按换行分段
+  const lines = text.split('\n').filter(l => l.trim().length > 10)
+  if (lines.length > 1) {
+    return lines.map(l => l.trim())
   }
 
-  // 默认返回原文
   return [text]
 }
 

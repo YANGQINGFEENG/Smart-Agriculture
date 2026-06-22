@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
 
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
+
 interface KnowledgeItem extends RowDataPacket {
   id: number
   title: string
@@ -11,10 +13,10 @@ interface KnowledgeItem extends RowDataPacket {
 
 /**
  * POST /api/knowledge/compare
- * 多条知识对比分析
+ * 多条知识对比分析 - 找出矛盾点
  *
  * 输入: ids (知识ID数组)
- * 输出: 每对知识的相似度对比结果
+ * 输出: 矛盾点分析结果
  */
 export async function POST(request: NextRequest) {
   try {
@@ -43,40 +45,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 两两对比
-    const comparisons: any[] = []
-    for (let i = 0; i < items.length; i++) {
-      for (let j = i + 1; j < items.length; j++) {
-        const result = compareKnowledge(items[i], items[j])
-        comparisons.push(result)
-      }
-    }
+    // 使用AI分析矛盾点
+    const contradictions = await findContradictionsWithAI(items)
 
-    // 统计分析
+    // 同时进行规则检测
+    const ruleBasedContradictions = findContradictionsByRules(items)
+
+    // 合并结果，去重
+    const allContradictions = mergeContradictions(contradictions, ruleBasedContradictions)
+
+    // 统计
     const stats = {
-      total_pairs: comparisons.length,
-      high_overlap: comparisons.filter(c => c.similarity > 70).length,
-      medium_overlap: comparisons.filter(c => c.similarity > 40 && c.similarity <= 70).length,
-      low_overlap: comparisons.filter(c => c.similarity <= 40).length,
-      same_category: items.filter(item =>
-        items.some(other => other.id !== item.id && other.category === item.category)
-      ).length,
+      total_pairs: (items.length * (items.length - 1)) / 2,
+      has_contradictions: allContradictions.length > 0,
+      contradiction_count: allContradictions.length,
+      severity_levels: {
+        high: allContradictions.filter(c => c.severity === 'high').length,
+        medium: allContradictions.filter(c => c.severity === 'medium').length,
+        low: allContradictions.filter(c => c.severity === 'low').length,
+      },
     }
-
-    // 生成合并建议
-    const mergeSuggestions = generateMergeSuggestions(comparisons, items)
 
     return NextResponse.json({
       success: true,
       data: {
         items,
-        comparisons,
+        contradictions: allContradictions,
         stats,
-        merge_suggestions: mergeSuggestions,
       },
     })
   } catch (error) {
-    console.error('对比分析失败:', error)
+    console.error('矛盾检测失败:', error)
     return NextResponse.json(
       { success: false, error: '对比分析失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -85,224 +84,250 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 对比两条知识
+ * 使用AI检测矛盾点
  */
-function compareKnowledge(item1: KnowledgeItem, item2: KnowledgeItem) {
-  // 1. 标题相似度
-  const titleSimilarity = calculateTextSimilarity(item1.title, item2.title)
+async function findContradictionsWithAI(items: KnowledgeItem[]): Promise<any[]> {
+  if (items.length < 2) return []
 
-  // 2. 内容相似度
-  const contentSimilarity = calculateKeywordOverlap(item1.content, item2.content)
+  try {
+    // 构建知识列表
+    const knowledgeList = items.map((item, i) =>
+      `知识${i + 1}（${item.title}）：${item.content}`
+    ).join('\n\n')
 
-  // 3. 共同关键词
-  const commonKeywords = findCommonKeywords(item1.content, item2.content)
+    const prompt = `你是一个农业知识审查专家。请分析以下多条农业知识，找出它们之间的矛盾点。
 
-  // 4. 查找重复文字片段
-  const overlappingSegments = findOverlappingSegments(item1.content, item2.content)
+矛盾包括：
+1. 直接矛盾：两个知识给出相反的建议（如"加糖"vs"加盐"）
+2. 条件矛盾：在相同条件下给出不同建议
+3. 数据矛盾：给出不同的数值或时间
+4. 方法矛盾：推荐不同的防治方法
 
-  // 5. 综合相似度
-  const similarity = Math.round((titleSimilarity * 0.4 + contentSimilarity * 0.6) * 100)
+知识列表：
+${knowledgeList}
 
-  // 6. 判断关系类型
-  let relationType = 'unrelated'
-  let suggestion = '可以独立保留'
+请按以下JSON格式返回（只返回JSON，不要其他内容）：
+{
+  "contradictions": [
+    {
+      "knowledge1_id": 知识1的序号,
+      "knowledge2_id": 知识2的序号,
+      "type": "direct/condition/data/method",
+      "description": "矛盾描述",
+      "detail1": "知识1的观点",
+      "detail2": "知识2的观点",
+      "severity": "high/medium/low",
+      "suggestion": "建议如何处理"
+    }
+  ]
+}
 
-  if (similarity > 80) {
-    relationType = 'near_duplicate'
-    suggestion = '高度重复，建议合并为一条'
-  } else if (similarity > 60) {
-    relationType = 'high_overlap'
-    suggestion = '内容重叠较多，建议合并或整合'
-  } else if (similarity > 40) {
-    relationType = 'related'
-    suggestion = '内容相关，可以互相引用'
-  } else if (similarity > 20) {
-    relationType = 'loosely_related'
-    suggestion = '有一定关联，建议添加关联链接'
+如果没有矛盾，返回 {"contradictions": []}`
+
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'qwen3:1.7b-q4_K_M',
+        prompt,
+        stream: false,
+        options: { temperature: 0.1, num_predict: 1024 },
+      }),
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      const text = result.response || ''
+
+      // 解析AI返回的JSON
+      const jsonMatch = text.match(/\{[\s\S]*"contradictions"[\s\S]*\}/)
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.contradictions && Array.isArray(parsed.contradictions)) {
+            // 转换为统一格式
+            return parsed.contradictions.map((c: any) => ({
+              item1: items[c.knowledge1_id - 1] ? {
+                id: items[c.knowledge1_id - 1].id,
+                title: items[c.knowledge1_id - 1].title,
+              } : null,
+              item2: items[c.knowledge2_id - 1] ? {
+                id: items[c.knowledge2_id - 1].id,
+                title: items[c.knowledge2_id - 1].title,
+              } : null,
+              type: c.type || 'unknown',
+              description: c.description || '',
+              detail1: c.detail1 || '',
+              detail2: c.detail2 || '',
+              severity: c.severity || 'medium',
+              suggestion: c.suggestion || '',
+              source: 'ai',
+            }))
+          }
+        } catch {}
+      }
+    }
+  } catch (error) {
+    console.log('AI矛盾检测失败，使用规则检测')
   }
 
-  // 7. 检查分类是否相同
-  const sameCategory = item1.category === item2.category
-
-  return {
-    item1: { id: item1.id, title: item1.title, category: item1.category, content: item1.content },
-    item2: { id: item2.id, title: item2.title, category: item2.category, content: item2.content },
-    similarity,
-    title_similarity: Math.round(titleSimilarity * 100),
-    content_similarity: Math.round(contentSimilarity * 100),
-    common_keywords: commonKeywords.slice(0, 5),
-    overlapping_segments: overlappingSegments,
-    relation_type: relationType,
-    suggestion,
-    same_category: sameCategory,
-  }
+  return []
 }
 
 /**
- * 查找重复文字片段
- * 返回两个文本中连续重复的片段
+ * 基于规则的矛盾检测
  */
-function findOverlappingSegments(text1: string, text2: string): Array<{ text: string; positions: { text1: number; text2: number } }> {
-  const segments: Array<{ text: string; positions: { text1: number; text2: number } }> = []
+function findContradictionsByRules(items: KnowledgeItem[]): any[] {
+  const contradictions: any[] = []
 
-  // 清理文本
-  const clean1 = text1.replace(/\s+/g, '')
-  const clean2 = text2.replace(/\s+/g, '')
+  // 定义矛盾关键词对
+  const contradictionPairs = [
+    // 方向矛盾
+    ['东', '西'], ['南', '北'], ['上', '下'], ['左', '右'],
+    // 动作矛盾
+    ['增加', '减少'], ['提高', '降低'], ['加强', '减弱'],
+    ['开启', '关闭'], ['添加', '去除'], ['使用', '避免'],
+    // 数值矛盾
+    ['多', '少'], ['大', '小'], ['高', '低'], ['快', '慢'],
+    // 农业相关矛盾
+    ['加糖', '加盐'], ['施肥', '控肥'], ['浇水', '控水'],
+    ['密植', '稀植'], ['早播', '晚播'], ['深翻', '免耕'],
+  ]
 
-  // 查找连续重复的字符（至少6个字符）
-  const minSegmentLength = 4
+  // 两两对比
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const item1 = items[i]
+      const item2 = items[j]
 
-  for (let i = 0; i < clean1.length - minSegmentLength; i++) {
-    for (let len = minSegmentLength; len <= Math.min(50, clean1.length - i); len++) {
-      const segment = clean1.substring(i, i + len)
+      // 检查数值矛盾
+      const numberContradictions = findNumberContradictions(item1, item2)
+      contradictions.push(...numberContradictions)
 
-      // 在第二个文本中查找
-      const pos2 = clean2.indexOf(segment)
-      if (pos2 !== -1) {
-        // 检查是否已被更长的片段包含
-        const isContained = segments.some(s =>
-          s.text.includes(segment) &&
-          Math.abs(s.positions.text1 - i) < segment.length
-        )
+      // 检查关键词矛盾
+      for (const [word1, word2] of contradictionPairs) {
+        const has1in1 = item1.content.includes(word1)
+        const has2in1 = item1.content.includes(word2)
+        const has1in2 = item2.content.includes(word1)
+        const has2in2 = item2.content.includes(word2)
 
-        if (!isContained) {
-          // 尝试扩展片段
-          let extendedLen = len
-          while (
-            i + extendedLen < clean1.length &&
-            pos2 + extendedLen < clean2.length &&
-            clean1[i + extendedLen] === clean2[pos2 + extendedLen] &&
-            extendedLen < 100
-          ) {
-            extendedLen++
-          }
+        // 如果一个知识说word1，另一个说word2，可能存在矛盾
+        if ((has1in1 && has2in2) || (has2in1 && has1in2)) {
+          // 提取包含矛盾词的句子
+          const sentence1 = extractSentenceWithWord(item1.content, has1in1 ? word1 : word2)
+          const sentence2 = extractSentenceWithWord(item2.content, has1in2 ? word1 : word2)
 
-          const finalSegment = clean1.substring(i, i + extendedLen)
-          if (finalSegment.length >= minSegmentLength) {
-            // 找到在原始文本中的位置
-            const origPos1 = text1.indexOf(finalSegment.replace(/\s+/g, ''))
-            const origPos2 = text2.indexOf(finalSegment.replace(/\s+/g, ''))
-
-            segments.push({
-              text: finalSegment,
-              positions: {
-                text1: origPos1 !== -1 ? origPos1 : i,
-                text2: origPos2 !== -1 ? origPos2 : pos2,
-              }
+          if (sentence1 && sentence2 && sentence1 !== sentence2) {
+            contradictions.push({
+              item1: { id: item1.id, title: item1.title },
+              item2: { id: item2.id, title: item2.title },
+              type: 'direct',
+              description: `在"${has1in1 ? word1 : word2}"vs"${has2in2 ? word2 : word1}"上存在矛盾`,
+              detail1: sentence1,
+              detail2: sentence2,
+              severity: 'high',
+              suggestion: '存在直接矛盾，请核实哪个是正确的',
+              source: 'rule',
             })
           }
-
-          // 跳过已处理的部分
-          i += extendedLen - 1
-          break
         }
       }
     }
   }
 
-  // 去重并按长度排序
-  const uniqueSegments = segments
-    .filter((s, idx, arr) => arr.findIndex(other => other.text === s.text) === idx)
-    .sort((a, b) => b.text.length - a.text.length)
-    .slice(0, 10)
-
-  return uniqueSegments
+  return contradictions
 }
 
 /**
- * 计算文本相似度
+ * 检测数值矛盾
  */
-function calculateTextSimilarity(text1: string, text2: string): number {
-  const chars1 = new Set(text1.replace(/[，。！？、；：""''（）\s]/g, '').split(''))
-  const chars2 = new Set(text2.replace(/[，。！？、；：""''（）\s]/g, '').split(''))
-  const intersection = new Set([...chars1].filter(c => chars2.has(c)))
-  const union = new Set([...chars1, ...chars2])
-  return union.size > 0 ? intersection.size / union.size : 0
-}
+function findNumberContradictions(item1: KnowledgeItem, item2: KnowledgeItem): any[] {
+  const contradictions: any[] = []
 
-/**
- * 计算关键词重叠度
- */
-function calculateKeywordOverlap(text1: string, text2: string): number {
-  const kw1 = extractKeyPhrases(text1)
-  const kw2 = extractKeyPhrases(text2)
-  const set1 = new Set(kw1)
-  const set2 = new Set(kw2)
-  const intersection = new Set([...set1].filter(k => set2.has(k)))
-  const union = new Set([...set1, ...set2])
-  return union.size > 0 ? intersection.size / union.size : 0
-}
+  // 提取数字+单位
+  const numberPattern = /(\d+\.?\d*)\s*(%|倍|亩|斤|克|升|℃|°|天|小时|分钟)/g
 
-/**
- * 提取关键短语
- */
-function extractKeyPhrases(text: string): string[] {
-  const cleaned = text.replace(/[，。！？、；：""''（）\[\]【】\s]/g, '')
-  const phrases: string[] = []
-  for (let i = 0; i < cleaned.length - 1; i++) {
-    for (let len = 2; len <= 4; len++) {
-      if (i + len <= cleaned.length) {
-        const phrase = cleaned.substring(i, i + len)
-        if (!/^[的了在是我有和就不人都一]/.test(phrase)) {
-          phrases.push(phrase)
-        }
-      }
-    }
-  }
-  return [...new Set(phrases)]
-}
+  const numbers1: Array<{ value: number; unit: string; context: string }> = []
+  const numbers2: Array<{ value: number; unit: string; context: string }> = []
 
-/**
- * 查找共同关键词
- */
-function findCommonKeywords(text1: string, text2: string): string[] {
-  const kw1 = extractKeyPhrases(text1)
-  const kw2 = extractKeyPhrases(text2)
-  const set2 = new Set(kw2)
-  return [...new Set(kw1)].filter(k => set2.has(k))
-}
-
-/**
- * 生成合并建议
- */
-function generateMergeSuggestions(comparisons: any[], items: KnowledgeItem[]) {
-  const suggestions: any[] = []
-
-  // 找出高度重叠的对
-  const highOverlapPairs = comparisons.filter(c => c.similarity > 60)
-
-  highOverlapPairs.forEach(pair => {
-    const item1 = items.find(i => i.id === pair.item1.id)
-    const item2 = items.find(i => i.id === pair.item2.id)
-
-    if (item1 && item2) {
-      suggestions.push({
-        type: 'merge',
-        reason: `相似度 ${pair.similarity}%，${pair.suggestion}`,
-        items: [
-          { id: item1.id, title: item1.title },
-          { id: item2.id, title: item2.title },
-        ],
-        merged_title: item1.title.length >= item2.title.length ? item1.title : item2.title,
-        merged_content: item1.content + '\n\n' + item2.content,
-      })
-    }
-  })
-
-  // 找出可以关联的对
-  const relatedPairs = comparisons.filter(c => c.similarity > 20 && c.similarity <= 60)
-
-  if (relatedPairs.length > 0) {
-    suggestions.push({
-      type: 'link',
-      reason: `${relatedPairs.length} 对知识内容相关，建议添加关联`,
-      pairs: relatedPairs.map(p => ({
-        item1: p.item1,
-        item2: p.item2,
-        similarity: p.similarity,
-      })),
+  let match
+  while ((match = numberPattern.exec(item1.content)) !== null) {
+    numbers1.push({
+      value: parseFloat(match[1]),
+      unit: match[2],
+      context: item1.content.substring(Math.max(0, match.index - 20), match.index + match[0].length + 20),
     })
   }
 
-  return suggestions
+  while ((match = numberPattern.exec(item2.content)) !== null) {
+    numbers2.push({
+      value: parseFloat(match[1]),
+      unit: match[2],
+      context: item2.content.substring(Math.max(0, match.index - 20), match.index + match[0].length + 20),
+    })
+  }
+
+  // 找出相同单位但不同数值的矛盾
+  for (const n1 of numbers1) {
+    for (const n2 of numbers2) {
+      if (n1.unit === n2.unit && n1.value !== n2.value) {
+        // 数值差异超过20%视为矛盾
+        const diff = Math.abs(n1.value - n2.value) / Math.max(n1.value, n2.value)
+        if (diff > 0.2) {
+          contradictions.push({
+            item1: { id: item1.id, title: item1.title },
+            item2: { id: item2.id, title: item2.title },
+            type: 'data',
+            description: `数值矛盾：${n1.value}${n1.unit} vs ${n2.value}${n2.unit}`,
+            detail1: n1.context.trim(),
+            detail2: n2.context.trim(),
+            severity: diff > 0.5 ? 'high' : 'medium',
+            suggestion: '数值存在较大差异，请核实',
+            source: 'rule',
+          })
+        }
+      }
+    }
+  }
+
+  return contradictions
+}
+
+/**
+ * 提取包含特定词的句子
+ */
+function extractSentenceWithWord(text: string, word: string): string {
+  const sentences = text.split(/[。！？；]/)
+  for (const sentence of sentences) {
+    if (sentence.includes(word)) {
+      return sentence.trim()
+    }
+  }
+  return ''
+}
+
+/**
+ * 合并去重矛盾结果
+ */
+function mergeContradictions(aiResults: any[], ruleResults: any[]): any[] {
+  const all = [...aiResults, ...ruleResults]
+
+  // 去重：相同的一对知识+相同类型视为重复
+  const unique: any[] = []
+  const seen = new Set<string>()
+
+  for (const item of all) {
+    if (!item.item1 || !item.item2) continue
+    const key = `${Math.min(item.item1.id, item.item2.id)}-${Math.max(item.item1.id, item.item2.id)}-${item.type}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      unique.push(item)
+    }
+  }
+
+  // 按严重程度排序
+  return unique.sort((a, b) => {
+    const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
+    return (severityOrder[a.severity] || 2) - (severityOrder[b.severity] || 2)
+  })
 }

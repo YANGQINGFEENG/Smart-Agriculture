@@ -66,20 +66,23 @@ interface SmartAddResult {
 
 interface CompareResult {
   items: KnowledgeItem[]
-  comparisons: Array<{
-    item1: { id: number; title: string; category: string; content: string }
-    item2: { id: number; title: string; category: string; content: string }
-    similarity: number
-    title_similarity: number
-    content_similarity: number
-    common_keywords: string[]
-    overlapping_segments: Array<{ text: string; positions: { text1: number; text2: number } }>
-    relation_type: string
+  contradictions: Array<{
+    item1: { id: number; title: string }
+    item2: { id: number; title: string }
+    type: string
+    description: string
+    detail1: string
+    detail2: string
+    severity: string
     suggestion: string
-    same_category: boolean
+    source: string
   }>
-  stats: { total_pairs: number; high_overlap: number; medium_overlap: number; low_overlap: number }
-  merge_suggestions: any[]
+  stats: {
+    total_pairs: number
+    has_contradictions: boolean
+    contradiction_count: number
+    severity_levels: { high: number; medium: number; low: number }
+  }
 }
 
 const categoryOptions = [
@@ -106,22 +109,32 @@ const statusColors: Record<string, string> = {
   archived: "bg-slate-50 text-slate-500 border-slate-200",
 }
 
-const relationColors: Record<string, string> = {
-  exact_duplicate: "bg-red-100 text-red-700",
-  near_duplicate: "bg-red-100 text-red-700",
-  high_overlap: "bg-orange-100 text-orange-700",
-  related: "bg-yellow-100 text-yellow-700",
-  loosely_related: "bg-blue-100 text-blue-700",
-  unrelated: "bg-gray-100 text-gray-700",
+const contradictionTypeColors: Record<string, string> = {
+  direct: "bg-red-100 text-red-700",
+  condition: "bg-orange-100 text-orange-700",
+  data: "bg-yellow-100 text-yellow-700",
+  method: "bg-purple-100 text-purple-700",
+  unknown: "bg-gray-100 text-gray-700",
 }
 
-const relationLabels: Record<string, string> = {
-  exact_duplicate: "完全重复",
-  near_duplicate: "几乎重复",
-  high_overlap: "高度重叠",
-  related: "相关",
-  loosely_related: "弱相关",
-  unrelated: "无关联",
+const contradictionTypeLabels: Record<string, string> = {
+  direct: "直接矛盾",
+  condition: "条件矛盾",
+  data: "数据矛盾",
+  method: "方法矛盾",
+  unknown: "未知类型",
+}
+
+const severityColors: Record<string, string> = {
+  high: "bg-red-500 text-white",
+  medium: "bg-yellow-500 text-white",
+  low: "bg-blue-500 text-white",
+}
+
+const severityLabels: Record<string, string> = {
+  high: "严重",
+  medium: "中等",
+  low: "轻微",
 }
 
 export default function KnowledgePage() {
@@ -529,121 +542,86 @@ export default function KnowledgePage() {
           {compareResult && (
             <div className="space-y-6">
               {/* 统计概览 */}
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4 text-center">
                   <div className="text-2xl font-bold text-blue-600">{compareResult.stats.total_pairs}</div>
                   <div className="text-xs text-blue-500">对比组数</div>
                 </div>
-                <div className="bg-red-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-red-600">{compareResult.stats.high_overlap}</div>
-                  <div className="text-xs text-red-500">高度重叠</div>
+                <div className={`rounded-lg p-4 text-center ${compareResult.stats.has_contradictions ? 'bg-red-50' : 'bg-green-50'}`}>
+                  <div className={`text-2xl font-bold ${compareResult.stats.has_contradictions ? 'text-red-600' : 'text-green-600'}`}>
+                    {compareResult.stats.contradiction_count}
+                  </div>
+                  <div className={`text-xs ${compareResult.stats.has_contradictions ? 'text-red-500' : 'text-green-500'}`}>
+                    {compareResult.stats.has_contradictions ? '发现矛盾' : '无矛盾'}
+                  </div>
                 </div>
-                <div className="bg-yellow-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-yellow-600">{compareResult.stats.medium_overlap}</div>
-                  <div className="text-xs text-yellow-500">中度重叠</div>
-                </div>
-                <div className="bg-green-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-green-600">{compareResult.stats.low_overlap}</div>
-                  <div className="text-xs text-green-500">低重叠</div>
+                <div className="bg-gray-50 rounded-lg p-4 text-center">
+                  <div className="flex justify-center gap-2">
+                    <span className="text-red-600">严重:{compareResult.stats.severity_levels.high}</span>
+                    <span className="text-yellow-600">中等:{compareResult.stats.severity_levels.medium}</span>
+                    <span className="text-blue-600">轻微:{compareResult.stats.severity_levels.low}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">矛盾严重程度</div>
                 </div>
               </div>
 
-              {/* 合并建议 */}
-              {compareResult.merge_suggestions.length > 0 && (
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-medium mb-3 flex items-center gap-2">
-                    <Merge className="h-4 w-4" />
-                    智能建议
+              {/* 矛盾点列表 */}
+              {compareResult.contradictions.length > 0 ? (
+                <div className="space-y-4">
+                  <h3 className="font-medium flex items-center gap-2 text-red-600">
+                    <AlertTriangle className="h-4 w-4" />
+                    发现 {compareResult.contradictions.length} 个矛盾点
                   </h3>
-                  {compareResult.merge_suggestions.map((suggestion, i) => (
-                    <div key={i} className="mb-3 p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        {suggestion.type === 'merge' ? (
-                          <Badge className="bg-red-100 text-red-700">建议合并</Badge>
-                        ) : (
-                          <Badge className="bg-blue-100 text-blue-700">建议关联</Badge>
-                        )}
-                        <span className="text-sm">{suggestion.reason}</span>
-                      </div>
-                      {suggestion.items && (
-                        <div className="text-xs text-muted-foreground">
-                          涉及：{suggestion.items.map((item: any) => item.title).join(' ↔ ')}
+                  {compareResult.contradictions.map((contra, i) => (
+                    <div key={i} className="border border-red-200 rounded-lg overflow-hidden">
+                      {/* 矛盾标题栏 */}
+                      <div className="bg-red-50 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge className={severityColors[contra.severity]}>{severityLabels[contra.severity]}</Badge>
+                          <Badge className={contradictionTypeColors[contra.type]}>{contradictionTypeLabels[contra.type]}</Badge>
+                          <span className="text-sm font-medium">{contra.description}</span>
                         </div>
-                      )}
+                        <span className="text-xs text-muted-foreground">
+                          来源: {contra.source === 'ai' ? 'AI分析' : '规则检测'}
+                        </span>
+                      </div>
+
+                      {/* 矛盾内容对比 */}
+                      <div className="grid grid-cols-2 divide-x">
+                        <div className="p-4 bg-blue-50/30">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-medium text-blue-600">知识A</span>
+                            <span className="text-sm font-medium">{contra.item1?.title}</span>
+                          </div>
+                          <p className="text-sm text-gray-700 bg-white p-2 rounded border border-blue-100">
+                            {contra.detail1 || '无具体描述'}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-red-50/30">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-medium text-red-600">知识B</span>
+                            <span className="text-sm font-medium">{contra.item2?.title}</span>
+                          </div>
+                          <p className="text-sm text-gray-700 bg-white p-2 rounded border border-red-100">
+                            {contra.detail2 || '无具体描述'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 建议 */}
+                      <div className="px-4 py-2 bg-amber-50 border-t text-sm text-amber-700">
+                        💡 建议：{contra.suggestion}
+                      </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="text-center py-8 text-green-600">
+                  <Check className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p className="font-medium">未发现矛盾点</p>
+                  <p className="text-sm text-muted-foreground">这些知识内容一致，可以放心使用</p>
+                </div>
               )}
-
-              {/* 详细对比结果 */}
-              <div className="space-y-4">
-                <h3 className="font-medium">详细对比</h3>
-                {compareResult.comparisons.map((comp, i) => (
-                  <div key={i} className="border rounded-lg overflow-hidden">
-                    {/* 标题对比 */}
-                    <div className="grid grid-cols-2 divide-x">
-                      <div className="p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge className={getCategoryBadgeColor(comp.item1.category)}>{comp.item1.category}</Badge>
-                          <span className="font-medium text-sm">{comp.item1.title}</span>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge className={getCategoryBadgeColor(comp.item2.category)}>{comp.item2.category}</Badge>
-                          <span className="font-medium text-sm">{comp.item2.title}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 相似度统计 */}
-                    <div className="bg-muted/30 px-4 py-3 border-t">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-sm">
-                          <span>相似度：<strong className={comp.similarity > 60 ? 'text-red-600' : comp.similarity > 30 ? 'text-yellow-600' : 'text-green-600'}>{comp.similarity}%</strong></span>
-                          <span className="text-muted-foreground">标题: {comp.title_similarity}%</span>
-                          <span className="text-muted-foreground">内容: {comp.content_similarity}%</span>
-                          <Badge className={relationColors[comp.relation_type]}>{relationLabels[comp.relation_type]}</Badge>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{comp.suggestion}</span>
-                      </div>
-                      {comp.common_keywords.length > 0 && (
-                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>共同关键词：</span>
-                          {comp.common_keywords.map((kw, j) => (
-                            <Badge key={j} variant="outline" className="text-xs">{kw}</Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 重复文字高亮显示 */}
-                    {comp.overlapping_segments.length > 0 && (
-                      <div className="border-t">
-                        <div className="px-4 py-2 bg-amber-50 border-b flex items-center gap-2">
-                          <span className="text-sm font-medium text-amber-700">
-                            📝 重复文字（{comp.overlapping_segments.length}处）
-                          </span>
-                        </div>
-                        <div className="divide-y">
-                          {comp.overlapping_segments.slice(0, 5).map((segment, j) => (
-                            <div key={j} className="grid grid-cols-2 divide-x text-xs">
-                              <div className="p-3">
-                                <div className="text-muted-foreground mb-1">知识1：</div>
-                                <HighlightedText text={comp.item1.content} highlight={segment.text} />
-                              </div>
-                              <div className="p-3">
-                                <div className="text-muted-foreground mb-1">知识2：</div>
-                                <HighlightedText text={comp.item2.content} highlight={segment.text} />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
@@ -666,18 +644,23 @@ export default function KnowledgePage() {
           {!smartAddResult ? (
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">粘贴文字内容（支持多条知识，用空行分隔）</label>
+                <label className="text-sm font-medium mb-2 block">粘贴文字内容</label>
                 <Textarea value={rawText} onChange={(e) => setRawText(e.target.value)}
-                  placeholder={`示例：
+                  placeholder={`直接粘贴任意格式的农业知识，AI会自动识别知识点数量并拆分。
 
-番茄晚疫病防治
-症状：叶片出现水渍状暗绿色斑点
-防治：用甲霜灵喷雾
+例如：
 
-番茄早疫病症状
-叶片出现褐色圆形斑点，有同心轮纹`}
+番茄晚疫病症状：叶片出现水渍状暗绿色斑点，湿度大时叶背有白色霉层。
+防治方法：用甲霜灵喷雾，每7天一次。
+
+黄瓜霜霉病：叶片出现黄色斑点，可用霜脲氰锰锌防治。
+抽穗期补防：若遇连续阴雨，4天后补喷一次，重点喷穗部。
+
+系统会自动识别这是几条知识点，并提取标题、分类和标签。`}
                   rows={12} className="font-mono text-sm" />
-                <p className="text-xs text-muted-foreground mt-1">提示：用空行分隔不同知识点，系统会自动拆分</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  💡 AI会自动识别知识点数量，无需手动分隔
+                </p>
               </div>
               <div className="flex items-center gap-4">
                 <input ref={fileInputRef} type="file" accept=".md,.txt,.text" onChange={handleFileUpload} className="hidden" />
@@ -762,62 +745,5 @@ export default function KnowledgePage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-/**
- * 高亮显示重复文字组件
- */
-function HighlightedText({ text, highlight }: { text: string; highlight: string }) {
-  if (!highlight || highlight.length < 4) {
-    return <span className="text-gray-700 line-clamp-4">{text}</span>
-  }
-
-  // 清理高亮文本用于匹配
-  const cleanHighlight = highlight.replace(/\s+/g, '')
-
-  // 找到高亮文本在原文中的位置
-  const cleanText = text.replace(/\s+/g, '')
-  const pos = cleanText.indexOf(cleanHighlight)
-
-  if (pos === -1) {
-    return <span className="text-gray-700 line-clamp-4">{text}</span>
-  }
-
-  // 计算在原始文本中的大致位置（考虑空格）
-  let origStart = 0
-  let cleanCount = 0
-  for (let i = 0; i < text.length; i++) {
-    if (cleanCount === pos) {
-      origStart = i
-      break
-    }
-    if (/\S/.test(text[i])) cleanCount++
-  }
-
-  // 找到结束位置
-  let origEnd = origStart
-  cleanCount = 0
-  for (let i = origStart; i < text.length; i++) {
-    if (cleanCount >= cleanHighlight.length) {
-      origEnd = i
-      break
-    }
-    if (/\S/.test(text[i])) cleanCount++
-  }
-  if (cleanCount >= cleanHighlight.length) origEnd = text.length
-
-  const before = text.substring(0, origStart)
-  const highlighted = text.substring(origStart, origEnd)
-  const after = text.substring(origEnd)
-
-  return (
-    <span className="text-gray-700">
-      {before.length > 50 && <span>...{before.slice(-50)}</span>}
-      {before.length <= 50 && before}
-      <mark className="bg-yellow-200 text-yellow-900 px-0.5 rounded">{highlighted}</mark>
-      {after.length > 50 && <span>{after.slice(0, 50)}...</span>}
-      {after.length <= 50 && after}
-    </span>
   )
 }
