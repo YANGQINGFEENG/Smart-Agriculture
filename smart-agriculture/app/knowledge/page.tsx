@@ -74,27 +74,27 @@ interface SmartAddResult {
 }
 
 const categoryOptions = [
-  { value: "病虫害防治", label: "病虫害防治", color: "bg-red-100 text-red-800" },
-  { value: "作物管理", label: "作物管理", color: "bg-green-100 text-green-800" },
-  { value: "环境参数", label: "环境参数", color: "bg-blue-100 text-blue-800" },
-  { value: "灌溉管理", label: "灌溉管理", color: "bg-cyan-100 text-cyan-800" },
-  { value: "土壤管理", label: "土壤管理", color: "bg-amber-100 text-amber-800" },
-  { value: "其他", label: "其他", color: "bg-gray-100 text-gray-800" },
+  { value: "病虫害防治", label: "病虫害防治", color: "bg-rose-50 text-rose-600 border-rose-200" },
+  { value: "作物管理", label: "作物管理", color: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+  { value: "环境参数", label: "环境参数", color: "bg-sky-50 text-sky-600 border-sky-200" },
+  { value: "灌溉管理", label: "灌溉管理", color: "bg-teal-50 text-teal-600 border-teal-200" },
+  { value: "土壤管理", label: "土壤管理", color: "bg-amber-50 text-amber-600 border-amber-200" },
+  { value: "其他", label: "其他", color: "bg-slate-50 text-slate-600 border-slate-200" },
 ]
 
 const categoryColors: Record<string, string> = {
-  '病虫害防治': 'from-red-500 to-red-600',
-  '作物管理': 'from-green-500 to-green-600',
-  '环境参数': 'from-blue-500 to-blue-600',
-  '灌溉管理': 'from-cyan-500 to-cyan-600',
-  '土壤管理': 'from-amber-500 to-amber-600',
-  '其他': 'from-gray-500 to-gray-600',
+  '病虫害防治': 'from-rose-400/80 to-rose-500/80',
+  '作物管理': 'from-emerald-400/80 to-emerald-500/80',
+  '环境参数': 'from-sky-400/80 to-sky-500/80',
+  '灌溉管理': 'from-teal-400/80 to-teal-500/80',
+  '土壤管理': 'from-amber-400/80 to-amber-500/80',
+  '其他': 'from-slate-400/80 to-slate-500/80',
 }
 
 const statusColors: Record<string, string> = {
-  draft: "bg-yellow-100 text-yellow-800",
-  published: "bg-green-100 text-green-800",
-  archived: "bg-gray-100 text-gray-800",
+  draft: "bg-amber-50 text-amber-600 border-amber-200",
+  published: "bg-emerald-50 text-emerald-600 border-emerald-200",
+  archived: "bg-slate-50 text-slate-500 border-slate-200",
 }
 
 export default function KnowledgePage() {
@@ -332,24 +332,24 @@ export default function KnowledgePage() {
                     onClick={() => setViewingItem(item)}
                   >
                     {/* 书本封面 */}
-                    <div className={`relative h-48 rounded-lg bg-gradient-to-br ${getCategoryColor(item.category)} p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}>
+                    <div className={`relative h-44 rounded-lg bg-gradient-to-br ${getCategoryColor(item.category)} p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}>
                       {/* 书脊效果 */}
-                      <div className="absolute left-0 top-0 bottom-0 w-3 bg-black/10 rounded-l-lg" />
+                      <div className="absolute left-0 top-0 bottom-0 w-2 bg-black/5 rounded-l-lg" />
 
                       {/* 内容 */}
-                      <div className="relative h-full flex flex-col justify-between text-white">
+                      <div className="relative h-full flex flex-col justify-between text-white/90">
                         <div>
-                          <Badge className="bg-white/20 text-white border-0 mb-2">
+                          <Badge className="bg-white/15 text-white/80 border-0 text-xs mb-2">
                             {item.category}
                           </Badge>
-                          <h3 className="font-bold text-lg line-clamp-2">{item.title}</h3>
+                          <h3 className="font-semibold text-base line-clamp-2 drop-shadow-sm">{item.title}</h3>
                         </div>
 
                         <div className="flex items-center justify-between">
-                          <span className="text-xs opacity-75">
+                          <span className="text-xs opacity-60">
                             {new Date(item.updated_at).toLocaleDateString('zh-CN')}
                           </span>
-                          <ChevronRight className="h-5 w-5 opacity-75 group-hover:translate-x-1 transition-transform" />
+                          <ChevronRight className="h-4 w-4 opacity-50 group-hover:translate-x-1 transition-transform" />
                         </div>
                       </div>
 
