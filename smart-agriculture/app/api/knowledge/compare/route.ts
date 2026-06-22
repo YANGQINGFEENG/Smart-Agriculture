@@ -97,10 +97,13 @@ function compareKnowledge(item1: KnowledgeItem, item2: KnowledgeItem) {
   // 3. 共同关键词
   const commonKeywords = findCommonKeywords(item1.content, item2.content)
 
-  // 4. 综合相似度
+  // 4. 查找重复文字片段
+  const overlappingSegments = findOverlappingSegments(item1.content, item2.content)
+
+  // 5. 综合相似度
   const similarity = Math.round((titleSimilarity * 0.4 + contentSimilarity * 0.6) * 100)
 
-  // 5. 判断关系类型
+  // 6. 判断关系类型
   let relationType = 'unrelated'
   let suggestion = '可以独立保留'
 
@@ -118,20 +121,92 @@ function compareKnowledge(item1: KnowledgeItem, item2: KnowledgeItem) {
     suggestion = '有一定关联，建议添加关联链接'
   }
 
-  // 6. 检查分类是否相同
+  // 7. 检查分类是否相同
   const sameCategory = item1.category === item2.category
 
   return {
-    item1: { id: item1.id, title: item1.title, category: item1.category },
-    item2: { id: item2.id, title: item2.title, category: item2.category },
+    item1: { id: item1.id, title: item1.title, category: item1.category, content: item1.content },
+    item2: { id: item2.id, title: item2.title, category: item2.category, content: item2.content },
     similarity,
     title_similarity: Math.round(titleSimilarity * 100),
     content_similarity: Math.round(contentSimilarity * 100),
     common_keywords: commonKeywords.slice(0, 5),
+    overlapping_segments: overlappingSegments,
     relation_type: relationType,
     suggestion,
     same_category: sameCategory,
   }
+}
+
+/**
+ * 查找重复文字片段
+ * 返回两个文本中连续重复的片段
+ */
+function findOverlappingSegments(text1: string, text2: string): Array<{ text: string; positions: { text1: number; text2: number } }> {
+  const segments: Array<{ text: string; positions: { text1: number; text2: number } }> = []
+
+  // 清理文本
+  const clean1 = text1.replace(/\s+/g, '')
+  const clean2 = text2.replace(/\s+/g, '')
+
+  // 查找连续重复的字符（至少6个字符）
+  const minSegmentLength = 4
+
+  for (let i = 0; i < clean1.length - minSegmentLength; i++) {
+    for (let len = minSegmentLength; len <= Math.min(50, clean1.length - i); len++) {
+      const segment = clean1.substring(i, i + len)
+
+      // 在第二个文本中查找
+      const pos2 = clean2.indexOf(segment)
+      if (pos2 !== -1) {
+        // 检查是否已被更长的片段包含
+        const isContained = segments.some(s =>
+          s.text.includes(segment) &&
+          Math.abs(s.positions.text1 - i) < segment.length
+        )
+
+        if (!isContained) {
+          // 尝试扩展片段
+          let extendedLen = len
+          while (
+            i + extendedLen < clean1.length &&
+            pos2 + extendedLen < clean2.length &&
+            clean1[i + extendedLen] === clean2[pos2 + extendedLen] &&
+            extendedLen < 100
+          ) {
+            extendedLen++
+          }
+
+          const finalSegment = clean1.substring(i, i + extendedLen)
+          if (finalSegment.length >= minSegmentLength) {
+            // 找到在原始文本中的位置
+            const origPos1 = text1.indexOf(finalSegment.replace(/\s+/g, ''))
+            const origPos2 = text2.indexOf(finalSegment.replace(/\s+/g, ''))
+
+            segments.push({
+              text: finalSegment,
+              positions: {
+                text1: origPos1 !== -1 ? origPos1 : i,
+                text2: origPos2 !== -1 ? origPos2 : pos2,
+              }
+            })
+          }
+
+          // 跳过已处理的部分
+          i += extendedLen - 1
+          break
+        }
+      }
+    }
+  }
+
+  // 去重并按长度排序
+  const uniqueSegments = segments
+    .filter((s, idx, arr) => arr.findIndex(other => other.text === s.text) === idx)
+    .sort((a, b) => b.text.length - a.text.length)
+    .slice(0, 10)
+
+  return uniqueSegments
 }
 
 /**

@@ -67,12 +67,13 @@ interface SmartAddResult {
 interface CompareResult {
   items: KnowledgeItem[]
   comparisons: Array<{
-    item1: { id: number; title: string; category: string }
-    item2: { id: number; title: string; category: string }
+    item1: { id: number; title: string; category: string; content: string }
+    item2: { id: number; title: string; category: string; content: string }
     similarity: number
     title_similarity: number
     content_similarity: number
     common_keywords: string[]
+    overlapping_segments: Array<{ text: string; positions: { text1: number; text2: number } }>
     relation_type: string
     suggestion: string
     same_category: boolean
@@ -577,6 +578,7 @@ export default function KnowledgePage() {
                 <h3 className="font-medium">详细对比</h3>
                 {compareResult.comparisons.map((comp, i) => (
                   <div key={i} className="border rounded-lg overflow-hidden">
+                    {/* 标题对比 */}
                     <div className="grid grid-cols-2 divide-x">
                       <div className="p-4">
                         <div className="flex items-center gap-2 mb-2">
@@ -591,6 +593,8 @@ export default function KnowledgePage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* 相似度统计 */}
                     <div className="bg-muted/30 px-4 py-3 border-t">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 text-sm">
@@ -610,6 +614,31 @@ export default function KnowledgePage() {
                         </div>
                       )}
                     </div>
+
+                    {/* 重复文字高亮显示 */}
+                    {comp.overlapping_segments.length > 0 && (
+                      <div className="border-t">
+                        <div className="px-4 py-2 bg-amber-50 border-b flex items-center gap-2">
+                          <span className="text-sm font-medium text-amber-700">
+                            📝 重复文字（{comp.overlapping_segments.length}处）
+                          </span>
+                        </div>
+                        <div className="divide-y">
+                          {comp.overlapping_segments.slice(0, 5).map((segment, j) => (
+                            <div key={j} className="grid grid-cols-2 divide-x text-xs">
+                              <div className="p-3">
+                                <div className="text-muted-foreground mb-1">知识1：</div>
+                                <HighlightedText text={comp.item1.content} highlight={segment.text} />
+                              </div>
+                              <div className="p-3">
+                                <div className="text-muted-foreground mb-1">知识2：</div>
+                                <HighlightedText text={comp.item2.content} highlight={segment.text} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -721,5 +750,62 @@ export default function KnowledgePage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+/**
+ * 高亮显示重复文字组件
+ */
+function HighlightedText({ text, highlight }: { text: string; highlight: string }) {
+  if (!highlight || highlight.length < 4) {
+    return <span className="text-gray-700 line-clamp-4">{text}</span>
+  }
+
+  // 清理高亮文本用于匹配
+  const cleanHighlight = highlight.replace(/\s+/g, '')
+
+  // 找到高亮文本在原文中的位置
+  const cleanText = text.replace(/\s+/g, '')
+  const pos = cleanText.indexOf(cleanHighlight)
+
+  if (pos === -1) {
+    return <span className="text-gray-700 line-clamp-4">{text}</span>
+  }
+
+  // 计算在原始文本中的大致位置（考虑空格）
+  let origStart = 0
+  let cleanCount = 0
+  for (let i = 0; i < text.length; i++) {
+    if (cleanCount === pos) {
+      origStart = i
+      break
+    }
+    if (/\S/.test(text[i])) cleanCount++
+  }
+
+  // 找到结束位置
+  let origEnd = origStart
+  cleanCount = 0
+  for (let i = origStart; i < text.length; i++) {
+    if (cleanCount >= cleanHighlight.length) {
+      origEnd = i
+      break
+    }
+    if (/\S/.test(text[i])) cleanCount++
+  }
+  if (cleanCount >= cleanHighlight.length) origEnd = text.length
+
+  const before = text.substring(0, origStart)
+  const highlighted = text.substring(origStart, origEnd)
+  const after = text.substring(origEnd)
+
+  return (
+    <span className="text-gray-700">
+      {before.length > 50 && <span>...{before.slice(-50)}</span>}
+      {before.length <= 50 && before}
+      <mark className="bg-yellow-200 text-yellow-900 px-0.5 rounded">{highlighted}</mark>
+      {after.length > 50 && <span>{after.slice(0, 50)}...</span>}
+      {after.length <= 50 && after}
+    </span>
   )
 }
