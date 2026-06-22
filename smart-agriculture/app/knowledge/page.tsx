@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Header } from "@/components/dashboard/header"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -26,7 +25,6 @@ import {
   RefreshCw,
   Plus,
   Search,
-  FileText,
   Edit,
   Trash2,
   Loader2,
@@ -36,6 +34,10 @@ import {
   Check,
   BookOpen,
   ChevronRight,
+  GitCompare,
+  Merge,
+  Link,
+  X,
 } from "lucide-react"
 
 interface KnowledgeItem {
@@ -51,19 +53,8 @@ interface KnowledgeItem {
 }
 
 interface SmartAddItem {
-  structured: {
-    title: string
-    content: string
-    category: string
-    tags: string
-  }
-  conflicts: Array<{
-    id: number
-    title: string
-    similarity: number
-    type: string
-    suggestion: string
-  }>
+  structured: { title: string; content: string; category: string; tags: string }
+  conflicts: Array<{ id: number; title: string; similarity: number; type: string; suggestion: string; existing_content?: string }>
   has_conflicts: boolean
 }
 
@@ -71,6 +62,23 @@ interface SmartAddResult {
   items: SmartAddItem[]
   total: number
   has_any_conflicts: boolean
+}
+
+interface CompareResult {
+  items: KnowledgeItem[]
+  comparisons: Array<{
+    item1: { id: number; title: string; category: string }
+    item2: { id: number; title: string; category: string }
+    similarity: number
+    title_similarity: number
+    content_similarity: number
+    common_keywords: string[]
+    relation_type: string
+    suggestion: string
+    same_category: boolean
+  }>
+  stats: { total_pairs: number; high_overlap: number; medium_overlap: number; low_overlap: number }
+  merge_suggestions: any[]
 }
 
 const categoryOptions = [
@@ -97,12 +105,32 @@ const statusColors: Record<string, string> = {
   archived: "bg-slate-50 text-slate-500 border-slate-200",
 }
 
+const relationColors: Record<string, string> = {
+  near_duplicate: "bg-red-100 text-red-700",
+  high_overlap: "bg-orange-100 text-orange-700",
+  related: "bg-yellow-100 text-yellow-700",
+  loosely_related: "bg-blue-100 text-blue-700",
+  unrelated: "bg-gray-100 text-gray-700",
+}
+
+const relationLabels: Record<string, string> = {
+  near_duplicate: "几乎重复",
+  high_overlap: "高度重叠",
+  related: "相关",
+  loosely_related: "弱相关",
+  unrelated: "无关联",
+}
+
 export default function KnowledgePage() {
   const [knowledgeList, setKnowledgeList] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState<string>("all")
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
+
+  // 多选状态
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [compareMode, setCompareMode] = useState(false)
 
   // 智能添加状态
   const [showSmartAdd, setShowSmartAdd] = useState(false)
@@ -112,8 +140,13 @@ export default function KnowledgePage() {
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 查看详情状态
-  const [viewingItem, setViewingItem] = useState<KnowledgeItem | null>(null)
+  // 编辑状态
+  const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null)
+  const [editForm, setEditForm] = useState({ title: "", content: "", category: "", tags: "" })
+
+  // 对比结果状态
+  const [compareResult, setCompareResult] = useState<CompareResult | null>(null)
+  const [comparing, setComparing] = useState(false)
 
   const fetchKnowledge = async (page = 1) => {
     setLoading(true)
@@ -123,7 +156,6 @@ export default function KnowledgePage() {
       params.set('pageSize', pagination.pageSize.toString())
       if (filterCategory !== 'all') params.set('category', filterCategory)
       if (searchQuery) params.set('search', searchQuery)
-
       const response = await fetch(`/api/knowledge?${params}`)
       const result = await response.json()
       if (result.success) {
@@ -137,11 +169,89 @@ export default function KnowledgePage() {
     }
   }
 
-  useEffect(() => {
-    fetchKnowledge(1)
-  }, [filterCategory])
+  useEffect(() => { fetchKnowledge(1) }, [filterCategory])
 
-  const handleSearch = () => fetchKnowledge(1)
+  // 编辑功能
+  const handleEdit = (item: KnowledgeItem) => {
+    setEditingItem(item)
+    setEditForm({
+      title: item.title,
+      content: item.content,
+      category: item.category,
+      tags: item.tags || "",
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return
+    try {
+      const response = await fetch(`/api/knowledge/${editingItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (response.ok) {
+        setEditingItem(null)
+        fetchKnowledge(pagination.page)
+      }
+    } catch (error) {
+      console.error("保存失败:", error)
+    }
+  }
+
+  // 删除功能
+  const handleDelete = async (id: number) => {
+    if (!confirm("确定要删除这条知识吗？")) return
+    try {
+      const response = await fetch(`/api/knowledge/${id}`, { method: 'DELETE' })
+      if (response.ok) fetchKnowledge(pagination.page)
+    } catch (error) {
+      console.error("删除失败:", error)
+    }
+  }
+
+  // 多选功能
+  const toggleSelect = (id: number) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const selectAll = () => {
+    if (selectedIds.size === knowledgeList.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(knowledgeList.map(i => i.id)))
+    }
+  }
+
+  // 对比功能
+  const handleCompare = async () => {
+    if (selectedIds.size < 2) {
+      alert("请选择至少2条知识进行对比")
+      return
+    }
+    setComparing(true)
+    try {
+      const response = await fetch('/api/knowledge/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      const result = await response.json()
+      if (result.success) {
+        setCompareResult(result.data)
+      }
+    } catch (error) {
+      console.error("对比失败:", error)
+    } finally {
+      setComparing(false)
+    }
+  }
 
   // 智能添加
   const handleSmartAdd = async () => {
@@ -156,7 +266,6 @@ export default function KnowledgePage() {
       const result = await response.json()
       if (result.success) {
         setSmartAddResult(result.data)
-        // 默认全选
         setSelectedItems(new Set(result.data.items.map((_: any, i: number) => i)))
       }
     } catch (error) {
@@ -166,28 +275,21 @@ export default function KnowledgePage() {
     }
   }
 
-  // 文件上传
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = async (event) => {
-      const text = event.target?.result as string
-      setRawText(text)
-    }
+    reader.onload = (event) => { setRawText(event.target?.result as string) }
     reader.readAsText(file)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // 保存选中的知识
   const handleSaveSelected = async () => {
     if (!smartAddResult) return
     let savedCount = 0
-
     for (const index of selectedItems) {
       const item = smartAddResult.items[index]
       if (!item) continue
-
       try {
         const response = await fetch('/api/knowledge', {
           method: 'POST',
@@ -206,7 +308,6 @@ export default function KnowledgePage() {
         console.error("保存失败:", error)
       }
     }
-
     if (savedCount > 0) {
       setShowSmartAdd(false)
       setSmartAddResult(null)
@@ -215,38 +316,14 @@ export default function KnowledgePage() {
     }
   }
 
-  // 删除知识
-  const handleDelete = async (id: number) => {
-    if (!confirm("确定要删除这条知识吗？")) return
-    try {
-      const response = await fetch(`/api/knowledge/${id}`, { method: 'DELETE' })
-      if (response.ok) fetchKnowledge(pagination.page)
-    } catch (error) {
-      console.error("删除失败:", error)
-    }
-  }
-
-  // 切换选中状态
   const toggleItemSelection = (index: number) => {
     const newSelected = new Set(selectedItems)
-    if (newSelected.has(index)) {
-      newSelected.delete(index)
-    } else {
-      newSelected.add(index)
-    }
+    if (newSelected.has(index)) { newSelected.delete(index) } else { newSelected.add(index) }
     setSelectedItems(newSelected)
   }
 
-  // 获取分类颜色
-  const getCategoryColor = (category: string) => {
-    return categoryColors[category] || 'from-gray-500 to-gray-600'
-  }
-
-  // 获取分类标签颜色
-  const getCategoryBadgeColor = (category: string) => {
-    const found = categoryOptions.find(c => c.value === category)
-    return found?.color || 'bg-gray-100 text-gray-800'
-  }
+  const getCategoryColor = (category: string) => categoryColors[category] || 'from-slate-400/80 to-slate-500/80'
+  const getCategoryBadgeColor = (category: string) => categoryOptions.find(c => c.value === category)?.color || 'bg-slate-50 text-slate-600'
 
   return (
     <div className="flex h-screen bg-background">
@@ -260,24 +337,41 @@ export default function KnowledgePage() {
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* 标题和操作按钮 */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2">
                   <BookOpen className="h-6 w-6" />
                   知识库
                 </h1>
-                <p className="text-muted-foreground">共 {pagination.total} 条知识</p>
+                <p className="text-muted-foreground">
+                  共 {pagination.total} 条知识
+                  {selectedIds.size > 0 && ` · 已选 ${selectedIds.size} 条`}
+                </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button variant="outline" size="sm" onClick={() => fetchKnowledge(pagination.page)}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
+                  <RefreshCw className="h-4 w-4 mr-1" />
                   刷新
                 </Button>
+                <Button
+                  variant={compareMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setCompareMode(!compareMode); setSelectedIds(new Set()); setCompareResult(null) }}
+                >
+                  <GitCompare className="h-4 w-4 mr-1" />
+                  {compareMode ? "退出对比" : "对比模式"}
+                </Button>
+                {compareMode && selectedIds.size >= 2 && (
+                  <Button size="sm" onClick={handleCompare} disabled={comparing}>
+                    {comparing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <GitCompare className="h-4 w-4 mr-1" />}
+                    开始对比 ({selectedIds.size})
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   onClick={() => { setShowSmartAdd(true); setSmartAddResult(null); setRawText(""); setSelectedItems(new Set()) }}
                 >
-                  <Sparkles className="h-4 w-4 mr-2" />
+                  <Sparkles className="h-4 w-4 mr-1" />
                   智能添加
                 </Button>
               </div>
@@ -287,13 +381,8 @@ export default function KnowledgePage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索知识..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  className="pl-10"
-                />
+                <Input placeholder="搜索知识..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchKnowledge(1)} className="pl-10" />
               </div>
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger className="w-[180px]">
@@ -306,11 +395,19 @@ export default function KnowledgePage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={handleSearch}>
-                <Search className="h-4 w-4 mr-2" />
-                搜索
-              </Button>
             </div>
+
+            {/* 对比模式提示 */}
+            {compareMode && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                <span className="text-sm text-blue-700">
+                  对比模式：点击书本选择要对比的知识（至少2条）
+                </span>
+                <Button variant="ghost" size="sm" onClick={selectAll}>
+                  {selectedIds.size === knowledgeList.length ? "取消全选" : "全选"}
+                </Button>
+              </div>
+            )}
 
             {/* 书本式知识列表 */}
             {loading ? (
@@ -326,50 +423,189 @@ export default function KnowledgePage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {knowledgeList.map((item) => (
-                  <div
-                    key={item.id}
-                    className="group cursor-pointer"
-                    onClick={() => setViewingItem(item)}
-                  >
-                    {/* 书本封面 */}
-                    <div className={`relative h-44 rounded-lg bg-gradient-to-br ${getCategoryColor(item.category)} p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}>
-                      {/* 书脊效果 */}
+                  <div key={item.id} className="group cursor-pointer" onClick={() => {
+                    if (compareMode) { toggleSelect(item.id) } else { handleEdit(item) }
+                  }}>
+                    <div className={`relative h-44 rounded-lg bg-gradient-to-br ${getCategoryColor(item.category)} p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 ${compareMode && selectedIds.has(item.id) ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
                       <div className="absolute left-0 top-0 bottom-0 w-2 bg-black/5 rounded-l-lg" />
-
-                      {/* 内容 */}
                       <div className="relative h-full flex flex-col justify-between text-white/90">
                         <div>
-                          <Badge className="bg-white/15 text-white/80 border-0 text-xs mb-2">
-                            {item.category}
-                          </Badge>
+                          <Badge className="bg-white/15 text-white/80 border-0 text-xs mb-2">{item.category}</Badge>
                           <h3 className="font-semibold text-base line-clamp-2 drop-shadow-sm">{item.title}</h3>
                         </div>
-
                         <div className="flex items-center justify-between">
-                          <span className="text-xs opacity-60">
-                            {new Date(item.updated_at).toLocaleDateString('zh-CN')}
-                          </span>
-                          <ChevronRight className="h-4 w-4 opacity-50 group-hover:translate-x-1 transition-transform" />
+                          <span className="text-xs opacity-60">{new Date(item.updated_at).toLocaleDateString('zh-CN')}</span>
+                          {compareMode ? (
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedIds.has(item.id) ? 'bg-white border-white' : 'border-white/50'}`}>
+                              {selectedIds.has(item.id) && <Check className="h-3 w-3 text-primary" />}
+                            </div>
+                          ) : (
+                            <ChevronRight className="h-4 w-4 opacity-50 group-hover:translate-x-1 transition-transform" />
+                          )}
                         </div>
                       </div>
-
-                      {/* 状态标签 */}
                       <div className="absolute top-2 right-2">
                         <Badge className={`${statusColors[item.status]} text-xs`}>
                           {item.status === 'draft' ? '草稿' : item.status === 'published' ? '已发布' : '归档'}
                         </Badge>
                       </div>
                     </div>
-
-                    {/* 书本底部 */}
                     <div className="mt-2 px-1">
                       <p className="text-sm text-muted-foreground line-clamp-2">{item.content}</p>
-                      {item.tags && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {item.tags.split(',').slice(0, 3).map((tag, i) => (
-                            <Badge key={i} variant="outline" className="text-xs">
-                              {tag.trim()}
-                            </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pagination.totalPages > 1 && (
+              <div className="flex justify-center gap-2 mt-6">
+                <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => fetchKnowledge(pagination.page - 1)}>上一页</Button>
+                <span className="flex items-center px-4 text-sm text-muted-foreground">第 {pagination.page} / {pagination.totalPages} 页</span>
+                <Button variant="outline" size="sm" disabled={pagination.page >= pagination.totalPages} onClick={() => fetchKnowledge(pagination.page + 1)}>下一页</Button>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* 编辑对话框 */}
+      <Dialog open={!!editingItem} onOpenChange={() => setEditingItem(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5" />
+              编辑知识
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">标题</label>
+              <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">分类</label>
+              <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">内容</label>
+              <Textarea value={editForm.content} onChange={(e) => setEditForm({ ...editForm, content: e.target.value })} rows={10} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">标签（逗号分隔）</label>
+              <Input value={editForm.tags} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} placeholder="番茄,晚疫病" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingItem(null)}>取消</Button>
+            <Button onClick={handleSaveEdit}>
+              <Check className="h-4 w-4 mr-1" />
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 对比结果对话框 */}
+      <Dialog open={!!compareResult} onOpenChange={() => setCompareResult(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCompare className="h-5 w-5" />
+              知识对比分析
+            </DialogTitle>
+          </DialogHeader>
+
+          {compareResult && (
+            <div className="space-y-6">
+              {/* 统计概览 */}
+              <div className="grid grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-blue-600">{compareResult.stats.total_pairs}</div>
+                  <div className="text-xs text-blue-500">对比组数</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-red-600">{compareResult.stats.high_overlap}</div>
+                  <div className="text-xs text-red-500">高度重叠</div>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-yellow-600">{compareResult.stats.medium_overlap}</div>
+                  <div className="text-xs text-yellow-500">中度重叠</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-green-600">{compareResult.stats.low_overlap}</div>
+                  <div className="text-xs text-green-500">低重叠</div>
+                </div>
+              </div>
+
+              {/* 合并建议 */}
+              {compareResult.merge_suggestions.length > 0 && (
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-medium mb-3 flex items-center gap-2">
+                    <Merge className="h-4 w-4" />
+                    智能建议
+                  </h3>
+                  {compareResult.merge_suggestions.map((suggestion, i) => (
+                    <div key={i} className="mb-3 p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        {suggestion.type === 'merge' ? (
+                          <Badge className="bg-red-100 text-red-700">建议合并</Badge>
+                        ) : (
+                          <Badge className="bg-blue-100 text-blue-700">建议关联</Badge>
+                        )}
+                        <span className="text-sm">{suggestion.reason}</span>
+                      </div>
+                      {suggestion.items && (
+                        <div className="text-xs text-muted-foreground">
+                          涉及：{suggestion.items.map((item: any) => item.title).join(' ↔ ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 详细对比结果 */}
+              <div className="space-y-4">
+                <h3 className="font-medium">详细对比</h3>
+                {compareResult.comparisons.map((comp, i) => (
+                  <div key={i} className="border rounded-lg overflow-hidden">
+                    <div className="grid grid-cols-2 divide-x">
+                      <div className="p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={getCategoryBadgeColor(comp.item1.category)}>{comp.item1.category}</Badge>
+                          <span className="font-medium text-sm">{comp.item1.title}</span>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={getCategoryBadgeColor(comp.item2.category)}>{comp.item2.category}</Badge>
+                          <span className="font-medium text-sm">{comp.item2.title}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-muted/30 px-4 py-3 border-t">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-sm">
+                          <span>相似度：<strong className={comp.similarity > 60 ? 'text-red-600' : comp.similarity > 30 ? 'text-yellow-600' : 'text-green-600'}>{comp.similarity}%</strong></span>
+                          <span className="text-muted-foreground">标题: {comp.title_similarity}%</span>
+                          <span className="text-muted-foreground">内容: {comp.content_similarity}%</span>
+                          <Badge className={relationColors[comp.relation_type]}>{relationLabels[comp.relation_type]}</Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{comp.suggestion}</span>
+                      </div>
+                      {comp.common_keywords.length > 0 && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>共同关键词：</span>
+                          {comp.common_keywords.map((kw, j) => (
+                            <Badge key={j} variant="outline" className="text-xs">{kw}</Badge>
                           ))}
                         </div>
                       )}
@@ -377,35 +613,14 @@ export default function KnowledgePage() {
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* 分页 */}
-            {pagination.totalPages > 1 && (
-              <div className="flex justify-center gap-2 mt-6">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pagination.page <= 1}
-                  onClick={() => fetchKnowledge(pagination.page - 1)}
-                >
-                  上一页
-                </Button>
-                <span className="flex items-center px-4 text-sm text-muted-foreground">
-                  第 {pagination.page} / {pagination.totalPages} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pagination.page >= pagination.totalPages}
-                  onClick={() => fetchKnowledge(pagination.page + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompareResult(null)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 智能添加对话框 */}
       <Dialog open={showSmartAdd} onOpenChange={setShowSmartAdd}>
@@ -420,12 +635,8 @@ export default function KnowledgePage() {
           {!smartAddResult ? (
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">
-                  粘贴文字内容（支持多条知识，用空行分隔）
-                </label>
-                <Textarea
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
+                <label className="text-sm font-medium mb-2 block">粘贴文字内容（支持多条知识，用空行分隔）</label>
+                <Textarea value={rawText} onChange={(e) => setRawText(e.target.value)}
                   placeholder={`示例：
 
 番茄晚疫病防治
@@ -433,110 +644,56 @@ export default function KnowledgePage() {
 防治：用甲霜灵喷雾
 
 番茄早疫病症状
-叶片出现褐色圆形斑点，有同心轮纹
-用代森锰锌防治
-
-也可以上传 .md 或 .txt 文件`}
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  提示：用空行分隔不同知识点，系统会自动拆分
-                </p>
+叶片出现褐色圆形斑点，有同心轮纹`}
+                  rows={12} className="font-mono text-sm" />
+                <p className="text-xs text-muted-foreground mt-1">提示：用空行分隔不同知识点，系统会自动拆分</p>
               </div>
-
               <div className="flex items-center gap-4">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".md,.txt,.text"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept=".md,.txt,.text" onChange={handleFileUpload} className="hidden" />
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  上传文件
+                  <Upload className="h-4 w-4 mr-1" />上传文件
                 </Button>
                 <div className="flex-1" />
                 <Button onClick={handleSmartAdd} disabled={!rawText.trim() || smartAddLoading}>
-                  {smartAddLoading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
-                  )}
+                  {smartAddLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
                   智能识别
                 </Button>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* 冲突提示 */}
               {smartAddResult.has_any_conflicts && (
-                <div className="border border-orange-200 rounded-lg p-4 bg-orange-50">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-orange-600" />
-                    <span className="font-medium text-orange-800">
-                      部分知识存在冲突，请检查
-                    </span>
-                  </div>
+                <div className="border border-orange-200 rounded-lg p-3 bg-orange-50 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <span className="text-sm text-orange-700">部分知识存在冲突，请检查</span>
                 </div>
               )}
-
-              {/* 拆分结果 */}
-              <div className="text-sm text-muted-foreground mb-2">
-                识别到 {smartAddResult.total} 条知识，请选择要保存的内容
-              </div>
-
+              <div className="text-sm text-muted-foreground">识别到 {smartAddResult.total} 条知识，请选择要保存的内容</div>
               <div className="space-y-3 max-h-[50vh] overflow-y-auto">
                 {smartAddResult.items.map((item, index) => (
-                  <div
-                    key={index}
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                      selectedItems.has(index)
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                    onClick={() => toggleItemSelection(index)}
-                  >
+                  <div key={index} className={`border rounded-lg p-4 cursor-pointer transition-colors ${selectedItems.has(index) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
+                    onClick={() => toggleItemSelection(index)}>
                     <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.has(index)}
-                        onChange={() => toggleItemSelection(index)}
-                        className="mt-1"
-                      />
+                      <input type="checkbox" checked={selectedItems.has(index)} onChange={() => toggleItemSelection(index)} className="mt-1" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-medium">{item.structured.title}</h4>
-                          <Badge className={getCategoryBadgeColor(item.structured.category)}>
-                            {item.structured.category}
-                          </Badge>
-                          {item.has_conflicts && (
-                            <Badge className="bg-orange-100 text-orange-800">
-                              有冲突
-                            </Badge>
-                          )}
+                          <Badge className={getCategoryBadgeColor(item.structured.category)}>{item.structured.category}</Badge>
+                          {item.has_conflicts && <Badge className="bg-orange-100 text-orange-800">有冲突</Badge>}
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {item.structured.content}
-                        </p>
-                        {item.structured.tags && (
-                          <div className="flex gap-1 mt-1">
-                            {item.structured.tags.split(',').map((tag, i) => (
-                              <Badge key={i} variant="outline" className="text-xs">
-                                {tag.trim()}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        {/* 冲突详情 */}
+                        <p className="text-sm text-muted-foreground line-clamp-2">{item.structured.content}</p>
                         {item.has_conflicts && (
-                          <div className="mt-2 p-2 bg-orange-50 rounded text-xs">
+                          <div className="mt-2 space-y-2">
                             {item.conflicts.map((c, i) => (
-                              <div key={i} className="flex items-center gap-2">
-                                <span className="text-orange-600">⚠</span>
-                                <span>与"{c.title}"相似 {c.similarity}%</span>
-                                <span className="text-muted-foreground">- {c.suggestion}</span>
+                              <div key={i} className="border border-orange-200 rounded-lg overflow-hidden">
+                                <div className="bg-orange-50 px-3 py-2 flex items-center justify-between">
+                                  <span className="text-xs font-medium text-orange-700">与"{c.title}"相似 {c.similarity}%</span>
+                                  <span className="text-xs text-orange-600">{c.suggestion}</span>
+                                </div>
+                                <div className="grid grid-cols-2 divide-x text-xs">
+                                  <div className="p-2 bg-blue-50/50"><span className="text-blue-600">新内容</span><p className="mt-1 line-clamp-3 text-gray-700">{item.structured.content}</p></div>
+                                  <div className="p-2 bg-gray-50"><span className="text-gray-500">已有知识</span><p className="mt-1 line-clamp-3 text-gray-700">{c.existing_content}</p></div>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -552,69 +709,15 @@ export default function KnowledgePage() {
           <DialogFooter>
             {smartAddResult ? (
               <>
-                <Button variant="outline" onClick={() => setSmartAddResult(null)}>
-                  返回修改
-                </Button>
+                <Button variant="outline" onClick={() => setSmartAddResult(null)}>返回修改</Button>
                 <Button onClick={handleSaveSelected} disabled={selectedItems.size === 0}>
-                  <Check className="h-4 w-4 mr-2" />
-                  保存选中的 {selectedItems.size} 条
+                  <Check className="h-4 w-4 mr-1" />保存选中的 {selectedItems.size} 条
                 </Button>
               </>
             ) : (
-              <Button variant="outline" onClick={() => setShowSmartAdd(false)}>
-                取消
-              </Button>
+              <Button variant="outline" onClick={() => setShowSmartAdd(false)}>取消</Button>
             )}
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 查看详情对话框 */}
-      <Dialog open={!!viewingItem} onOpenChange={() => setViewingItem(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          {viewingItem && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5" />
-                  {viewingItem.title}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Badge className={getCategoryBadgeColor(viewingItem.category)}>
-                    {viewingItem.category}
-                  </Badge>
-                  <Badge className={statusColors[viewingItem.status]}>
-                    {viewingItem.status === 'draft' ? '草稿' : viewingItem.status === 'published' ? '已发布' : '归档'}
-                  </Badge>
-                </div>
-                <div className="prose prose-sm max-w-none">
-                  <p className="whitespace-pre-wrap">{viewingItem.content}</p>
-                </div>
-                {viewingItem.tags && (
-                  <div className="flex flex-wrap gap-1">
-                    {viewingItem.tags.split(',').map((tag, i) => (
-                      <Badge key={i} variant="outline">{tag.trim()}</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="text-xs text-muted-foreground">
-                  更新时间: {new Date(viewingItem.updated_at).toLocaleString('zh-CN')}
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setViewingItem(null)}>关闭</Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => { handleDelete(viewingItem.id); setViewingItem(null) }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  删除
-                </Button>
-              </DialogFooter>
-            </>
-          )}
         </DialogContent>
       </Dialog>
     </div>
