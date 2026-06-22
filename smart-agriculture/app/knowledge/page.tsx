@@ -468,6 +468,16 @@ export default function KnowledgePage() {
                     </div>
                     <div className="mt-2 px-1">
                       <p className="text-sm text-muted-foreground line-clamp-2">{item.content}</p>
+                      {!compareMode && (
+                        <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); handleEdit(item) }}>
+                            <Edit className="h-3 w-3 mr-1" />编辑
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(item.id) }}>
+                            <Trash2 className="h-3 w-3 mr-1" />删除
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
