@@ -39,7 +39,7 @@ const navItems = [
   { id: "ai-video", label: "AI视频检测", icon: Camera, href: "/ai-video" },
   { id: "ai-command", label: "AI文字控制", icon: MessageSquare, href: "/ai-command" },
   { id: "ai-monitor", label: "AI实时监测", icon: Activity, href: "/ai-monitor" },
-  { id: "model-management", label: "模型管理", icon: Layers },
+  { id: "model-management", label: "模型管理", icon: Layers, href: "/model-management" },
   { id: "knowledge", label: "知识库管理", icon: BookOpen, href: "/knowledge" },
   { id: "prompts", label: "提示词模板", icon: FileText, href: "/prompts" },
 ]
