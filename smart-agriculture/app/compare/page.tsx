@@ -112,12 +112,14 @@ export default function ComparePage() {
   const [customEndDate, setCustomEndDate] = useState<Date>()
   const [chartData, setChartData] = useState<SensorDataPoint[]>([])
   const [loading, setLoading] = useState(false)
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [lastUpdate, setLastUpdate] = useState<string>("")
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setCurrentTime(new Date().toLocaleString("zh-CN"))
+    setMounted(true)
+    setLastUpdate(new Date().toLocaleTimeString("zh-CN"))
     const interval = setInterval(() => {
-      setCurrentTime(new Date().toLocaleString("zh-CN"))
+      setLastUpdate(new Date().toLocaleTimeString("zh-CN"))
     }, 1000)
     return () => clearInterval(interval)
   }, [])
@@ -341,7 +343,7 @@ export default function ComparePage() {
       )
 
       setChartData(sortedData)
-      setLastUpdate(new Date())
+      setLastUpdate(new Date().toLocaleTimeString("zh-CN"))
     } catch (error) {
       console.error('获取对比数据失败:', error)
       alert('获取对比数据失败')
@@ -515,7 +517,7 @@ export default function ComparePage() {
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <RefreshCw className="w-3 h-3" />
-                <span>最后更新: {lastUpdate.toLocaleTimeString('zh-CN')}</span>
+                <span>最后更新: {mounted ? lastUpdate : '--:--:--'}</span>
               </div>
             </div>
           </div>
