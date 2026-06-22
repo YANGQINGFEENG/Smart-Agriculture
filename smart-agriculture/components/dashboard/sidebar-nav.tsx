@@ -19,6 +19,8 @@ import {
   MessageSquare,
   Layers,
   Activity,
+  BookOpen,
+  FileText,
 } from "lucide-react"
 
 interface SidebarNavProps {
@@ -32,12 +34,14 @@ const navItems = [
   { id: "analysis", label: "数据分析", icon: BarChart3 },
   { id: "export", label: "数据导出", icon: Download },
   { id: "devices", label: "设备连接", icon: Wifi },
-  { id: "actuators", label: "执行器控制", icon: Power },
-  { id: "compare", label: "数据对比", icon: TrendingUp },
-  { id: "ai-video", label: "AI视频检测", icon: Camera },
-  { id: "ai-command", label: "AI文字控制", icon: MessageSquare },
+  { id: "actuators", label: "执行器控制", icon: Power, href: "/actuators" },
+  { id: "compare", label: "数据对比", icon: TrendingUp, href: "/compare" },
+  { id: "ai-video", label: "AI视频检测", icon: Camera, href: "/ai-video" },
+  { id: "ai-command", label: "AI文字控制", icon: MessageSquare, href: "/ai-command" },
   { id: "ai-monitor", label: "AI实时监测", icon: Activity },
   { id: "model-management", label: "模型管理", icon: Layers },
+  { id: "knowledge", label: "知识库管理", icon: BookOpen, href: "/knowledge" },
+  { id: "prompts", label: "提示词模板", icon: FileText, href: "/prompts" },
 ]
 
 const sensorTypes = [
@@ -68,20 +72,34 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
           <ul className="space-y-1" role="navigation" aria-label="主功能导航">
             {navItems.map((item) => (
               <li key={item.id}>
-                <button
-                  onClick={() => onTabChange(item.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
-                    activeTab === item.id
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                  aria-current={activeTab === item.id ? "page" : undefined}
-                  aria-label={item.label}
-                >
-                  <item.icon className="w-4 h-4" aria-hidden="true" />
-                  {item.label}
-                </button>
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
+                      "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                    aria-label={item.label}
+                  >
+                    <item.icon className="w-4 h-4" aria-hidden="true" />
+                    {item.label}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => onTabChange(item.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
+                      activeTab === item.id
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                    aria-current={activeTab === item.id ? "page" : undefined}
+                    aria-label={item.label}
+                  >
+                    <item.icon className="w-4 h-4" aria-hidden="true" />
+                    {item.label}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
