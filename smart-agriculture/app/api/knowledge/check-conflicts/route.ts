@@ -9,18 +9,9 @@ interface KnowledgeItem extends RowDataPacket {
   tags: string | null
 }
 
-// 中文停用词（常见无意义词）
-const STOP_WORDS = new Set([
-  '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '一个',
-  '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好',
-  '自己', '这', '他', '她', '它', '们', '那', '些', '被', '从', '对', '把', '能',
-  '可以', '这个', '那个', '什么', '怎么', '如何', '为', '而', '与', '及', '等',
-  '但', '或', '如', '若', '则', '因', '所以', '但是', '然后', '因为', '如果',
-])
-
 /**
  * POST /api/knowledge/check-conflicts
- * 冲突检测API - 优化版
+ * 冲突检测 - 内容级别相似度检测
  */
 export async function POST(request: NextRequest) {
   try {
@@ -35,116 +26,72 @@ export async function POST(request: NextRequest) {
     }
 
     const conflicts: any[] = []
+    const searchText = `${title || ''} ${content || ''}`
 
-    // 1. 标题精确匹配 - 最高优先级
-    if (title) {
-      const exactTitleRows = await db.query<KnowledgeItem[]>(
+    // 1. 提取关键短语
+    const keyPhrases = extractKeyPhrases(searchText)
+
+    // 2. 搜索包含关键短语的知识
+    if (keyPhrases.length > 0) {
+      const likeParts: string[] = []
+      const params: any[] = []
+
+      keyPhrases.forEach(phrase => {
+        likeParts.push('title LIKE ?')
+        likeParts.push('content LIKE ?')
+        params.push(`%${phrase}%`, `%${phrase}%`)
+      })
+
+      const whereClause = `status != 'archived' ${exclude_id ? 'AND id != ?' : ''}`
+      if (exclude_id) params.push(exclude_id)
+
+      const rows = await db.query<KnowledgeItem[]>(
         `SELECT id, title, content, category, tags, created_at FROM knowledge_base
-         WHERE title = ? AND status != 'archived' ${exclude_id ? 'AND id != ?' : ''}`,
-        exclude_id ? [title, exclude_id] : [title]
+         WHERE ${whereClause} AND (${likeParts.join(' OR ')})
+         ORDER BY updated_at DESC LIMIT 20`,
+        params
       )
 
-      exactTitleRows.forEach(row => {
-        conflicts.push({
-          id: row.id,
-          title: row.title,
-          category: row.category,
-          similarity: 100,
-          existing_content: row.content.substring(0, 300) + (row.content.length > 300 ? '...' : ''),
-          created_at: row.created_at,
-          type: 'exact_title',
-          suggestion: '标题完全相同，建议合并或更新已有知识',
-        })
+      rows.forEach(row => {
+        if (conflicts.find(c => c.id === row.id)) return
+
+        const similarity = calculateMultiSimilarity(
+          title || '', content || '',
+          row.title, row.content
+        )
+
+        if (similarity.score > 0.25) {
+          conflicts.push({
+            id: row.id,
+            title: row.title,
+            category: row.category,
+            similarity: Math.round(similarity.score * 100),
+            existing_content: row.content.substring(0, 300) + (row.content.length > 300 ? '...' : ''),
+            created_at: row.created_at,
+            type: similarity.type,
+            suggestion: getSuggestion(similarity.type, similarity.score),
+            match_details: similarity.details,
+          })
+        }
       })
     }
 
-    // 2. 标题关键词匹配（提取有意义的关键词）
-    if (title) {
-      const titleKeywords = extractMeaningfulKeywords(title)
-      if (titleKeywords.length > 0) {
-        // 构建查询：标题包含任意关键词
-        const likeParts = titleKeywords.map(() => 'title LIKE ?')
-        const params: any[] = titleKeywords.map(kw => `%${kw}%`)
-
-        const whereClause = `status != 'archived' ${exclude_id ? 'AND id != ?' : ''}`
-        if (exclude_id) params.push(exclude_id)
-
-        const rows = await db.query<KnowledgeItem[]>(
-          `SELECT id, title, content, category, tags, created_at FROM knowledge_base
-           WHERE ${whereClause} AND (${likeParts.join(' OR ')})
-           ORDER BY updated_at DESC LIMIT 10`,
-          params
+    // 3. 同分类统计
+    const sameCategoryCount = category
+      ? await db.query<{ count: number }[]>(
+          `SELECT COUNT(*) as count FROM knowledge_base WHERE category = ? AND status = 'published'`,
+          [category]
         )
-
-        rows.forEach(row => {
-          if (conflicts.find(c => c.id === row.id)) return
-
-          // 计算标题相似度（基于关键词匹配）
-          const titleSimilarity = calculateTitleSimilarity(title, row.title)
-          if (titleSimilarity > 0.5) {
-            conflicts.push({
-              id: row.id,
-              title: row.title,
-              category: row.category,
-              similarity: Math.round(titleSimilarity * 100),
-              existing_content: row.content.substring(0, 300) + (row.content.length > 300 ? '...' : ''),
-              created_at: row.created_at,
-              type: titleSimilarity > 0.8 ? 'high_overlap' : 'medium_overlap',
-              suggestion: titleSimilarity > 0.8
-                ? '高度重叠：建议合并到已有知识'
-                : '中度重叠：建议补充差异化内容',
-            })
-          }
-        })
-      }
-    }
-
-    // 3. 内容关键词匹配（只在标题匹配不多时才检查内容）
-    if (content && conflicts.length < 3) {
-      const contentKeywords = extractMeaningfulKeywords(content)
-      if (contentKeywords.length >= 2) {
-        const likeParts = contentKeywords.slice(0, 5).map(() => 'content LIKE ?')
-        const params: any[] = contentKeywords.slice(0, 5).map(kw => `%${kw}%`)
-
-        const whereClause = `status != 'archived' ${exclude_id ? 'AND id != ?' : ''}`
-        if (exclude_id) params.push(exclude_id)
-
-        const rows = await db.query<KnowledgeItem[]>(
-          `SELECT id, title, content, category, tags, created_at FROM knowledge_base
-           WHERE ${whereClause} AND (${likeParts.join(' OR ')})
-           ORDER BY updated_at DESC LIMIT 5`,
-          params
-        )
-
-        rows.forEach(row => {
-          if (conflicts.find(c => c.id === row.id)) return
-
-          const contentSimilarity = calculateContentSimilarity(content, row.content)
-          if (contentSimilarity > 0.4) {
-            conflicts.push({
-              id: row.id,
-              title: row.title,
-              category: row.category,
-              similarity: Math.round(contentSimilarity * 100),
-              existing_content: row.content.substring(0, 300) + (row.content.length > 300 ? '...' : ''),
-              created_at: row.created_at,
-              type: contentSimilarity > 0.7 ? 'high_overlap' : 'medium_overlap',
-              suggestion: contentSimilarity > 0.7
-                ? '内容高度相似：建议合并'
-                : '内容有部分重叠，可考虑补充差异化内容',
-            })
-          }
-        })
-      }
-    }
+      : [{ count: 0 }]
 
     return NextResponse.json({
       success: true,
       data: {
-        conflicts: conflicts.sort((a, b) => b.similarity - a.similarity),
+        conflicts: conflicts.sort((a, b) => b.similarity - a.similarity).slice(0, 5),
         total_conflicts: conflicts.length,
         has_high_conflicts: conflicts.some(c => c.similarity > 70),
         has_medium_conflicts: conflicts.some(c => c.similarity > 40),
+        same_category_count: sameCategoryCount[0]?.count || 0,
       },
     })
   } catch (error) {
@@ -157,67 +104,97 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 提取有意义的关键词（过滤停用词）
+ * 提取关键短语
  */
-function extractMeaningfulKeywords(text: string): string[] {
-  // 清理文本
-  const cleaned = text.replace(/[，。！？、；：""''（）\[\]【】\(\)《》]/g, ' ')
-
-  // 方法1：按标点和空格分词，保留2字以上的词
-  const words = cleaned.split(/[\s,，.。!！?？;；:：]+/).filter(w => w.length >= 2 && !STOP_WORDS.has(w))
-
-  // 方法2：提取连续2-4字的词组
-  const charCleaned = text.replace(/[，。！？、；：""''（）\[\]【】\s]/g, '')
+function extractKeyPhrases(text: string): string[] {
+  const cleaned = text.replace(/[，。！？、；：""''（）\[\]【】\s]/g, '')
   const phrases: string[] = []
-  for (let i = 0; i < charCleaned.length - 1; i++) {
-    const phrase = charCleaned.substring(i, i + 2)
-    if (!STOP_WORDS.has(phrase) && /[一-龥]/.test(phrase)) {
-      phrases.push(phrase)
+
+  for (let i = 0; i < cleaned.length - 1; i++) {
+    for (let len = 2; len <= 4; len++) {
+      if (i + len <= cleaned.length) {
+        const phrase = cleaned.substring(i, i + len)
+        if (!/^[的了在是我有和就不人都一]/.test(phrase)) {
+          phrases.push(phrase)
+        }
+      }
     }
   }
 
-  // 合并并去重
-  const allKeywords = [...words, ...phrases]
-  const unique = [...new Set(allKeywords)]
-
-  // 过滤掉太常见的词
-  return unique.filter(kw => kw.length >= 2).slice(0, 8)
+  return [...new Set(phrases)].slice(0, 10)
 }
 
 /**
- * 计算标题相似度（基于关键词匹配）
+ * 多维度相似度计算
  */
-function calculateTitleSimilarity(title1: string, title2: string): number {
-  const keywords1 = extractMeaningfulKeywords(title1)
-  const keywords2 = extractMeaningfulKeywords(title2)
+function calculateMultiSimilarity(
+  title1: string, content1: string,
+  title2: string, content2: string
+): { score: number; type: string; details: string[] } {
+  const details: string[] = []
 
-  if (keywords1.length === 0 || keywords2.length === 0) return 0
+  // 标题相似度
+  const titleSim = calculateTextSimilarity(title1, title2)
+  if (titleSim > 0.5) details.push(`标题相似: ${Math.round(titleSim * 100)}%`)
 
-  // 计算关键词匹配率
-  const set2 = new Set(keywords2)
-  const matched = keywords1.filter(kw => set2.has(kw))
-  const matchRate = matched.length / Math.min(keywords1.length, keywords2.length)
+  // 内容关键词重叠
+  const contentSim = calculateKeywordOverlap(content1, content2)
+  if (contentSim > 0.3) details.push(`内容重叠: ${Math.round(contentSim * 100)}%`)
 
-  // 如果标题长度相近且匹配率高，相似度更高
-  const lengthRatio = Math.min(title1.length, title2.length) / Math.max(title1.length, title2.length)
+  // 共同实体（数字、单位）
+  const entitySim = calculateEntityOverlap(
+    title1 + content1,
+    title2 + content2
+  )
+  if (entitySim > 0.3) details.push(`共同数据: ${Math.round(entitySim * 100)}%`)
 
-  return matchRate * 0.7 + lengthRatio * 0.3
+  // 加权总分
+  const score = titleSim * 0.4 + contentSim * 0.4 + entitySim * 0.2
+
+  let type = 'low_overlap'
+  if (score > 0.7) type = 'high_overlap'
+  else if (score > 0.5) type = 'medium_overlap'
+  else if (score > 0.25) type = 'related'
+
+  if (titleSim > 0.8) type = 'similar_title'
+
+  return { score, type, details }
 }
 
-/**
- * 计算内容相似度（基于关键词重叠）
- */
-function calculateContentSimilarity(content1: string, content2: string): number {
-  const keywords1 = extractMeaningfulKeywords(content1)
-  const keywords2 = extractMeaningfulKeywords(content2)
-
-  if (keywords1.length === 0 || keywords2.length === 0) return 0
-
-  const set1 = new Set(keywords1)
-  const set2 = new Set(keywords2)
-
-  const intersection = new Set([...set1].filter(kw => set2.has(kw)))
-  const union = new Set([...set1, ...set2])
-
+function calculateTextSimilarity(text1: string, text2: string): number {
+  const chars1 = new Set(text1.replace(/[，。！？、；：""''（）\s]/g, '').split(''))
+  const chars2 = new Set(text2.replace(/[，。！？、；：""''（）\s]/g, '').split(''))
+  const intersection = new Set([...chars1].filter(c => chars2.has(c)))
+  const union = new Set([...chars1, ...chars2])
   return union.size > 0 ? intersection.size / union.size : 0
+}
+
+function calculateKeywordOverlap(text1: string, text2: string): number {
+  const kw1 = extractKeyPhrases(text1)
+  const kw2 = extractKeyPhrases(text2)
+  const set1 = new Set(kw1)
+  const set2 = new Set(kw2)
+  const intersection = new Set([...set1].filter(k => set2.has(k)))
+  const union = new Set([...set1, ...set2])
+  return union.size > 0 ? intersection.size / union.size : 0
+}
+
+function calculateEntityOverlap(text1: string, text2: string): number {
+  const entityPattern = /\d+[%倍亩斤克升℃°]|\d+[月日天时分]/g
+  const entities1 = new Set(text1.match(entityPattern) || [])
+  const entities2 = new Set(text2.match(entityPattern) || [])
+  if (entities1.size === 0 && entities2.size === 0) return 0
+  const intersection = new Set([...entities1].filter(e => entities2.has(e)))
+  const union = new Set([...entities1, ...entities2])
+  return union.size > 0 ? intersection.size / union.size : 0
+}
+
+function getSuggestion(type: string, score: number): string {
+  switch (type) {
+    case 'similar_title': return '标题高度相似，建议合并'
+    case 'high_overlap': return '内容高度重叠，建议合并'
+    case 'medium_overlap': return '内容有较多重叠，可补充差异化'
+    case 'related': return '内容相关，可独立添加'
+    default: return '可以添加'
+  }
 }

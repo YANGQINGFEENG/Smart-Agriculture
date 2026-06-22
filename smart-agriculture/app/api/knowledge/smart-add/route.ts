@@ -13,10 +13,10 @@ interface KnowledgeItem extends RowDataPacket {
 
 /**
  * POST /api/knowledge/smart-add
- * 智能添加知识 - AI自动整理格式
+ * 智能添加知识 - 支持多条知识自动拆分
  *
  * 输入: raw_text (粘贴的文字或MD内容)
- * 输出: AI整理后的结构化知识 + 冲突检测结果
+ * 输出: 拆分后的多条结构化知识 + 每条的冲突检测结果
  */
 export async function POST(request: NextRequest) {
   try {
@@ -30,129 +30,365 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. 用AI分析和整理内容
-    const aiResult = await analyzeWithAI(raw_text.trim())
+    // 1. 拆分多条知识
+    const knowledgeItems = splitKnowledge(raw_text.trim())
 
-    // 2. 检测知识冲突
-    const conflicts = await detectConflicts(aiResult.title, aiResult.content, aiResult.category)
+    // 2. 对每条知识进行结构化处理和冲突检测
+    const results = await Promise.all(
+      knowledgeItems.map(async (item) => {
+        const structured = structureKnowledge(item)
+        const conflicts = await detectConflicts(
+          structured.title,
+          structured.content,
+          structured.category
+        )
+        return {
+          structured,
+          conflicts,
+          has_conflicts: conflicts.length > 0,
+        }
+      })
+    )
 
     return NextResponse.json({
       success: true,
       data: {
-        structured: aiResult,
-        conflicts,
-        has_conflicts: conflicts.length > 0,
+        items: results,
+        total: results.length,
+        has_any_conflicts: results.some(r => r.has_conflicts),
       },
     })
   } catch (error) {
     console.error('智能添加知识失败:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: '智能处理失败',
-        details: error instanceof Error ? error.message : '未知错误',
-      },
+      { success: false, error: '智能处理失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
     )
   }
 }
 
 /**
- * 用AI分析原始文本，提取结构化知识
+ * 拆分多条知识
+ * 支持按段落、句号、编号列表、分隔符拆分
  */
-async function analyzeWithAI(rawText: string) {
-  // 先尝试AI处理
-  try {
-    const prompt = `分析以下农业文本，返回JSON：{"title":"标题","category":"分类"}
-文本：${rawText.substring(0, 200)}`
+function splitKnowledge(text: string): string[] {
+  // 如果文本很短，当作单条知识
+  if (text.length < 30) {
+    return [text]
+  }
 
-    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'qwen3:1.7b-q4_K_M',
-        prompt,
-        stream: false,
-        options: { temperature: 0.1, num_predict: 256 },
-      }),
+  const items: string[] = []
+
+  // 方法1: 按空行分段
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 10)
+  if (paragraphs.length > 1) {
+    for (const para of paragraphs) {
+      const trimmed = para.trim()
+      if (trimmed.length > 10) {
+        items.push(trimmed)
+      }
+    }
+    if (items.length > 1) return items
+  }
+
+  // 方法2: 按换行分段
+  const lines = text.split('\n').filter(l => l.trim().length > 10)
+  if (lines.length > 1) {
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.length > 10) {
+        items.push(trimmed)
+      }
+    }
+    if (items.length > 1) return items
+  }
+
+  // 方法3: 按句号分段（中文句号）
+  const sentences = text.split(/。/).filter(s => s.trim().length > 10)
+  if (sentences.length > 2) {
+    // 多个句子，尝试合并相关句子
+    let current = ''
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim()
+      if (!trimmed) continue
+
+      // 如果当前句子是新主题的开始
+      if (isNewTopic(trimmed) && current.length > 20) {
+        items.push(current)
+        current = trimmed
+      } else {
+        current = current ? current + '。' + trimmed : trimmed
+      }
+    }
+    if (current) items.push(current)
+    if (items.length > 1) return items
+  }
+
+  // 方法4: 按编号列表拆分
+  const numberedItems = text.split(/\n(?=\d+[.、）)]\s*)/).filter(item => item.trim().length > 10)
+  if (numberedItems.length > 1) {
+    return numberedItems.map(item => item.trim())
+  }
+
+  // 默认返回原文
+  return [text]
+}
+
+/**
+ * 判断是否是新主题的开始
+ */
+function isNewTopic(sentence: string): boolean {
+  // 以特定关键词开头
+  const topicStarters = [
+    /^(穗瘟|叶瘟|苗瘟|稻瘟)/,
+    /^(防治|症状|方法|技术|要点|注意|预防|治疗|管理)/,
+    /^(抽穗|分蘖|苗期|生长期)/,
+    /^[^：:]+[：:]/,  // 包含冒号的标题格式
+  ]
+
+  return topicStarters.some(pattern => pattern.test(sentence))
+}
+
+/**
+ * 结构化单条知识
+ */
+function structureKnowledge(text: string) {
+  // 提取标题
+  const title = extractTitle(text)
+  // 提取内容（去掉标题部分）
+  const content = extractContent(text, title)
+  // 猜测分类
+  const category = guessCategory(text)
+  // 提取标签
+  const tags = extractSimpleTags(text)
+
+  return { title, content, category, tags }
+}
+
+/**
+ * 提取标题
+ */
+function extractTitle(text: string): string {
+  const lines = text.split('\n').filter(l => l.trim())
+
+  if (lines.length > 0) {
+    const firstLine = lines[0].trim()
+
+    // 如果第一行是标题格式（短且不含句号）
+    if (firstLine.length <= 30 && !firstLine.includes('。') && !firstLine.includes('；')) {
+      return firstLine.replace(/[：:].*$/, '').trim()
+    }
+
+    // 取前20个字符
+    return firstLine
+      .substring(0, 20)
+      .replace(/[：:，,。.！!？?；;]/g, '')
+      .trim()
+  }
+
+  return text.substring(0, 20).replace(/[：:，,。.！!？?；;\n]/g, '').trim() || '未命名知识'
+}
+
+/**
+ * 提取内容（去掉标题）
+ */
+function extractContent(text: string, title: string): string {
+  // 如果标题在第一行，去掉标题
+  if (text.startsWith(title)) {
+    return text.substring(title.length).trim()
+  }
+  return text
+}
+
+/**
+ * 检测知识冲突 - 基于内容语义
+ */
+async function detectConflicts(title: string, content: string, category: string) {
+  const conflicts: any[] = []
+  const searchText = `${title} ${content}`
+
+  // 1. 提取关键短语用于搜索
+  const keyPhrases = extractKeyPhrases(searchText)
+
+  // 2. 搜索包含关键短语的知识
+  if (keyPhrases.length > 0) {
+    const likeParts: string[] = []
+    const params: any[] = []
+
+    keyPhrases.forEach(phrase => {
+      likeParts.push('title LIKE ?')
+      likeParts.push('content LIKE ?')
+      params.push(`%${phrase}%`, `%${phrase}%`)
     })
 
-    if (response.ok) {
-      const result = await response.json()
-      const text = result.response || ''
+    const rows = await db.query<KnowledgeItem[]>(
+      `SELECT id, title, content, category, tags FROM knowledge_base
+       WHERE status != 'archived' AND (${likeParts.join(' OR ')})
+       ORDER BY updated_at DESC LIMIT 20`,
+      params
+    )
 
-      // 尝试从响应中提取标题
-      const titleMatch = text.match(/"title"\s*:\s*"([^"]+)"/)
-      const categoryMatch = text.match(/"category"\s*:\s*"([^"]+)"/)
+    rows.forEach(row => {
+      if (conflicts.find(c => c.id === row.id)) return
 
-      if (titleMatch) {
-        return {
-          title: titleMatch[1],
-          content: rawText,
-          category: categoryMatch && isValidCategory(categoryMatch[1]) ? categoryMatch[1] : guessCategory(rawText),
-          tags: extractSimpleTags(rawText),
+      // 计算多维度相似度
+      const similarity = calculateMultiSimilarity(
+        title, content,
+        row.title, row.content
+      )
+
+      if (similarity.score > 0.3) {
+        conflicts.push({
+          id: row.id,
+          title: row.title,
+          category: row.category,
+          similarity: Math.round(similarity.score * 100),
+          existing_content: row.content.substring(0, 300) + (row.content.length > 300 ? '...' : ''),
+          type: similarity.type,
+          suggestion: getSuggestion(similarity.type, similarity.score),
+          match_details: similarity.details,
+        })
+      }
+    })
+  }
+
+  return conflicts.sort((a, b) => b.similarity - a.similarity).slice(0, 5)
+}
+
+/**
+ * 提取关键短语（2-4字的词组）
+ */
+function extractKeyPhrases(text: string): string[] {
+  const cleaned = text.replace(/[，。！？、；：""''（）\[\]【】\s]/g, '')
+  const phrases: string[] = []
+
+  // 提取2-4字的词组
+  for (let i = 0; i < cleaned.length - 1; i++) {
+    for (let len = 2; len <= 4; len++) {
+      if (i + len <= cleaned.length) {
+        const phrase = cleaned.substring(i, i + len)
+        // 过滤常见停用词组合
+        if (!isStopPhrase(phrase)) {
+          phrases.push(phrase)
         }
       }
     }
-  } catch (error) {
-    console.log('AI处理失败，使用规则处理')
   }
 
-  // AI失败，使用规则处理
-  return ruleBasedProcess(rawText)
+  // 去重并返回高频词
+  const unique = [...new Set(phrases)]
+  return unique.slice(0, 10)
 }
 
 /**
- * 基于规则的文本处理
+ * 判断是否是停用词组合
  */
-function ruleBasedProcess(rawText: string) {
-  // 提取标题：第一行或前30个字符
-  const lines = rawText.split('\n').filter(l => l.trim())
-  let title = ''
-
-  // 尝试从第一行提取标题
-  if (lines.length > 0) {
-    const firstLine = lines[0].trim()
-    // 去除标点符号和冒号后面的内容
-    const cleaned = firstLine
-      .replace(/[：:].*$/, '')  // 去除冒号及后面的内容
-      .replace(/[，,。.！!？?；;]/g, '')  // 去除标点
-      .trim()
-
-    if (cleaned.length >= 2 && cleaned.length <= 30) {
-      title = cleaned
-    } else if (cleaned.length > 30) {
-      title = cleaned.substring(0, 20)
-    }
-  }
-
-  // 如果标题还是太长或为空，取前20个字符
-  if (!title || title.length > 30) {
-    title = rawText
-      .substring(0, 30)
-      .replace(/[：:，,。.！!？?；;\n]/g, '')
-      .trim()
-  }
-
-  // 确保标题不为空
-  if (!title) {
-    title = '未命名知识'
-  }
-
-  return {
-    title,
-    content: rawText,
-    category: guessCategory(rawText),
-    tags: extractSimpleTags(rawText),
-  }
+function isStopPhrase(phrase: string): boolean {
+  const stopPhrases = ['的是', '是的', '在的', '的在', '了的', '的了', '和的', '的和']
+  return stopPhrases.includes(phrase) || /^[的了在是我有和就不人都一]/.test(phrase)
 }
 
 /**
- * 验证分类是否有效
+ * 多维度相似度计算
  */
-function isValidCategory(category: string): boolean {
-  const validCategories = ['病虫害防治', '作物管理', '环境参数', '灌溉管理', '土壤管理', '其他']
-  return validCategories.includes(category)
+function calculateMultiSimilarity(
+  title1: string, content1: string,
+  title2: string, content2: string
+): { score: number; type: string; details: string[] } {
+  const details: string[] = []
+
+  // 1. 标题相似度（权重0.4）
+  const titleSim = calculateTextSimilarity(title1, title2)
+  if (titleSim > 0.5) details.push(`标题相似度: ${Math.round(titleSim * 100)}%`)
+
+  // 2. 内容关键词重叠（权重0.4）
+  const contentSim = calculateKeywordOverlap(content1, content2)
+  if (contentSim > 0.3) details.push(`内容重叠: ${Math.round(contentSim * 100)}%`)
+
+  // 3. 共同实体词（权重0.2）
+  const entitySim = calculateEntityOverlap(title1 + content1, title2 + content2)
+  if (entitySim > 0.3) details.push(`共同关键词: ${Math.round(entitySim * 100)}%`)
+
+  // 加权总分
+  const score = titleSim * 0.4 + contentSim * 0.4 + entitySim * 0.2
+
+  // 确定类型
+  let type = 'low_overlap'
+  if (score > 0.7) type = 'high_overlap'
+  else if (score > 0.5) type = 'medium_overlap'
+  else if (score > 0.3) type = 'related'
+
+  // 特殊情况：标题几乎一样
+  if (titleSim > 0.8) {
+    type = 'similar_title'
+    details.push('标题高度相似')
+  }
+
+  return { score, type, details }
+}
+
+/**
+ * 计算文本相似度（基于字符级）
+ */
+function calculateTextSimilarity(text1: string, text2: string): number {
+  const chars1 = new Set(text1.replace(/[，。！？、；：""''（）\s]/g, '').split(''))
+  const chars2 = new Set(text2.replace(/[，。！？、；：""''（）\s]/g, '').split(''))
+
+  const intersection = new Set([...chars1].filter(c => chars2.has(c)))
+  const union = new Set([...chars1, ...chars2])
+
+  return union.size > 0 ? intersection.size / union.size : 0
+}
+
+/**
+ * 计算关键词重叠度
+ */
+function calculateKeywordOverlap(text1: string, text2: string): number {
+  const keywords1 = extractKeyPhrases(text1)
+  const keywords2 = extractKeyPhrases(text2)
+
+  const set1 = new Set(keywords1)
+  const set2 = new Set(keywords2)
+
+  const intersection = new Set([...set1].filter(k => set2.has(k)))
+  const union = new Set([...set1, ...set2])
+
+  return union.size > 0 ? intersection.size / union.size : 0
+}
+
+/**
+ * 计算实体词重叠度（数字、专业术语等）
+ */
+function calculateEntityOverlap(text1: string, text2: string): number {
+  // 提取数字和单位
+  const entityPattern = /\d+[%倍亩斤克升℃°]|\d+[月日天时分]/g
+  const entities1 = new Set(text1.match(entityPattern) || [])
+  const entities2 = new Set(text2.match(entityPattern) || [])
+
+  if (entities1.size === 0 && entities2.size === 0) return 0
+
+  const intersection = new Set([...entities1].filter(e => entities2.has(e)))
+  const union = new Set([...entities1, ...entities2])
+
+  return union.size > 0 ? intersection.size / union.size : 0
+}
+
+/**
+ * 获取处理建议
+ */
+function getSuggestion(type: string, score: number): string {
+  switch (type) {
+    case 'similar_title':
+      return '标题高度相似，建议合并或更新已有知识'
+    case 'high_overlap':
+      return '内容高度重叠，建议合并到已有知识'
+    case 'medium_overlap':
+      return '内容有较多重叠，可考虑补充差异化内容'
+    case 'related':
+      return '内容相关，可作为独立知识添加'
+    default:
+      return '可以添加'
+  }
 }
 
 /**
@@ -172,6 +408,10 @@ function extractSimpleTags(text: string): string {
     [/灌溉|浇水|排水/, '灌溉'],
     [/温度|湿度|光照/, '环境'],
     [/土壤|基质/, '土壤'],
+    [/抽穗|穗瘟|穗颈/, '穗瘟'],
+    [/叶瘟/, '叶瘟'],
+    [/苗瘟/, '苗瘟'],
+    [/喷雾|喷药|施药/, '施药'],
   ]
 
   const tags: string[] = []
@@ -185,7 +425,7 @@ function extractSimpleTags(text: string): string {
 }
 
 /**
- * 简单的分类猜测（AI不可用时的降级）
+ * 简单的分类猜测
  */
 function guessCategory(text: string): string {
   const lower = text.toLowerCase()
@@ -195,91 +435,4 @@ function guessCategory(text: string): string {
   if (/灌溉|浇水|排水|水分/.test(lower)) return '灌溉管理'
   if (/土壤|基质|ph|ec/.test(lower)) return '土壤管理'
   return '其他'
-}
-
-/**
- * 检测知识冲突
- * 搜索相似标题或内容的知识，返回可能冲突的条目
- */
-async function detectConflicts(title: string, content: string, category: string) {
-  const conflicts: any[] = []
-
-  // 1. 按标题关键词搜索
-  const titleKeywords = extractKeywords(title)
-  if (titleKeywords.length > 0) {
-    const likeConditions = titleKeywords.map(() => '(title LIKE ? OR content LIKE ?)').join(' OR ')
-    const params: any[] = []
-    titleKeywords.forEach(kw => {
-      params.push(`%${kw}%`, `%${kw}%`)
-    })
-
-    const rows = await db.query<KnowledgeItem[]>(
-      `SELECT id, title, content, category, tags FROM knowledge_base
-       WHERE status != 'archived' AND (${likeConditions})
-       ORDER BY updated_at DESC LIMIT 10`,
-      params
-    )
-
-    rows.forEach(row => {
-      const similarity = calculateSimilarity(title + ' ' + content, row.title + ' ' + row.content)
-      if (similarity > 0.3) {
-        conflicts.push({
-          id: row.id,
-          title: row.title,
-          category: row.category,
-          similarity: Math.round(similarity * 100),
-          existing_content: row.content.substring(0, 200) + (row.content.length > 200 ? '...' : ''),
-          type: similarity > 0.7 ? 'duplicate' : 'similar',
-        })
-      }
-    })
-  }
-
-  // 2. 按分类精确匹配，检查是否有完全相同的标题
-  const exactMatch = await db.query<KnowledgeItem[]>(
-    `SELECT id, title, content, category FROM knowledge_base
-     WHERE title = ? AND status != 'archived'`,
-    [title]
-  )
-
-  if (exactMatch.length > 0) {
-    exactMatch.forEach(row => {
-      if (!conflicts.find(c => c.id === row.id)) {
-        conflicts.push({
-          id: row.id,
-          title: row.title,
-          category: row.category,
-          similarity: 100,
-          existing_content: row.content.substring(0, 200) + '...',
-          type: 'exact_title',
-        })
-      }
-    })
-  }
-
-  return conflicts.sort((a, b) => b.similarity - a.similarity)
-}
-
-/**
- * 从文本中提取关键词
- */
-function extractKeywords(text: string): string[] {
-  // 去除标点符号，按空格和换行分词
-  const cleaned = text.replace(/[，。！？、；：""''（）\[\]【】]/g, ' ')
-  const words = cleaned.split(/\s+/).filter(w => w.length >= 2)
-  // 去重，取前5个
-  return [...new Set(words)].slice(0, 5)
-}
-
-/**
- * 计算两个文本的相似度（简单的Jaccard相似度）
- */
-function calculateSimilarity(text1: string, text2: string): number {
-  const words1 = new Set(text1.replace(/[，。！？、；：""''（）\[\]【】\s]/g, '').split(''))
-  const words2 = new Set(text2.replace(/[，。！？、；：""''（）\[\]【】\s]/g, '').split(''))
-
-  const intersection = new Set([...words1].filter(w => words2.has(w)))
-  const union = new Set([...words1, ...words2])
-
-  return union.size > 0 ? intersection.size / union.size : 0
 }
