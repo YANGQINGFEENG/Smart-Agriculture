@@ -231,7 +231,7 @@ export function ModelManagement() {
             ) : (
               models.map((model) => (
                 <div
-                  key={model.id}
+                  key={model.name || model.id}
                   className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-3">
