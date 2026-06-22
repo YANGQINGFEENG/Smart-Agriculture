@@ -24,16 +24,16 @@ import {
 } from "lucide-react"
 
 interface SidebarNavProps {
-  activeTab: string
-  onTabChange: (tab: string) => void
+  activeTab?: string
+  onTabChange?: (tab: string) => void
 }
 
 const navItems = [
-  { id: "overview", label: "数据概览", icon: LayoutDashboard },
-  { id: "detailed", label: "精细数据", icon: Database },
-  { id: "analysis", label: "数据分析", icon: BarChart3 },
-  { id: "export", label: "数据导出", icon: Download },
-  { id: "devices", label: "设备连接", icon: Wifi },
+  { id: "overview", label: "数据概览", icon: LayoutDashboard, href: "/" },
+  { id: "detailed", label: "精细数据", icon: Database, href: "/detailed" },
+  { id: "analysis", label: "数据分析", icon: BarChart3, href: "/analysis" },
+  { id: "export", label: "数据导出", icon: Download, href: "/export" },
+  { id: "devices", label: "设备连接", icon: Wifi, href: "/devices" },
   { id: "actuators", label: "执行器控制", icon: Power, href: "/actuators" },
   { id: "compare", label: "数据对比", icon: TrendingUp, href: "/compare" },
   { id: "ai-video", label: "AI视频检测", icon: Camera, href: "/ai-video" },
@@ -72,34 +72,17 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
           <ul className="space-y-1" role="navigation" aria-label="主功能导航">
             {navItems.map((item) => (
               <li key={item.id}>
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
-                      "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                    aria-label={item.label}
-                  >
-                    <item.icon className="w-4 h-4" aria-hidden="true" />
-                    {item.label}
-                  </Link>
-                ) : (
-                  <button
-                    onClick={() => onTabChange(item.id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
-                      activeTab === item.id
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                    aria-current={activeTab === item.id ? "page" : undefined}
-                    aria-label={item.label}
-                  >
-                    <item.icon className="w-4 h-4" aria-hidden="true" />
-                    {item.label}
-                  </button>
-                )}
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
+                    "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  )}
+                  aria-label={item.label}
+                >
+                  <item.icon className="w-4 h-4" aria-hidden="true" />
+                  {item.label}
+                </Link>
               </li>
             ))}
           </ul>
