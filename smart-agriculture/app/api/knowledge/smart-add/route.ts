@@ -61,20 +61,11 @@ export async function POST(request: NextRequest) {
  * 用AI分析原始文本，提取结构化知识
  */
 async function analyzeWithAI(rawText: string) {
-  const prompt = `你是一个农业知识整理专家。请分析以下原始文本，提取并整理成结构化的农业知识。
-
-原始文本：
-${rawText}
-
-请按以下JSON格式返回（只返回JSON，不要其他内容）：
-{
-  "title": "知识标题（简洁明了，10-30字）",
-  "content": "整理后的知识内容（保留关键信息，去除冗余，用清晰的段落组织）",
-  "category": "分类（从以下选择：病虫害防治/作物管理/环境参数/灌溉管理/土壤管理/其他）",
-  "tags": "标签1,标签2,标签3（3-5个相关标签，用逗号分隔）"
-}`
-
+  // 先尝试AI处理
   try {
+    const prompt = `分析以下农业文本，返回JSON：{"title":"标题","category":"分类"}
+文本：${rawText.substring(0, 200)}`
+
     const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -82,51 +73,115 @@ ${rawText}
         model: 'qwen3:1.7b-q4_K_M',
         prompt,
         stream: false,
-        options: {
-          temperature: 0.3,
-          num_predict: 1024,
-        },
+        options: { temperature: 0.1, num_predict: 256 },
       }),
     })
 
-    if (!response.ok) {
-      throw new Error('AI服务响应错误')
-    }
+    if (response.ok) {
+      const result = await response.json()
+      const text = result.response || ''
 
-    const result = await response.json()
-    const text = result.response || ''
+      // 尝试从响应中提取标题
+      const titleMatch = text.match(/"title"\s*:\s*"([^"]+)"/)
+      const categoryMatch = text.match(/"category"\s*:\s*"([^"]+)"/)
 
-    // 提取JSON
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      // AI返回格式不对，使用简单处理
-      return {
-        title: rawText.substring(0, 30).replace(/\n/g, ' '),
-        content: rawText,
-        category: '其他',
-        tags: '',
+      if (titleMatch) {
+        return {
+          title: titleMatch[1],
+          content: rawText,
+          category: categoryMatch && isValidCategory(categoryMatch[1]) ? categoryMatch[1] : guessCategory(rawText),
+          tags: extractSimpleTags(rawText),
+        }
       }
     }
-
-    const parsed = JSON.parse(jsonMatch[0])
-    return {
-      title: parsed.title || rawText.substring(0, 30),
-      content: parsed.content || rawText,
-      category: parsed.category || '其他',
-      tags: parsed.tags || '',
-    }
   } catch (error) {
-    console.error('AI分析失败，使用简单处理:', error)
-    // AI不可用时的降级处理
-    const lines = rawText.split('\n').filter(l => l.trim())
-    const title = lines[0]?.substring(0, 30) || '未命名知识'
-    return {
-      title,
-      content: rawText,
-      category: guessCategory(rawText),
-      tags: '',
+    console.log('AI处理失败，使用规则处理')
+  }
+
+  // AI失败，使用规则处理
+  return ruleBasedProcess(rawText)
+}
+
+/**
+ * 基于规则的文本处理
+ */
+function ruleBasedProcess(rawText: string) {
+  // 提取标题：第一行或前30个字符
+  const lines = rawText.split('\n').filter(l => l.trim())
+  let title = ''
+
+  // 尝试从第一行提取标题
+  if (lines.length > 0) {
+    const firstLine = lines[0].trim()
+    // 去除标点符号和冒号后面的内容
+    const cleaned = firstLine
+      .replace(/[：:].*$/, '')  // 去除冒号及后面的内容
+      .replace(/[，,。.！!？?；;]/g, '')  // 去除标点
+      .trim()
+
+    if (cleaned.length >= 2 && cleaned.length <= 30) {
+      title = cleaned
+    } else if (cleaned.length > 30) {
+      title = cleaned.substring(0, 20)
     }
   }
+
+  // 如果标题还是太长或为空，取前20个字符
+  if (!title || title.length > 30) {
+    title = rawText
+      .substring(0, 30)
+      .replace(/[：:，,。.！!？?；;\n]/g, '')
+      .trim()
+  }
+
+  // 确保标题不为空
+  if (!title) {
+    title = '未命名知识'
+  }
+
+  return {
+    title,
+    content: rawText,
+    category: guessCategory(rawText),
+    tags: extractSimpleTags(rawText),
+  }
+}
+
+/**
+ * 验证分类是否有效
+ */
+function isValidCategory(category: string): boolean {
+  const validCategories = ['病虫害防治', '作物管理', '环境参数', '灌溉管理', '土壤管理', '其他']
+  return validCategories.includes(category)
+}
+
+/**
+ * 从文本中提取简单标签
+ */
+function extractSimpleTags(text: string): string {
+  const tagPatterns: [RegExp, string][] = [
+    [/番茄|西红柿/, '番茄'],
+    [/黄瓜/, '黄瓜'],
+    [/水稻|稻/, '水稻'],
+    [/玉米/, '玉米'],
+    [/小麦/, '小麦'],
+    [/蔬菜/, '蔬菜'],
+    [/水果/, '水果'],
+    [/病|虫|害|防治|农药/, '病虫害'],
+    [/施肥|肥料|营养/, '施肥'],
+    [/灌溉|浇水|排水/, '灌溉'],
+    [/温度|湿度|光照/, '环境'],
+    [/土壤|基质/, '土壤'],
+  ]
+
+  const tags: string[] = []
+  for (const [pattern, tag] of tagPatterns) {
+    if (pattern.test(text) && !tags.includes(tag)) {
+      tags.push(tag)
+    }
+  }
+
+  return tags.slice(0, 5).join(',')
 }
 
 /**
