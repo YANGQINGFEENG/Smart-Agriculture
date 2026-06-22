@@ -237,6 +237,23 @@ async function detectConflicts(title: string, content: string, category: string)
         row.title, row.content
       )
 
+      // 检查内容是否几乎完全相同
+      const contentExactlySame = isContentExactlySame(content, row.content)
+      if (contentExactlySame) {
+        // 内容几乎完全相同，直接标记为重复
+        conflicts.push({
+          id: row.id,
+          title: row.title,
+          category: row.category,
+          similarity: 99,
+          existing_content: row.content.substring(0, 300) + (row.content.length > 300 ? '...' : ''),
+          type: 'exact_duplicate',
+          suggestion: '内容几乎完全相同，建议跳过，无需重复添加',
+          match_details: ['内容完全重复'],
+        })
+        return
+      }
+
       if (similarity.score > 0.3) {
         conflicts.push({
           id: row.id,
@@ -374,21 +391,53 @@ function calculateEntityOverlap(text1: string, text2: string): number {
 }
 
 /**
- * 获取处理建议
+ * 获取处理建议 - 更明确的指导
  */
 function getSuggestion(type: string, score: number): string {
+  // 检查内容是否几乎完全相同
+  if (score > 90) {
+    return '内容几乎完全相同，建议跳过，无需重复添加'
+  }
+
   switch (type) {
     case 'similar_title':
-      return '标题高度相似，建议合并或更新已有知识'
+      if (score > 80) return '标题高度相似，内容可能重复，建议跳过'
+      return '标题相似，建议检查是否重复'
     case 'high_overlap':
-      return '内容高度重叠，建议合并到已有知识'
+      if (score > 75) return '内容大量重复，建议跳过或合并到已有知识'
+      return '内容重叠较多，建议整合后添加'
     case 'medium_overlap':
-      return '内容有较多重叠，可考虑补充差异化内容'
+      return '部分内容重叠，可补充差异化信息后添加'
     case 'related':
-      return '内容相关，可作为独立知识添加'
+      return '内容相关但有区别，可作为独立知识添加'
     default:
       return '可以添加'
   }
+}
+
+/**
+ * 检查两段内容是否几乎完全相同
+ */
+function isContentExactlySame(content1: string, content2: string): boolean {
+  // 清理文本（去除空格和标点）
+  const clean1 = content1.replace(/[\s，。！？、；：""''（）\[\]【】]/g, '')
+  const clean2 = content2.replace(/[\s，。！？、；：""''（）\[\]【】]/g, '')
+
+  // 完全相同
+  if (clean1 === clean2) return true
+
+  // 长度差异太大，不可能相同
+  if (Math.abs(clean1.length - clean2.length) > clean1.length * 0.1) return false
+
+  // 计算相似度
+  const chars1 = new Set(clean1.split(''))
+  const chars2 = new Set(clean2.split(''))
+  const intersection = new Set([...chars1].filter(c => chars2.has(c)))
+  const union = new Set([...chars1, ...chars2])
+  const similarity = union.size > 0 ? intersection.size / union.size : 0
+
+  // 相似度超过95%视为相同
+  return similarity > 0.95
 }
 
 /**

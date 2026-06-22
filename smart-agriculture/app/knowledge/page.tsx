@@ -107,6 +107,7 @@ const statusColors: Record<string, string> = {
 }
 
 const relationColors: Record<string, string> = {
+  exact_duplicate: "bg-red-100 text-red-700",
   near_duplicate: "bg-red-100 text-red-700",
   high_overlap: "bg-orange-100 text-orange-700",
   related: "bg-yellow-100 text-yellow-700",
@@ -115,6 +116,7 @@ const relationColors: Record<string, string> = {
 }
 
 const relationLabels: Record<string, string> = {
+  exact_duplicate: "完全重复",
   near_duplicate: "几乎重复",
   high_overlap: "高度重叠",
   related: "相关",
@@ -715,13 +717,23 @@ export default function KnowledgePage() {
                           <div className="mt-2 space-y-2">
                             {item.conflicts.map((c, i) => (
                               <div key={i} className="border border-orange-200 rounded-lg overflow-hidden">
-                                <div className="bg-orange-50 px-3 py-2 flex items-center justify-between">
-                                  <span className="text-xs font-medium text-orange-700">与"{c.title}"相似 {c.similarity}%</span>
-                                  <span className="text-xs text-orange-600">{c.suggestion}</span>
+                                <div className="bg-orange-50 px-3 py-2">
+                                  <span className="text-xs font-medium text-orange-700">
+                                    ⚠ 与"{c.title}"存在重复内容
+                                  </span>
                                 </div>
                                 <div className="grid grid-cols-2 divide-x text-xs">
-                                  <div className="p-2 bg-blue-50/50"><span className="text-blue-600">新内容</span><p className="mt-1 line-clamp-3 text-gray-700">{item.structured.content}</p></div>
-                                  <div className="p-2 bg-gray-50"><span className="text-gray-500">已有知识</span><p className="mt-1 line-clamp-3 text-gray-700">{c.existing_content}</p></div>
+                                  <div className="p-2 bg-blue-50/50">
+                                    <span className="text-blue-600 font-medium">新内容</span>
+                                    <p className="mt-1 line-clamp-4 text-gray-700">{item.structured.content}</p>
+                                  </div>
+                                  <div className="p-2 bg-gray-50">
+                                    <span className="text-gray-500 font-medium">已有知识</span>
+                                    <p className="mt-1 line-clamp-4 text-gray-700">{c.existing_content}</p>
+                                  </div>
+                                </div>
+                                <div className="px-2 py-1.5 bg-amber-50 text-xs text-amber-700">
+                                  💡 {c.suggestion}
                                 </div>
                               </div>
                             ))}

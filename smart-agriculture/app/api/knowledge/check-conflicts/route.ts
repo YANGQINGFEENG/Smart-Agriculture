@@ -133,6 +133,11 @@ function calculateMultiSimilarity(
 ): { score: number; type: string; details: string[] } {
   const details: string[] = []
 
+  // 检查内容是否几乎完全相同
+  if (isContentExactlySame(content1, content2)) {
+    return { score: 0.99, type: 'exact_duplicate', details: ['内容完全重复'] }
+  }
+
   // 标题相似度
   const titleSim = calculateTextSimilarity(title1, title2)
   if (titleSim > 0.5) details.push(`标题相似: ${Math.round(titleSim * 100)}%`)
@@ -190,6 +195,7 @@ function calculateEntityOverlap(text1: string, text2: string): number {
 }
 
 function getSuggestion(type: string, score: number): string {
+  if (score > 90) return '内容几乎完全相同，建议跳过'
   switch (type) {
     case 'similar_title': return '标题高度相似，建议合并'
     case 'high_overlap': return '内容高度重叠，建议合并'
@@ -197,4 +203,17 @@ function getSuggestion(type: string, score: number): string {
     case 'related': return '内容相关，可独立添加'
     default: return '可以添加'
   }
+}
+
+function isContentExactlySame(content1: string, content2: string): boolean {
+  const clean1 = content1.replace(/[\s，。！？、；：""''（）\[\]【】]/g, '')
+  const clean2 = content2.replace(/[\s，。！？、；：""''（）\[\]【】]/g, '')
+  if (clean1 === clean2) return true
+  if (Math.abs(clean1.length - clean2.length) > clean1.length * 0.1) return false
+  const chars1 = new Set(clean1.split(''))
+  const chars2 = new Set(clean2.split(''))
+  const intersection = new Set([...chars1].filter(c => chars2.has(c)))
+  const union = new Set([...chars1, ...chars2])
+  const similarity = union.size > 0 ? intersection.size / union.size : 0
+  return similarity > 0.95
 }
