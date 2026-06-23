@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Header } from "@/components/dashboard/header"
+import { useFarm } from "@/lib/farm-context"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -59,6 +60,7 @@ const actuatorIcons: Record<string, typeof Power> = {
  * 显示所有执行器状态，支持开关控制和模式切换
  */
 export default function ActuatorsPage() {
+  const { selectedFarmId, farms } = useFarm()
   const [activeTab, setActiveTab] = useState("actuators")
   const [currentTime, setCurrentTime] = useState<string>("")
   const [actuators, setActuators] = useState<Actuator[]>([])
@@ -79,7 +81,8 @@ export default function ActuatorsPage() {
    */
   const fetchActuators = async () => {
     try {
-      const response = await fetch('/api/actuators')
+      const url = selectedFarmId ? `/api/actuators?farm_id=${selectedFarmId}` : '/api/actuators'
+      const response = await fetch(url)
       const result = await response.json()
       
       if (result.success && result.data) {
@@ -99,7 +102,7 @@ export default function ActuatorsPage() {
     const interval = setInterval(fetchActuators, 10000)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedFarmId])
 
   /**
    * 切换执行器开关状态（发送控制指令）
@@ -247,7 +250,7 @@ export default function ActuatorsPage() {
             <div>
               <h1 className="text-2xl font-bold text-foreground">执行器控制</h1>
               <p className="text-sm text-muted-foreground">
-                管理和控制农业设备执行器
+                {farms.find(f => f.id === selectedFarmId)?.name || '未选择基地'} · 共 {actuators.length} 个执行器
               </p>
             </div>
             <div className="flex items-center gap-2">
