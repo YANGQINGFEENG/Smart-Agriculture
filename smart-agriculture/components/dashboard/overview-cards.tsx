@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useFarm } from "@/lib/farm-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Thermometer, Droplets, Sun, Leaf, TrendingUp, TrendingDown, RefreshCw, Activity } from "lucide-react"
 
@@ -83,6 +84,7 @@ const sensorConfig = [
 ]
 
 export function OverviewCards() {
+  const { selectedFarmId } = useFarm()
   const [sensorData, setSensorData] = useState<SensorData[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
@@ -95,7 +97,8 @@ export function OverviewCards() {
 
   const fetchSensorData = async () => {
     try {
-      const response = await fetch('/api/sensors')
+      const url = selectedFarmId ? `/api/sensors?farm_id=${selectedFarmId}` : '/api/sensors'
+      const response = await fetch(url)
       const result = await response.json()
       
       if (result.success && result.data) {
@@ -141,7 +144,7 @@ export function OverviewCards() {
     const interval = setInterval(fetchSensorData, 2000)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedFarmId])
 
   const getSensorDisplayValue = (type: string, value: number): string => {
     if (type === 'light') {

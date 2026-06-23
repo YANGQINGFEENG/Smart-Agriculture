@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useFarm } from "@/lib/farm-context"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -40,6 +41,7 @@ interface Actuator {
   state: 'on' | 'off'
   mode: 'auto' | 'manual'
   last_update: string | null
+  locked?: number
 }
 
 /**
@@ -58,6 +60,7 @@ const actuatorIcons: Record<string, typeof Power> = {
  * 显示所有执行器状态，支持开关控制和模式切换
  */
 export function ActuatorControl() {
+  const { selectedFarmId } = useFarm()
   const [actuators, setActuators] = useState<Actuator[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
@@ -69,7 +72,8 @@ export function ActuatorControl() {
    */
   const fetchActuators = async () => {
     try {
-      const response = await fetch('/api/actuators')
+      const url = selectedFarmId ? `/api/actuators?farm_id=${selectedFarmId}` : '/api/actuators'
+      const response = await fetch(url)
       const result = await response.json()
       
       if (result.success && result.data) {
@@ -89,7 +93,7 @@ export function ActuatorControl() {
     const interval = setInterval(fetchActuators, 10000)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedFarmId])
 
   /**
    * 切换执行器开关状态（发送控制指令）
