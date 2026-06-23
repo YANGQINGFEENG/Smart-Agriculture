@@ -332,21 +332,41 @@ async function createTables() {
     );
   `);
 
-  // 为传感器表添加基地和区域关联字段
-  try {
-    await databaseInstance.exec('ALTER TABLE sensors ADD COLUMN farm_id INTEGER');
-  } catch (e) { /* 字段已存在 */ }
-  try {
-    await databaseInstance.exec('ALTER TABLE sensors ADD COLUMN zone_id INTEGER');
-  } catch (e) { /* 字段已存在 */ }
+  // 设备网关表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS gateways (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farm_id INTEGER NOT NULL,
+      zone_id INTEGER,
+      name TEXT NOT NULL,
+      gateway_type TEXT NOT NULL,
+      ip_address TEXT,
+      mac_address TEXT,
+      protocol TEXT,
+      status TEXT DEFAULT 'online',
+      last_heartbeat TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
+    );
+  `);
 
-  // 为执行器表添加基地和区域关联字段
-  try {
-    await databaseInstance.exec('ALTER TABLE actuators ADD COLUMN farm_id INTEGER');
-  } catch (e) { /* 字段已存在 */ }
-  try {
-    await databaseInstance.exec('ALTER TABLE actuators ADD COLUMN zone_id INTEGER');
-  } catch (e) { /* 字段已存在 */ }
+  // 设备节点表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS device_nodes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gateway_id INTEGER NOT NULL,
+      node_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      node_type TEXT NOT NULL DEFAULT 'sensor',
+      sensor_type TEXT,
+      location TEXT,
+      config TEXT,
+      status TEXT DEFAULT 'online',
+      last_update TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
+    );
+  `);
   
   // 插入初始数据
   await insertInitialData();
