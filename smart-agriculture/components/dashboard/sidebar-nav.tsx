@@ -36,6 +36,7 @@ const navItems = [
   { id: "devices", label: "设备连接", icon: Wifi, href: "/devices" },
   { id: "actuators", label: "执行器控制", icon: Power, href: "/actuators" },
   { id: "compare", label: "数据对比", icon: TrendingUp, href: "/compare" },
+  { id: "alarms", label: "报警管理", icon: Bell, href: "/alarms" },
   { id: "ai-video", label: "AI视频检测", icon: Camera, href: "/ai-video" },
   { id: "ai-command", label: "AI文字控制", icon: MessageSquare, href: "/ai-command" },
   { id: "ai-monitor", label: "AI实时监测", icon: Activity, href: "/ai-monitor" },
