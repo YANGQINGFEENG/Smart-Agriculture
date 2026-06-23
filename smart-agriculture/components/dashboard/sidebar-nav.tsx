@@ -22,6 +22,7 @@ import {
   BookOpen,
   FileText,
   Bell,
+  MapPin,
 } from "lucide-react"
 
 interface SidebarNavProps {
@@ -31,6 +32,7 @@ interface SidebarNavProps {
 
 const navItems = [
   { id: "overview", label: "数据概览", icon: LayoutDashboard, href: "/" },
+  { id: "farms", label: "基地管理", icon: MapPin, href: "/farms" },
   { id: "detailed", label: "精细数据", icon: Database, href: "/detailed" },
   { id: "analysis", label: "数据分析", icon: BarChart3, href: "/analysis" },
   { id: "export", label: "数据导出", icon: Download, href: "/export" },
