@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { CustomThemeProvider as ThemeProvider } from '@/components/custom-theme-provider'
+import { Providers } from '@/components/providers'
 import './globals.css'
 import '@/lib/init'
 
@@ -39,9 +39,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <ThemeProvider defaultTheme="dark">
+        <Providers>
           {children}
-        </ThemeProvider>
+        </Providers>
         <Analytics />
       </body>
     </html>

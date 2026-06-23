@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
     const type = url.searchParams.get('type')
+    const farmId = url.searchParams.get('farm_id')
 
     let query = `
       SELECT 
@@ -48,6 +49,8 @@ export async function GET(request: NextRequest) {
         s.battery, 
         s.last_update, 
         s.created_at,
+        s.farm_id,
+        s.zone_id,
         st.type,
         st.name as type_name,
         st.unit
@@ -55,11 +58,20 @@ export async function GET(request: NextRequest) {
       INNER JOIN sensor_types st ON s.type_id = st.id
     `
 
+    const conditions: string[] = []
     const params: any[] = []
 
     if (type) {
-      query += ' WHERE st.type = ?'
+      conditions.push('st.type = ?')
       params.push(type)
+    }
+    if (farmId) {
+      conditions.push('s.farm_id = ?')
+      params.push(parseInt(farmId))
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ')
     }
 
     query += ' ORDER BY s.id'

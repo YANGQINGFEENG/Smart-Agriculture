@@ -2,6 +2,14 @@
 
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { useFarm } from "@/lib/farm-context"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   LayoutDashboard,
   BarChart3,
@@ -56,10 +64,12 @@ const sensorTypes = [
 ]
 
 export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
+  const { farms, selectedFarmId, setSelectedFarmId, loading } = useFarm()
+
   return (
     <aside className="w-64 border-r border-border bg-sidebar flex flex-col h-screen sticky top-0">
       <div className="p-6 border-b border-border">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
             <Leaf className="w-6 h-6 text-primary" />
           </div>
@@ -68,6 +78,28 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
             <p className="text-xs text-muted-foreground">物联网监控平台</p>
           </div>
         </div>
+        
+        {/* 基地选择器 */}
+        {farms.length > 0 && (
+          <div className="mt-2">
+            <label className="text-xs text-muted-foreground mb-1 block">当前基地</label>
+            <Select
+              value={selectedFarmId?.toString() || ""}
+              onValueChange={(v) => setSelectedFarmId(v ? parseInt(v) : null)}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="选择基地" />
+              </SelectTrigger>
+              <SelectContent>
+                {farms.map((farm) => (
+                  <SelectItem key={farm.id} value={farm.id.toString()}>
+                    {farm.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 p-4">

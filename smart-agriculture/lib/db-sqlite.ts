@@ -331,6 +331,22 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // 为传感器表添加基地和区域关联字段
+  try {
+    await databaseInstance.exec('ALTER TABLE sensors ADD COLUMN farm_id INTEGER');
+  } catch (e) { /* 字段已存在 */ }
+  try {
+    await databaseInstance.exec('ALTER TABLE sensors ADD COLUMN zone_id INTEGER');
+  } catch (e) { /* 字段已存在 */ }
+
+  // 为执行器表添加基地和区域关联字段
+  try {
+    await databaseInstance.exec('ALTER TABLE actuators ADD COLUMN farm_id INTEGER');
+  } catch (e) { /* 字段已存在 */ }
+  try {
+    await databaseInstance.exec('ALTER TABLE actuators ADD COLUMN zone_id INTEGER');
+  } catch (e) { /* 字段已存在 */ }
   
   // 插入初始数据
   await insertInitialData();
