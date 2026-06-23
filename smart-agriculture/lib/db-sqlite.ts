@@ -250,6 +250,87 @@ async function createTables() {
       FOREIGN KEY (alarm_id) REFERENCES alarm_records(id) ON DELETE CASCADE
     );
   `);
+
+  // 农场/基地表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS farms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      code TEXT UNIQUE NOT NULL,
+      address TEXT,
+      latitude REAL,
+      longitude REAL,
+      area REAL,
+      farm_type TEXT DEFAULT 'mixed',
+      owner_id INTEGER,
+      status TEXT DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // 区域表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS zones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farm_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      zone_type TEXT DEFAULT 'greenhouse',
+      area REAL,
+      description TEXT,
+      status TEXT DEFAULT 'active',
+      FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
+    );
+  `);
+
+  // 监控点表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS monitor_points (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      zone_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      point_type TEXT DEFAULT 'air_point',
+      position_x REAL,
+      position_y REAL,
+      description TEXT,
+      FOREIGN KEY (zone_id) REFERENCES zones(id) ON DELETE CASCADE
+    );
+  `);
+
+  // 作物批次表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS crop_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farm_id INTEGER NOT NULL,
+      zone_id INTEGER NOT NULL,
+      crop_type TEXT NOT NULL,
+      variety TEXT,
+      batch_code TEXT UNIQUE NOT NULL,
+      planting_date DATE,
+      expected_harvest_date DATE,
+      actual_harvest_date DATE,
+      area REAL,
+      status TEXT DEFAULT 'growing',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE,
+      FOREIGN KEY (zone_id) REFERENCES zones(id) ON DELETE CASCADE
+    );
+  `);
+
+  // 设备模板表
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS device_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      device_model TEXT,
+      default_config TEXT,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
   
   // 插入初始数据
   await insertInitialData();
