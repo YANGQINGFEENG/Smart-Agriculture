@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { syncNodeToSensor } from '@/lib/device-sync'
 
 interface Gateway extends RowDataPacket {
   id: number
@@ -15,13 +16,14 @@ interface DeviceNode extends RowDataPacket {
 
 /**
  * POST /api/device/report
- * 设备数据上报（支持自动发现和注册）
+ * 设备数据上报（支持自动发现、注册和同步）
  * 
  * 场景1：WiFi直连传感器
  * {
  *   "gateway_ip": "192.168.1.101",
  *   "gateway_type": "wifi_sensor",
  *   "mac": "AA:BB:CC:DD:EE:FF",
+ *   "farm_id": 1,
  *   "data": [{"type": "temperature", "value": 25.5, "unit": "°C"}]
  * }
  * 
@@ -30,8 +32,9 @@ interface DeviceNode extends RowDataPacket {
  *   "gateway_ip": "192.168.1.100",
  *   "gateway_type": "lorawan_gateway",
  *   "mac": "11:22:33:44:55:66",
+ *   "farm_id": 1,
  *   "nodes": [
- *     {"node_id": "sensor_001", "type": "temperature", "value": 24.5}
+ *     {"node_id": "sensor_001", "type": "temperature", "value": 24.5, "unit": "°C"}
  *   ]
  * }
  */
@@ -143,12 +146,19 @@ async function processNodeData(gatewayId: number, nodeData: any) {
     )
   }
 
-  // 存储数据（如果有值）
+  // 存储数据到device_data表
   if (value !== undefined && value !== null) {
     await db.execute(
       `INSERT INTO device_data (gateway_id, node_id, sensor_type, value, unit)
        VALUES (?, ?, ?, ?, ?)`,
       [gatewayId, node_id, type || 'unknown', value, unit || null]
     )
+
+    // 同步到sensors表（让概览、详情等页面能看到数据）
+    try {
+      await syncNodeToSensor(gatewayId, node_id, type || 'temperature', value, unit || '')
+    } catch (err) {
+      console.error('同步到传感器表失败:', err)
+    }
   }
 }

@@ -367,6 +367,21 @@ async function createTables() {
       FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
     );
   `);
+
+  // 设备数据表（统一存储所有设备上报的数据）
+  await databaseInstance.exec(`
+    CREATE TABLE IF NOT EXISTS device_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gateway_id INTEGER NOT NULL,
+      node_id TEXT NOT NULL,
+      sensor_type TEXT NOT NULL,
+      value REAL NOT NULL,
+      unit TEXT,
+      quality INTEGER DEFAULT 100,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
+    );
+  `);
   
   // 插入初始数据
   await insertInitialData();
