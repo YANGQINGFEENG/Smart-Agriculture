@@ -21,6 +21,7 @@ import {
   Activity,
   BookOpen,
   FileText,
+  Bell,
 } from "lucide-react"
 
 interface SidebarNavProps {
