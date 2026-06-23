@@ -229,6 +229,27 @@ export default function DevicesPage() {
               </div>
             </div>
 
+            {/* 数据流说明 */}
+            <Card className="bg-blue-50 border-blue-200">
+              <CardContent className="p-4">
+                <h3 className="text-sm font-medium text-blue-800 mb-2">📡 设备数据上报流程</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-blue-700">
+                  <div>
+                    <p className="font-medium">场景1：WiFi直连传感器</p>
+                    <p>传感器 → 独立IP → 服务器 → 自动注册到基地</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">场景2：网关聚合上报</p>
+                    <p>多个传感器 → 网关 → 服务器 → 自动同步到传感器表</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">数据同步</p>
+                    <p>设备节点 → device_data表 → 自动同步 → sensors表</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* 筛选栏 */}
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
@@ -308,6 +329,7 @@ export default function DevicesPage() {
                           {gateway.nodes.map((node) => {
                             const sensorInfo = sensorTypeOptions.find(s => s.value === node.sensor_type)
                             const SensorIcon = sensorInfo?.icon || Thermometer
+                            const hasSync = node.last_update && new Date(node.last_update).getTime() > Date.now() - 5 * 60 * 1000
                             return (
                               <div key={node.id} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
                                 <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
@@ -319,10 +341,22 @@ export default function DevicesPage() {
                                     {node.node_id}
                                     {node.location && ` · ${node.location}`}
                                   </p>
+                                  {node.last_update && (
+                                    <p className="text-xs text-muted-foreground">
+                                      最后上报: {new Date(node.last_update).toLocaleTimeString('zh-CN')}
+                                    </p>
+                                  )}
                                 </div>
-                                <Badge variant={node.status === 'online' ? 'default' : 'secondary'} className="text-xs">
-                                  {node.status === 'online' ? '在线' : '离线'}
-                                </Badge>
+                                <div className="flex flex-col items-end gap-1">
+                                  <Badge variant={node.status === 'online' ? 'default' : 'secondary'} className="text-xs">
+                                    {node.status === 'online' ? '在线' : '离线'}
+                                  </Badge>
+                                  {hasSync && (
+                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-600">
+                                      已同步
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             )
                           })}
