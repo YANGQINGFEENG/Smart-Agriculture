@@ -1,135 +1,35 @@
-# 智慧农业物联网监控平台 - API 文档
+# 智慧农业物联网平台 - API 文档
 
-## 📅 更新日期：2026-04-13
-
----
-
-## 📋 目录
-
-1. [传感器API](#传感器api)
-2. [传感器类型API](#传感器类型api)
-3. [执行器API](#执行器api)
-4. [控制指令API](#控制指令api)
-5. [策略API](#策略api)
-6. [策略执行日志API](#策略执行日志api)
-7. [AI聊天接口](#ai聊天接口)
-8. [图片识别API](#图片识别api)
-9. [数据对比API](#数据对比api)
-10. [错误处理](#错误处理)
+## 更新日期：2026-06-23
 
 ---
 
-## 传感器API
+## 目录
 
-### 1. 获取所有传感器
+1. [基地管理API](#1-基地管理api)
+2. [区域管理API](#2-区域管理api)
+3. [传感器API](#3-传感器api)
+4. [执行器API](#4-执行器api)
+5. [设备网关API](#5-设备网关api)
+6. [设备数据上报API](#6-设备数据上报api)
+7. [报警系统API](#7-报警系统api)
+8. [知识库API](#8-知识库api)
+9. [提示词模板API](#9-提示词模板api)
+10. [AI服务API](#10-ai服务api)
+11. [错误处理](#11-错误处理)
 
-**接口地址**：`GET /api/sensors`
+---
 
-**描述**：获取所有传感器设备列表
+## 1. 基地管理API
+
+### 1.1 获取基地列表
+
+**接口地址**：`GET /api/farms`
 
 **请求参数**：
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| type | string | 否 | 按类型过滤（temperature, humidity, light, soil, soil_temperature, ec, ph） |
-
-**请求示例**：
-```bash
-# 获取所有传感器
-curl http://localhost:3000/api/sensors
-
-# 获取温度传感器
-curl http://localhost:3000/api/sensors?type=temperature
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "T-001",
-      "name": "A区温室1号温度传感器",
-      "type_id": 1,
-      "location": "A区温室",
-      "status": "online",
-      "battery": 95,
-      "last_update": "2026-04-13T15:30:00.000Z",
-      "created_at": "2026-04-13T10:00:00.000Z",
-      "type": "temperature",
-      "type_name": "温度传感器",
-      "unit": "°C"
-    }
-  ],
-  "total": 12
-}
-```
-
----
-
-### 2. 获取单个传感器详情
-
-**接口地址**：`GET /api/sensors/[id]`
-
-**描述**：获取指定传感器的详细信息
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 传感器ID（如：T-001） |
-
-**请求示例**：
-```bash
-curl http://localhost:3000/api/sensors/T-001
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": "T-001",
-    "name": "A区温室1号温度传感器",
-    "type_id": 1,
-    "location": "A区温室",
-    "status": "online",
-    "battery": 95,
-    "last_update": "2026-04-13T15:30:00.000Z",
-    "created_at": "2026-04-13T10:00:00.000Z",
-    "type": "temperature",
-    "type_name": "温度传感器",
-    "unit": "°C"
-  }
-}
-```
-
----
-
-### 3. 获取传感器历史数据
-
-**接口地址**：`GET /api/sensors/[id]/data`
-
-**描述**：获取指定传感器的历史数据
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 传感器ID |
-
-**查询参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| startTime | string | 否 | 开始时间（ISO 8601格式） |
-| endTime | string | 否 | 结束时间（ISO 8601格式） |
-| limit | number | 否 | 返回数量限制（默认100） |
-
-**请求示例**：
-```bash
-# 获取最近100条数据
-curl http://localhost:3000/api/sensors/T-001/data
-
-# 获取指定时间范围的数据
-curl "http://localhost:3000/api/sensors/T-001/data?startTime=2026-04-12T00:00:00Z&endTime=2026-04-13T23:59:59Z&limit=200"
-```
+| status | string | 否 | 按状态筛选（active/inactive） |
 
 **响应示例**：
 ```json
@@ -138,32 +38,145 @@ curl "http://localhost:3000/api/sensors/T-001/data?startTime=2026-04-12T00:00:00
   "data": [
     {
       "id": 1,
-      "sensor_id": "T-001",
-      "value": 25.5,
-      "timestamp": "2026-04-13T15:30:00.000Z"
+      "name": "北京智能温室基地",
+      "code": "BJ-001",
+      "address": "北京市昌平区",
+      "area": 50,
+      "farm_type": "greenhouse",
+      "status": "active",
+      "created_at": "2026-06-23T10:00:00Z"
     }
   ],
-  "stats": {
-    "avg": 24.5,
-    "max": 28.0,
-    "min": 22.0
-  },
-  "total": 100
+  "total": 1
 }
 ```
 
+### 1.2 获取基地详情
+
+**接口地址**：`GET /api/farms/[id]`
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "北京智能温室基地",
+    "zones": [...],
+    "stats": {
+      "zones": 3,
+      "sensors": 10,
+      "actuators": 5
+    }
+  }
+}
+```
+
+### 1.3 创建基地
+
+**接口地址**：`POST /api/farms`
+
+**请求体**：
+```json
+{
+  "name": "基地名称",
+  "code": "BJ-002",
+  "address": "地址",
+  "area": 100,
+  "farm_type": "mixed"
+}
+```
+
+### 1.4 更新基地
+
+**接口地址**：`PUT /api/farms/[id]`
+
+### 1.5 删除基地
+
+**接口地址**：`DELETE /api/farms/[id]`
+
 ---
 
-### 4. 上传传感器数据
+## 2. 区域管理API
 
-**接口地址**：`POST /api/sensors/[id]/data`
+### 2.1 获取区域列表
 
-**描述**：上传传感器数据（硬件设备使用）
+**接口地址**：`GET /api/farms/[farmId]/zones`
 
-**路径参数**：
+### 2.2 创建区域
+
+**接口地址**：`POST /api/farms/[farmId]/zones`
+
+**请求体**：
+```json
+{
+  "name": "1号温室",
+  "code": "GH1",
+  "zone_type": "greenhouse",
+  "area": 10,
+  "description": "区域描述"
+}
+```
+
+### 2.3 更新区域
+
+**接口地址**：`PUT /api/zones/[id]`
+
+### 2.4 删除区域
+
+**接口地址**：`DELETE /api/zones/[id]`
+
+---
+
+## 3. 传感器API
+
+### 3.1 获取传感器列表
+
+**接口地址**：`GET /api/sensors`
+
+**请求参数**：
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| id | string | 是 | 传感器ID |
+| type | string | 否 | 按类型筛选（temperature/humidity/light等） |
+| farm_id | number | 否 | 按基地筛选 |
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "T-001",
+      "name": "温度传感器1",
+      "type": "temperature",
+      "type_name": "温度传感器",
+      "unit": "°C",
+      "location": "1号温室",
+      "status": "online",
+      "battery": 95,
+      "farm_id": 1,
+      "zone_id": 1,
+      "last_update": "2026-06-23T15:30:00Z"
+    }
+  ],
+  "total": 10
+}
+```
+
+### 3.2 获取传感器历史数据
+
+**接口地址**：`GET /api/sensors/[id]/data`
+
+**请求参数**：
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| startTime | string | 否 | 开始时间（ISO 8601） |
+| endTime | string | 否 | 结束时间（ISO 8601） |
+| limit | number | 否 | 返回数量（默认100） |
+
+### 3.3 上传传感器数据
+
+**接口地址**：`POST /api/sensors/[id]/data`
 
 **请求体**：
 ```json
@@ -172,99 +185,56 @@ curl "http://localhost:3000/api/sensors/T-001/data?startTime=2026-04-12T00:00:00
 }
 ```
 
-**请求示例**：
-```bash
-curl -X POST http://localhost:3000/api/sensors/T-001/data \
-  -H "Content-Type: application/json" \
-  -d '{"value": 25.5}'
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1001,
-    "sensor_id": "T-001",
-    "value": 25.5,
-    "timestamp": "2026-04-13T15:30:00.000Z"
-  },
-  "message": "传感器数据添加成功"
-}
-```
-
 ---
 
-### 5. 新增传感器
+## 4. 执行器API
 
-**接口地址**：`POST /api/sensors`
-
-**描述**：新增传感器设备
-
-**请求体**：
-```json
-{
-  "name": "A区温室2号温度传感器",
-  "type_id": 1,
-  "location": "A区温室"
-}
-```
-
-**请求示例**：
-```bash
-curl -X POST http://localhost:3000/api/sensors \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "A区温室2号温度传感器",
-    "type_id": 1,
-    "location": "A区温室"
-  }'
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": "T-004",
-    "name": "A区温室2号温度传感器",
-    "type_id": 1,
-    "location": "A区温室",
-    "status": "offline",
-    "battery": 100,
-    "last_update": null,
-    "created_at": "2026-04-13T15:30:00.000Z",
-    "type": "temperature",
-    "type_name": "温度传感器",
-    "unit": "°C"
-  },
-  "message": "传感器创建成功"
-}
-```
-
----
-
-## 执行器API
-
-### 1. 获取所有执行器
+### 4.1 获取执行器列表
 
 **接口地址**：`GET /api/actuators`
-
-**描述**：获取所有执行器设备列表
 
 **请求参数**：
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| type | string | 否 | 按类型过滤（water_pump, fan, heater, valve, light） |
+| type | string | 否 | 按类型筛选（water_pump/fan/heater等） |
+| farm_id | number | 否 | 按基地筛选 |
 
-**请求示例**：
-```bash
-# 获取所有执行器
-curl http://localhost:3000/api/actuators
+### 4.2 更新执行器状态
 
-# 获取水泵
-curl http://localhost:3000/api/actuators?type=water_pump
+**接口地址**：`PATCH /api/actuators/[id]`
+
+**请求体**：
+```json
+{
+  "state": "on",
+  "mode": "manual",
+  "trigger_source": "user"
+}
 ```
+
+### 4.3 发送控制指令
+
+**接口地址**：`POST /api/actuators/[id]/commands`
+
+**请求体**：
+```json
+{
+  "command": "on"
+}
+```
+
+---
+
+## 5. 设备网关API
+
+### 5.1 获取网关列表
+
+**接口地址**：`GET /api/gateways`
+
+**请求参数**：
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| farm_id | number | 否 | 按基地筛选 |
 
 **响应示例**：
 ```json
@@ -272,40 +242,173 @@ curl http://localhost:3000/api/actuators?type=water_pump
   "success": true,
   "data": [
     {
-      "id": "WP-001",
-      "name": "A区温室1号水泵",
-      "type_id": 1,
-      "location": "A区温室",
+      "id": 1,
+      "farm_id": 1,
+      "name": "1号温室网关",
+      "gateway_type": "lorawan_gateway",
+      "ip_address": "192.168.1.100",
+      "mac_address": "AA:BB:CC:DD:EE:FF",
+      "protocol": "lorawan",
       "status": "online",
-      "state": "off",
-      "mode": "auto",
-      "last_update": "2026-04-13T15:30:00.000Z",
-      "created_at": "2026-04-13T10:00:00.000Z",
-      "type": "water_pump",
-      "type_name": "水泵",
-      "description": "用于灌溉和排水控制"
+      "nodes": [
+        {
+          "id": 1,
+          "node_id": "sensor_001",
+          "name": "温度传感器1",
+          "sensor_type": "temperature",
+          "location": "1号温室入口",
+          "status": "online",
+          "last_update": "2026-06-23T15:30:00Z"
+        }
+      ]
     }
   ],
-  "total": 7
+  "total": 1
+}
+```
+
+### 5.2 创建网关
+
+**接口地址**：`POST /api/gateways`
+
+**请求体**：
+```json
+{
+  "farm_id": 1,
+  "name": "新网关",
+  "gateway_type": "wifi_sensor",
+  "ip_address": "192.168.1.101",
+  "mac_address": "AA:BB:CC:DD:EE:FF",
+  "protocol": "http"
+}
+```
+
+### 5.3 删除网关
+
+**接口地址**：`DELETE /api/gateways/[id]`
+
+---
+
+## 6. 设备数据上报API
+
+### 6.1 设备数据上报
+
+**接口地址**：`POST /api/device/report`
+
+**场景1：WiFi直连传感器**
+```json
+{
+  "gateway_ip": "192.168.1.101",
+  "gateway_type": "wifi_sensor",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "farm_id": 1,
+  "data": [
+    {"type": "temperature", "value": 25.5, "unit": "°C"}
+  ]
+}
+```
+
+**场景2：网关聚合上报**
+```json
+{
+  "gateway_ip": "192.168.1.100",
+  "gateway_type": "lorawan_gateway",
+  "mac": "11:22:33:44:55:66",
+  "farm_id": 1,
+  "nodes": [
+    {"node_id": "sensor_001", "type": "temperature", "value": 24.5, "unit": "°C"},
+    {"node_id": "sensor_002", "type": "humidity", "value": 65.0, "unit": "%"}
+  ]
+}
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "数据上报成功",
+  "gateway_id": 1
+}
+```
+
+**自动处理逻辑**：
+1. 首次上报 → 自动创建网关和设备节点
+2. 后续上报 → 自动关联到已有设备
+3. 数据存储 → 写入device_data表并同步到sensors表
+
+---
+
+## 7. 报警系统API
+
+### 7.1 获取报警规则
+
+**接口地址**：`GET /api/alarms/rules`
+
+### 7.2 创建报警规则
+
+**接口地址**：`POST /api/alarms/rules`
+
+**请求体**：
+```json
+{
+  "name": "温度过高报警",
+  "sensor_type": "temperature",
+  "condition_type": "above",
+  "max_value": 35,
+  "severity": "critical"
+}
+```
+
+### 7.3 获取报警记录
+
+**接口地址**：`GET /api/alarms/records`
+
+**请求参数**：
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| status | string | 否 | 按状态筛选（active/acknowledged/resolved） |
+| severity | string | 否 | 按严重程度筛选（info/warning/critical） |
+| page | number | 否 | 页码（默认1） |
+| pageSize | number | 否 | 每页数量（默认20） |
+
+### 7.4 更新报警状态
+
+**接口地址**：`PATCH /api/alarms/records`
+
+**请求体**：
+```json
+{
+  "id": 1,
+  "status": "acknowledged",
+  "acknowledged_by": "user"
 }
 ```
 
 ---
 
-### 2. 获取单个执行器详情
+## 8. 知识库API
 
-**接口地址**：`GET /api/actuators/[id]`
+### 8.1 获取知识列表
 
-**描述**：获取指定执行器的详细信息
+**接口地址**：`GET /api/knowledge`
 
-**路径参数**：
+**请求参数**：
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| id | string | 是 | 执行器ID（如：WP-001） |
+| page | number | 否 | 页码（默认1） |
+| pageSize | number | 否 | 每页数量（默认20） |
+| category | string | 否 | 按分类筛选 |
+| search | string | 否 | 搜索关键词 |
 
-**请求示例**：
-```bash
-curl http://localhost:3000/api/actuators/WP-001
+### 8.2 智能添加知识
+
+**接口地址**：`POST /api/knowledge/smart-add`
+
+**请求体**：
+```json
+{
+  "raw_text": "番茄晚疫病症状：叶片出现水渍状暗绿色斑点..."
+}
 ```
 
 **响应示例**：
@@ -313,399 +416,108 @@ curl http://localhost:3000/api/actuators/WP-001
 {
   "success": true,
   "data": {
-    "id": "WP-001",
-    "name": "A区温室1号水泵",
-    "type_id": 1,
-    "location": "A区温室",
-    "status": "online",
-    "state": "off",
-    "mode": "auto",
-    "last_update": "2026-04-13T15:30:00.000Z",
-    "created_at": "2026-04-13T10:00:00.000Z",
-    "type": "water_pump",
-    "type_name": "水泵",
-    "description": "用于灌溉和排水控制"
+    "items": [
+      {
+        "structured": {
+          "title": "番茄晚疫病症状与防治",
+          "content": "...",
+          "category": "病虫害防治",
+          "tags": "番茄,晚疫病"
+        },
+        "conflicts": [],
+        "has_conflicts": false
+      }
+    ],
+    "total": 1,
+    "has_any_conflicts": false
+  }
+}
+```
+
+### 8.3 知识对比分析
+
+**接口地址**：`POST /api/knowledge/compare`
+
+**请求体**：
+```json
+{
+  "ids": [1, 2, 3]
+}
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "data": {
+    "contradictions": [
+      {
+        "item1": {"id": 1, "title": "知识A"},
+        "item2": {"id": 2, "title": "知识B"},
+        "type": "direct",
+        "description": "直接矛盾",
+        "detail1": "观点A",
+        "detail2": "观点B",
+        "severity": "high",
+        "suggestion": "存在直接矛盾，请核实"
+      }
+    ],
+    "stats": {
+      "contradiction_count": 1,
+      "has_contradictions": true
+    }
   }
 }
 ```
 
 ---
 
-### 3. 更新执行器状态
+## 9. 提示词模板API
 
-**接口地址**：`PATCH /api/actuators/[id]`
+### 9.1 获取模板列表
 
-**描述**：更新执行器的开关状态或控制模式
+**接口地址**：`GET /api/prompts`
 
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 执行器ID |
+### 9.2 渲染模板
 
-**请求体**：
-```json
-{
-  "state": "on",           // 开关状态：on 或 off
-  "mode": "manual",        // 控制模式：auto 或 manual
-  "trigger_source": "user" // 触发来源（可选）
-}
-```
-
-**请求示例**：
-```bash
-# 开启水泵
-curl -X PATCH http://localhost:3000/api/actuators/WP-001 \
-  -H "Content-Type: application/json" \
-  -d '{"state": "on", "trigger_source": "user"}'
-
-# 切换为手动模式
-curl -X PATCH http://localhost:3000/api/actuators/WP-001 \
-  -H "Content-Type: application/json" \
-  -d '{"mode": "manual"}'
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": "WP-001",
-    "name": "A区温室1号水泵",
-    "type_id": 1,
-    "location": "A区温室",
-    "status": "online",
-    "state": "on",
-    "mode": "auto",
-    "last_update": "2026-04-13T15:30:00.000Z",
-    "created_at": "2026-04-13T10:00:00.000Z",
-    "type": "water_pump",
-    "type_name": "水泵",
-    "description": "用于灌溉和排水控制"
-  },
-  "message": "执行器状态更新成功"
-}
-```
-
----
-
-### 4. 硬件端上传执行器状态
-
-**接口地址**：`POST /api/actuators/[id]`
-
-**描述**：硬件设备上传执行器状态（支持数字格式）
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 执行器ID |
+**接口地址**：`POST /api/prompts/render`
 
 **请求体**：
 ```json
 {
-  "state": 0,              // 开关状态：0=off, 1=on（数字或字符串）
-  "mode": 1,               // 控制模式：0=auto, 1=manual（数字或字符串）
-  "status": 1,             // 在线状态：0=offline, 1=online（数字或字符串，可选）
-  "trigger_source": "hardware" // 触发来源（可选）
-}
-```
-
-**参数说明**：
-| 参数 | 数字值 | 字符串值 | 说明 |
-|------|--------|----------|------|
-| state | 0=off, 1=on | "off", "on" | 开关状态 |
-| mode | 0=auto, 1=manual | "auto", "manual" | 控制模式 |
-| status | 0=offline, 1=online | "offline", "online" | 在线状态 |
-
-**请求示例**：
-```bash
-# 硬件端上传状态（数字格式）
-curl -X POST http://localhost:3000/api/actuators/WP-002 \
-  -H "Content-Type: application/json" \
-  -d '{"state": 0, "mode": 1}'
-
-# 硬件端上传状态（字符串格式）
-curl -X POST http://localhost:3000/api/actuators/WP-002 \
-  -H "Content-Type: application/json" \
-  -d '{"state": "off", "mode": "manual"}'
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": "WP-002",
-    "name": "B区温室1号水泵",
-    "type_id": 1,
-    "location": "B区温室",
-    "status": "online",
-    "state": "off",
-    "mode": "manual",
-    "last_update": "2026-04-13T15:30:00.000Z",
-    "created_at": "2026-04-13T10:00:00.000Z",
-    "type": "water_pump",
-    "type_name": "水泵",
-    "description": "用于灌溉和排水控制"
-  },
-  "message": "执行器状态上传成功"
+  "template_id": 1,
+  "variables": {
+    "sensor_data": "温度: 25°C",
+    "detection_results": "未检测到病虫害"
+  }
 }
 ```
 
 ---
 
-### 5. 新增执行器
+## 10. AI服务API
 
-**接口地址**：`POST /api/actuators`
+### 10.1 AI聊天
 
-**描述**：新增执行器设备
+**接口地址**：`POST /api/ai/chat`
 
-**请求体**：
-```json
-{
-  "name": "A区温室2号水泵",
-  "type_id": 1,
-  "location": "A区温室"
-}
-```
+### 10.2 AI诊断
 
-**请求示例**：
-```bash
-curl -X POST http://localhost:3000/api/actuators \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "A区温室2号水泵",
-    "type_id": 1,
-    "location": "A区温室"
-  }'
-```
+**接口地址**：`POST /api/ai/diagnosis`
 
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": "WP-003",
-    "name": "A区温室2号水泵",
-    "type_id": 1,
-    "location": "A区温室",
-    "status": "offline",
-    "state": "off",
-    "mode": "auto",
-    "last_update": null,
-    "created_at": "2026-04-13T15:30:00.000Z",
-    "type": "water_pump",
-    "type_name": "水泵",
-    "description": "用于灌溉和排水控制"
-  },
-  "message": "执行器创建成功"
-}
-```
+### 10.3 图片识别
+
+**接口地址**：`POST /api/ai/image-recognition`
+
+### 10.4 获取模型列表
+
+**接口地址**：`GET /api/ai/models`
 
 ---
 
-### 6. 删除执行器
-
-**接口地址**：`DELETE /api/actuators/[id]`
-
-**描述**：删除指定执行器
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 执行器ID |
-
-**请求示例**：
-```bash
-curl -X DELETE http://localhost:3000/api/actuators/WP-003
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "message": "执行器删除成功"
-}
-```
-
----
-
-## 控制指令API
-
-控制指令API用于实现网页端远程控制硬件执行器的功能。采用轮询方式，网页端发送指令到服务器，硬件端定期查询并执行。
-
-### 1. 发送控制指令（网页端）
-
-**接口地址**：`POST /api/actuators/[id]/commands`
-
-**描述**：网页端发送控制指令到服务器，等待硬件端查询执行
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 执行器ID（如：WP-001） |
-
-**请求体**：
-```json
-{
-  "command": "on"  // 控制命令：on 或 off
-}
-```
-
-**请求示例**：
-```bash
-# 发送开启指令
-curl -X POST http://localhost:3000/api/actuators/WP-002/commands \
-  -H "Content-Type: application/json" \
-  -d '{"command": "on"}'
-
-# 发送关闭指令
-curl -X POST http://localhost:3000/api/actuators/WP-002/commands \
-  -H "Content-Type: application/json" \
-  -d '{"command": "off"}'
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "actuator_id": "WP-002",
-    "command": "on",
-    "status": "pending"
-  },
-  "message": "OK"
-}
-```
-
-**状态说明**：
-| 状态值 | 说明 |
-|--------|------|
-| pending | 待执行（硬件端尚未查询） |
-| executed | 已执行（硬件端已确认完成） |
-| failed | 执行失败 |
-
----
-
-### 2. 查询控制指令（硬件端）
-
-**接口地址**：`GET /api/actuators/[id]/commands`
-
-**描述**：硬件端查询是否有待执行的控制指令
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 执行器ID |
-
-**请求示例**：
-```bash
-curl http://localhost:3000/api/actuators/WP-002/commands
-```
-
-**响应示例（有待执行指令）**：
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "actuator_id": "WP-002",
-    "command": "on",
-    "status": "pending",
-    "created_at": "2026-04-13T15:30:00.000Z"
-  },
-  "message": "OK"
-}
-```
-
-**响应示例（无待执行指令）**：
-```json
-{
-  "success": true,
-  "data": null,
-  "message": "没有待执行的指令"
-}
-```
-
----
-
-### 3. 确认指令执行（硬件端）
-
-**接口地址**：`PATCH /api/actuators/[id]/commands`
-
-**描述**：硬件端确认指令执行结果
-
-**路径参数**：
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | string | 是 | 执行器ID |
-
-**请求体**：
-```json
-{
-  "command_id": 1,        // 指令ID（从查询接口获取）
-  "status": "executed"    // 执行状态：executed 或 failed
-}
-```
-
-**请求示例**：
-```bash
-# 确认执行成功
-curl -X PATCH http://localhost:3000/api/actuators/WP-002/commands \
-  -H "Content-Type: application/json" \
-  -d '{"command_id": 1, "status": "executed"}'
-
-# 确认执行失败
-curl -X PATCH http://localhost:3000/api/actuators/WP-002/commands \
-  -H "Content-Type: application/json" \
-  -d '{"command_id": 1, "status": "failed"}'
-```
-
-**响应示例**：
-```json
-{
-  "success": true,
-  "message": "OK"
-}
-```
-
-**注意事项**：
-1. 确认执行成功后，系统会自动更新执行器的状态
-2. 硬件端建议每1-2秒查询一次指令
-3. 同一时间只能有一个待执行的指令
-
----
-
-## 数据对比API
-
-### 1. 多传感器数据对比
-
-**接口地址**：`GET /api/sensors/[id]/data`（多次调用）
-
-**描述**：通过多次调用传感器数据接口实现多传感器数据对比
-
-**实现方式**：
-```javascript
-// 前端实现示例
-const sensorIds = ['T-001', 'H-001', 'L-001']
-const startTime = '2026-04-12T00:00:00Z'
-const endTime = '2026-04-13T23:59:59Z'
-
-const promises = sensorIds.map(id => 
-  fetch(`/api/sensors/${id}/data?startTime=${startTime}&endTime=${endTime}&limit=1000`)
-    .then(res => res.json())
-)
-
-const results = await Promise.all(promises)
-```
-
----
-
-## 错误处理
+## 11. 错误处理
 
 ### 错误响应格式
-
-所有API在发生错误时都会返回统一的错误格式：
 
 ```json
 {
@@ -723,155 +535,16 @@ const results = await Promise.all(promises)
 | 404 | 资源不存在 |
 | 500 | 服务器内部错误 |
 
-### 错误示例
+---
 
-**400 错误**：
-```json
-{
-  "success": false,
-  "error": "缺少必要参数：name, type_id, location"
-}
+## 12. 设备编号规则
+
 ```
-
-**404 错误**：
-```json
-{
-  "success": false,
-  "error": "传感器不存在"
-}
-```
-
-**500 错误**：
-```json
-{
-  "success": false,
-  "error": "获取传感器列表失败",
-  "details": "数据库连接失败"
-}
+[基地编码]-[区域编码]-[设备类型]-[序号]
+示例：BJ-001-GH1-S-001（北京001号基地-1号大棚-传感器-001）
 ```
 
 ---
 
-## 数据类型说明
-
-### 传感器类型（sensor_types）
-
-| 类型标识 | 名称 | 单位 |
-|---------|------|------|
-| temperature | 温度传感器 | °C |
-| humidity | 空气湿度传感器 | % |
-| light | 光照传感器 | Lux |
-| soil | 土壤湿度传感器 | % |
-| soil_temperature | 土壤温度传感器 | °C |
-| ec | 土壤电导率传感器 | μS/cm |
-| ph | 土壤pH值传感器 | pH |
-
-### 执行器类型（actuator_types）
-
-| 类型标识 | 名称 | 描述 |
-|---------|------|------|
-| water_pump | 水泵 | 用于灌溉和排水控制 |
-| fan | 风扇 | 用于通风和温度调节 |
-| heater | 加热器 | 用于温度控制 |
-| valve | 电磁阀 | 用于水流控制 |
-| light | 补光灯 | 用于光照调节 |
-
-### 执行器状态说明
-
-| 字段 | 取值 | 说明 |
-|------|------|------|
-| status | online | 设备在线 |
-| status | offline | 设备离线 |
-| state | on | 开启状态 |
-| state | off | 关闭状态 |
-| mode | auto | 自动控制模式 |
-| mode | manual | 手动控制模式 |
-
----
-
-## 使用示例
-
-### JavaScript/TypeScript 示例
-
-```typescript
-// 获取所有传感器
-const sensors = await fetch('/api/sensors')
-  .then(res => res.json())
-
-// 获取传感器历史数据
-const data = await fetch('/api/sensors/T-001/data?limit=100')
-  .then(res => res.json())
-
-// 上传传感器数据
-await fetch('/api/sensors/T-001/data', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ value: 25.5 })
-})
-
-// 开启水泵
-await fetch('/api/actuators/WP-001', {
-  method: 'PATCH',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ 
-    state: 'on', 
-    trigger_source: 'user' 
-  })
-})
-
-// 发送控制指令（网页端控制硬件）
-await fetch('/api/actuators/WP-002/commands', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ command: 'on' })
-})
-```
-
-### Python 示例
-
-```python
-import requests
-
-# 获取所有传感器
-response = requests.get('http://localhost:3000/api/sensors')
-sensors = response.json()
-
-# 上传传感器数据
-response = requests.post(
-    'http://localhost:3000/api/sensors/T-001/data',
-    json={'value': 25.5}
-)
-
-# 开启水泵
-response = requests.patch(
-    'http://localhost:3000/api/actuators/WP-001',
-    json={'state': 'on', 'trigger_source': 'user'}
-)
-
-# 发送控制指令（网页端控制硬件）
-response = requests.post(
-    'http://localhost:3000/api/actuators/WP-002/commands',
-    json={'command': 'on'}
-)
-```
-
----
-
-## 注意事项
-
-1. **时间格式**：所有时间参数使用 ISO 8601 格式（如：`2026-04-13T15:30:00.000Z`）
-2. **数据精度**：传感器数据保留2位小数
-3. **自动刷新**：前端页面每5-10秒自动刷新数据
-4. **状态历史**：执行器状态变更会自动记录到历史表
-5. **并发限制**：建议控制API调用频率，避免过于频繁的请求
-6. **控制指令**：
-   - 硬件端建议每1-2秒查询一次控制指令
-   - 确认执行成功后会自动更新执行器状态
-   - 同一时间只能有一个待执行的指令
-   - 指令执行后状态会从 pending 变为 executed 或 failed
-
----
-
-**最后更新时间**：2026-05-21  
-**文档版本**：v1.2  
-**维护团队**：开发团队
+**文档版本**：v2.0  
+**最后更新**：2026-06-23
