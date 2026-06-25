@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { getBeijingTimeForDB } from '@/lib/beijing-time'
 
 /**
  * 执行器数据接口
@@ -230,10 +231,10 @@ export async function PATCH(
     // 只有当不是专门更新 locked 字段时，才自动设置 locked = 1
     const isLockedUpdateOnly = updates.length === 1 && updates[0].includes('locked')
     if (!isLockedUpdateOnly) {
-      updates.push('last_update = CURRENT_TIMESTAMP, locked = 1')
+      updates.push(`last_update = '${getBeijingTimeForDB()}', locked = 1`)
     } else {
       // 如果是专门更新 locked 字段，只更新时间戳
-      updates.push('last_update = CURRENT_TIMESTAMP')
+      updates.push(`last_update = '${getBeijingTimeForDB()}'`)
     }
     values.push(id)
 
@@ -269,8 +270,8 @@ export async function PATCH(
       const newState = body.state === 1 ? 'on' : body.state === 0 ? 'off' : body.state
       await db.executeWithRetry(
         `INSERT INTO actuator_commands (actuator_id, command, status, created_at) 
-         VALUES (?, ?, 'pending', CURRENT_TIMESTAMP)`,
-        [id, newState]
+         VALUES (?, ?, 'pending', ?)`,
+        [id, newState, getBeijingTimeForDB()]
       )
       console.log(`[Actuator] 用户操作已锁定 - ID: ${id}, 新状态: ${newState}, 已下发控制指令`)
     }
@@ -387,8 +388,8 @@ export async function POST(
       }
       
       await db.execute<ResultSetHeader>(
-        'UPDATE actuators SET status = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?',
-        [statusValue, id]
+        'UPDATE actuators SET status = ?, last_update = ? WHERE id = ?',
+        [statusValue, getBeijingTimeForDB(), id]
       )
     }
 
@@ -404,15 +405,15 @@ export async function POST(
       // 记录硬件上报的状态到历史表（用于追踪硬件实际状态变化）
       await db.executeWithRetry(
         `INSERT INTO actuator_status_history (actuator_id, state, mode, trigger_source, timestamp) 
-         VALUES (?, ?, ?, 'hardware_report', CURRENT_TIMESTAMP)`,
-        [id, hardwareState || serverState, hardwareMode || serverMode]
+         VALUES (?, ?, ?, 'hardware_report', ?)`,
+        [id, hardwareState || serverState, hardwareMode || serverMode, getBeijingTimeForDB()]
       )
 
       // 同时下发一条控制指令到指令表（双保险：即使硬件不处理force_sync响应，下次查询指令也能获取）
       await db.executeWithRetry(
         `INSERT INTO actuator_commands (actuator_id, command, status, created_at) 
-         VALUES (?, ?, 'pending', CURRENT_TIMESTAMP)`,
-        [id, serverState]
+         VALUES (?, ?, 'pending', ?)`,
+        [id, serverState, getBeijingTimeForDB()]
       )
 
       return NextResponse.json({

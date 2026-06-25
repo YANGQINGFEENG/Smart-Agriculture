@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { sendCommandToActuator } from '@/app/api/websocket/route'
+import { getBeijingTimeForDB } from '@/lib/beijing-time'
 
 /**
  * 控制指令接口
@@ -28,10 +29,10 @@ export async function GET(
     // 清理超时的命令
     await db.execute(
       `UPDATE actuator_commands 
-       SET status = 'failed', executed_at = CURRENT_TIMESTAMP 
+       SET status = 'failed', executed_at = ? 
        WHERE actuator_id = ? AND status = 'pending' 
        AND created_at < datetime('now', '-5 minutes')`,
-      [id]
+      [getBeijingTimeForDB(), id]
     )
 
     const commands = await db.query<ActuatorCommand[]>(
@@ -201,9 +202,9 @@ export async function PATCH(
 
     await db.execute<ResultSetHeader>(
       `UPDATE actuator_commands 
-       SET status = ?, executed_at = CURRENT_TIMESTAMP 
+       SET status = ?, executed_at = ? 
        WHERE id = ? AND actuator_id = ?`,
-      [body.status, body.command_id, id]
+      [body.status, getBeijingTimeForDB(), body.command_id, id]
     )
 
     // 解锁执行器，允许用户继续操作

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { getBeijingTimeForDB } from '@/lib/beijing-time'
 
 /**
  * 传感器数据接口
@@ -165,13 +166,13 @@ export async function POST(
     }
 
     const result = await db.execute<ResultSetHeader>(
-      'INSERT INTO sensor_data (sensor_id, value) VALUES (?, ?)',
-      [id, parseFloat(body.value.toFixed(2))]
+      'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
+      [id, parseFloat(body.value.toFixed(2)), getBeijingTimeForDB()]
     )
 
     await db.execute<ResultSetHeader>(
-      'UPDATE sensors SET status = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?',
-      ['online', id]
+      'UPDATE sensors SET status = ?, last_update = ? WHERE id = ?',
+      ['online', getBeijingTimeForDB(), id]
     )
 
     const newData = await db.query<SensorData[]>(

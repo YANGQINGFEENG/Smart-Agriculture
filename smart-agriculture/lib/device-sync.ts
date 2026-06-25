@@ -1,4 +1,5 @@
 import { db } from './db'
+import { getBeijingTimeForDB } from './beijing-time'
 
 /**
  * 设备同步服务
@@ -53,14 +54,14 @@ export async function syncNodeToSensor(
 
   // 3. 更新传感器状态
   await db.execute(
-    'UPDATE sensors SET status = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?',
-    ['online', sensorId]
+    'UPDATE sensors SET status = ?, last_update = ? WHERE id = ?',
+    ['online', getBeijingTimeForDB(), sensorId]
   )
 
   // 4. 插入传感器数据
   await db.execute(
-    'INSERT INTO sensor_data (sensor_id, value) VALUES (?, ?)',
-    [sensorId, value]
+    'INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES (?, ?, ?)',
+    [sensorId, value, getBeijingTimeForDB()]
   )
 }
 
@@ -110,8 +111,8 @@ export async function syncNodeToActuator(
 
   // 3. 更新执行器状态
   await db.execute(
-    'UPDATE actuators SET status = ?, state = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?',
-    ['online', state, actuatorId]
+    'UPDATE actuators SET status = ?, state = ?, last_update = ? WHERE id = ?',
+    ['online', state, getBeijingTimeForDB(), actuatorId]
   )
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { syncNodeToSensor } from '@/lib/device-sync'
+import { getBeijingTimeForDB } from '@/lib/beijing-time'
 
 interface Gateway extends RowDataPacket {
   id: number
@@ -78,8 +79,8 @@ export async function POST(request: NextRequest) {
     } else {
       // 更新网关状态
       await db.execute(
-        'UPDATE gateways SET status = ?, last_heartbeat = CURRENT_TIMESTAMP WHERE id = ?',
-        ['online', gateway[0].id]
+        'UPDATE gateways SET status = ?, last_heartbeat = ? WHERE id = ?',
+        ['online', getBeijingTimeForDB(), gateway[0].id]
       )
     }
 
@@ -141,17 +142,17 @@ async function processNodeData(gatewayId: number, nodeData: any) {
   } else {
     // 更新设备状态
     await db.execute(
-      'UPDATE device_nodes SET status = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?',
-      ['online', node[0].id]
+      'UPDATE device_nodes SET status = ?, last_update = ? WHERE id = ?',
+      ['online', getBeijingTimeForDB(), node[0].id]
     )
   }
 
   // 存储数据到device_data表
   if (value !== undefined && value !== null) {
     await db.execute(
-      `INSERT INTO device_data (gateway_id, node_id, sensor_type, value, unit)
-       VALUES (?, ?, ?, ?, ?)`,
-      [gatewayId, node_id, type || 'unknown', value, unit || null]
+      `INSERT INTO device_data (gateway_id, node_id, sensor_type, value, unit, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [gatewayId, node_id, type || 'unknown', value, unit || null, getBeijingTimeForDB()]
     )
 
     // 同步到sensors表（让概览、详情等页面能看到数据）
