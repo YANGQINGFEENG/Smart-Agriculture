@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useFarm } from '@/lib/farm-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, CheckCircle, Lightbulb, Play, Pause, RefreshCw, Terminal, ChevronDown } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { AlertTriangle, CheckCircle, Lightbulb, Play, Pause, RefreshCw, Terminal, ChevronDown, Zap } from 'lucide-react'
 
 interface SensorAnalysis {
   sensorName: string
@@ -43,6 +45,24 @@ interface LogEntry {
   id: number
   timestamp: string
   type: 'info' | 'success' | 'warning' | 'error' | 'system'
+  message: string
+}
+
+interface Strategy {
+  id: number
+  name: string
+  actuator_id: string
+  action: string
+  enabled: boolean
+}
+
+interface ExecutionLog {
+  id: number
+  timestamp: string
+  strategy_name: string
+  actuator_id: string
+  action: string
+  status: 'success' | 'failed'
   message: string
 }
 
@@ -88,17 +108,24 @@ function CollapsibleCard({
 }
 
 export function AIRealtimeMonitor() {
+  const { selectedFarmId } = useFarm()
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [diagnosisResult, setDiagnosisResult] = useState<DiagnosisResult | null>(null)
   const [sensorData, setSensorData] = useState<SensorData[]>([])
   const [detectionResults, setDetectionResults] = useState<DetectionResult[]>([])
-  const [currentThinking, setCurrentThinking] = useState<string>('')
-  const [lastUpdate, setLastUpdate] = useState<string>('')
   const [logs, setLogs] = useState<LogEntry[]>([])
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [currentThinking, setCurrentThinking] = useState('')
+  const [lastUpdate, setLastUpdate] = useState('')
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
   const logIdRef = useRef(0)
   const thinkingIndexRef = useRef(0)
+  
+  // 策略执行状态
+  const [strategies, setStrategies] = useState<Strategy[]>([])
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([])
+  const [executingStrategy, setExecutingStrategy] = useState<number | null>(null)
+  const [autoExecute, setAutoExecute] = useState(false)
 
   const thinkingSteps = [
     '正在分析传感器数据...',
@@ -121,6 +148,90 @@ export function AIRealtimeMonitor() {
     }
     setLogs(prev => [...prev, newLog])
     console.log(`[${newLog.timestamp}] [${type.toUpperCase()}] ${message}`)
+  }
+
+  // 获取策略列表
+  const fetchStrategies = async () => {
+    try {
+      const response = await fetch('/api/strategies')
+      const result = await response.json()
+      if (result.success) {
+        setStrategies(result.data || [])
+      }
+    } catch (error) {
+      console.error('获取策略失败:', error)
+    }
+  }
+
+  // 执行策略
+  const executeStrategy = async (strategy: Strategy) => {
+    setExecutingStrategy(strategy.id)
+    addLog('system', `执行策略: ${strategy.name}`)
+
+    try {
+      // 发送控制指令到执行器
+      const command = strategy.action === 'on' ? 'on' : 'off'
+      const response = await fetch(`/api/actuators/${strategy.actuator_id}/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command }),
+      })
+
+      const result = await response.json()
+
+      const execLog: ExecutionLog = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleTimeString('zh-CN'),
+        strategy_name: strategy.name,
+        actuator_id: strategy.actuator_id,
+        action: strategy.action,
+        status: result.success ? 'success' : 'failed',
+        message: result.success ? '执行成功' : (result.error || '执行失败'),
+      }
+
+      setExecutionLogs(prev => [execLog, ...prev].slice(0, 20))
+
+      if (result.success) {
+        addLog('success', `策略执行成功: ${strategy.name} -> ${strategy.actuator_id} ${strategy.action}`)
+      } else {
+        addLog('error', `策略执行失败: ${strategy.name} - ${result.error}`)
+      }
+    } catch (error) {
+      addLog('error', `策略执行异常: ${error instanceof Error ? error.message : '未知错误'}`)
+      setExecutionLogs(prev => [{
+        id: Date.now(),
+        timestamp: new Date().toLocaleTimeString('zh-CN'),
+        strategy_name: strategy.name,
+        actuator_id: strategy.actuator_id,
+        action: strategy.action,
+        status: 'failed' as const,
+        message: error instanceof Error ? error.message : '执行异常',
+      }, ...prev].slice(0, 20))
+    } finally {
+      setExecutingStrategy(null)
+    }
+  }
+
+  // 根据诊断结果自动执行策略
+  const autoExecuteStrategies = async (actions: string[]) => {
+    if (!autoExecute || actions.length === 0) return
+
+    addLog('system', `自动执行模式: 准备执行 ${actions.length} 个策略`)
+
+    for (const action of actions) {
+      // 解析动作，找到匹配的策略
+      const matchedStrategy = strategies.find(s => 
+        action.toLowerCase().includes(s.name.toLowerCase()) ||
+        action.toLowerCase().includes(s.actuator_id.toLowerCase())
+      )
+
+      if (matchedStrategy) {
+        await executeStrategy(matchedStrategy)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      } else {
+        addLog('warning', `未找到匹配的策略: ${action}`)
+      }
+    }
   }
 
   const startThinkingAnimation = () => {
@@ -174,7 +285,7 @@ export function AIRealtimeMonitor() {
 
         if (result.data.rawResponse?.thinking) {
           addLog('system', '  thinking:')
-          const thinkingLines = result.data.rawResponse.thinking.split('\n').filter(line => line.trim())
+          const thinkingLines = result.data.rawResponse.thinking.split('\n').filter((line: string) => line.trim())
           thinkingLines.forEach((line: string) => {
             addLog('info', `    ${line.trim().slice(0, 100)}`)
           })
@@ -217,6 +328,11 @@ export function AIRealtimeMonitor() {
           result.data.diagnosis.actions.forEach((action: string, index: number) => {
             addLog('system', `${index + 1}. ${action}`)
           })
+
+          // 自动执行策略
+          if (autoExecute) {
+            await autoExecuteStrategies(result.data.diagnosis.actions)
+          }
         }
 
         addLog('system', '--- 数据来源 ---')
@@ -257,6 +373,7 @@ export function AIRealtimeMonitor() {
 
   useEffect(() => {
     performDiagnosis()
+    fetchStrategies()
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current)
@@ -496,21 +613,59 @@ export function AIRealtimeMonitor() {
                     title={`执行策略 (${diagnosisResult.actions.length})`}
                     icon={Play}
                     iconColor="text-green-600"
+                    defaultCollapsed={false}
                   >
-                    <div className="grid grid-cols-2 gap-2">
-                      {diagnosisResult.actions.map((action, index) => (
-                        <Button
-                          key={index}
-                          variant="outline"
-                          className="justify-start bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800"
-                          onClick={() => {
-                            addLog('system', `用户执行策略: ${action}`)
-                            alert(`即将执行: ${action}`)
-                          }}
+                    <div className="space-y-3">
+                      {/* 自动执行开关 */}
+                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                        <span className="text-sm font-medium text-gray-700">AI自动执行策略</span>
+                        <button
+                          onClick={() => setAutoExecute(!autoExecute)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            autoExecute ? 'bg-green-500' : 'bg-gray-300'
+                          }`}
                         >
-                          {action}
-                        </Button>
-                      ))}
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              autoExecute ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {autoExecute ? '开启后，AI诊断发现异常时将自动执行对应策略' : '关闭后需要手动点击执行'}
+                      </p>
+
+                      {/* 策略按钮 */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {diagnosisResult.actions.map((action, index) => {
+                          const matchedStrategy = strategies.find(s => 
+                            action.toLowerCase().includes(s.name.toLowerCase())
+                          )
+                          return (
+                            <Button
+                              key={index}
+                              variant="outline"
+                              className="justify-start bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800"
+                              disabled={executingStrategy !== null}
+                              onClick={() => {
+                                if (matchedStrategy) {
+                                  executeStrategy(matchedStrategy)
+                                } else {
+                                  addLog('warning', `未找到匹配的策略: ${action}`)
+                                }
+                              }}
+                            >
+                              {executingStrategy === matchedStrategy?.id ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Zap className="w-4 h-4 mr-2" />
+                              )}
+                              {action}
+                            </Button>
+                          )
+                        })}
+                      </div>
                     </div>
                   </CollapsibleCard>
                 )}
@@ -558,6 +713,32 @@ export function AIRealtimeMonitor() {
           )}
         </CardContent>
       </Card>
+
+      {/* 策略执行日志 */}
+      {executionLogs.length > 0 && (
+        <Card className="bg-gray-900">
+          <CardHeader className="border-b border-gray-700">
+            <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              策略执行记录
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-2 max-h-40 overflow-y-auto font-mono text-xs">
+            <div className="space-y-1">
+              {executionLogs.map((log) => (
+                <div key={log.id} className="flex items-start gap-2">
+                  <span className="text-gray-500 flex-shrink-0">[{log.timestamp}]</span>
+                  <span className={log.status === 'success' ? 'text-green-400' : 'text-red-400'}>
+                    [{log.status === 'success' ? 'OK' : 'FAIL'}]
+                  </span>
+                  <span className="text-gray-300">{log.strategy_name}</span>
+                  <span className="text-gray-500">→ {log.actuator_id} {log.action}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="bg-gray-50/50">
         <CardHeader className="py-3">
