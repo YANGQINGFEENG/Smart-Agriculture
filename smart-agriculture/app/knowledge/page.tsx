@@ -29,6 +29,7 @@ import {
   Trash2,
   Loader2,
   Upload,
+  Download,
   Sparkles,
   AlertTriangle,
   Check,
@@ -338,6 +339,60 @@ export default function KnowledgePage() {
     setSelectedItems(newSelected)
   }
 
+  // 导出功能
+  const handleExport = async () => {
+    try {
+      const response = await fetch('/api/knowledge/export?format=file')
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `knowledge_export_${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
+    } catch (error) {
+      console.error("导出失败:", error)
+      alert("导出失败")
+    }
+  }
+
+  // 导入功能
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string
+        const data = JSON.parse(content)
+
+        const response = await fetch('/api/knowledge/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data, mode: 'skip' }),
+        })
+        const result = await response.json()
+
+        if (result.success) {
+          alert(`导入完成: ${result.message}`)
+          fetchKnowledge(1)
+        } else {
+          alert(`导入失败: ${result.error}`)
+        }
+      } catch (error) {
+        console.error("导入失败:", error)
+        alert("导入失败: 文件格式错误")
+      }
+    }
+    reader.readAsText(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const getCategoryColor = (category: string) => categoryColors[category] || 'from-slate-400/80 to-slate-500/80'
   const getCategoryBadgeColor = (category: string) => categoryOptions.find(c => c.value === category)?.color || 'bg-slate-50 text-slate-600'
 
@@ -390,6 +445,21 @@ export default function KnowledgePage() {
                   <Sparkles className="h-4 w-4 mr-1" />
                   智能添加
                 </Button>
+                <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Download className="h-4 w-4 mr-1" />
+                  导出
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-1" />
+                  导入
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  className="hidden"
+                />
               </div>
             </div>
 
