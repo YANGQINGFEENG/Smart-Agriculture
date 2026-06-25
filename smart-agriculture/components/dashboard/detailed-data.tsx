@@ -58,7 +58,7 @@ export function DetailedData() {
   const [filterType, setFilterType] = useState("all")
   const [sensorData, setSensorData] = useState<TableData[]>([])
   const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
   const formatRelativeTime = (dateStr: string | null): string => {
     if (!dateStr) return '暂无数据'
@@ -185,6 +185,7 @@ export function DetailedData() {
   }
 
   useEffect(() => {
+    setLastUpdate(new Date())
     fetchSensorData()
     
     const interval = setInterval(fetchSensorData, 10000)
@@ -221,7 +222,7 @@ export function DetailedData() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <RefreshCw className="w-3 h-3" />
-              <span>最后更新: {lastUpdate.toLocaleTimeString('zh-CN')}</span>
+              <span>最后更新: {lastUpdate ? lastUpdate.toLocaleTimeString('zh-CN') : '--:--:--'}</span>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
