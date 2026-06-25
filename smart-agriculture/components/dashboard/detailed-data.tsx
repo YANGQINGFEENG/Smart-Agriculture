@@ -60,40 +60,52 @@ export function DetailedData() {
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
+  const formatRelativeTime = (dateStr: string | null): string => {
+    if (!dateStr) return '暂无数据'
+    
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffSeconds = Math.floor(diffMs / 1000)
+    const diffMinutes = Math.floor(diffSeconds / 60)
+    const diffHours = Math.floor(diffMinutes / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    
+    if (diffSeconds < 60) return `${diffSeconds}秒前`
+    if (diffMinutes < 60) return `${diffMinutes}分钟前`
+    if (diffHours < 24) return `${diffHours}小时前`
+    if (diffDays < 7) return `${diffDays}天前`
+    
+    return date.toLocaleDateString('zh-CN')
+  }
+
+  const getStatusFromTime = (dateStr: string | null, onlineStatus: string): string => {
+    if (onlineStatus !== 'online') return '离线'
+    if (!dateStr) return '离线'
+    
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 1000 / 60)
+    
+    if (diffMinutes < 5) return '正常'
+    if (diffMinutes < 30) return '延迟'
+    return '异常'
+  }
+
   const fetchSensorData = async () => {
     try {
-      console.log('开始获取传感器数据...')
       const response = await fetch('/api/sensors')
-      console.log('传感器列表响应状态:', response.status)
       const result = await response.json()
-      console.log('传感器列表响应数据:', result)
       
       if (result.success && result.data) {
-        console.log('传感器列表数据:', result.data)
         const dataPromises = result.data.map(async (sensor: any) => {
           try {
-            console.log('获取传感器', sensor.id, '的数据...')
             const dataResponse = await fetch(`/api/sensors/${sensor.id}/data?limit=1`)
-            console.log('传感器数据响应状态:', dataResponse.status)
             const dataResult = await dataResponse.json()
-            console.log('传感器数据响应数据:', dataResult)
-            
             const latestData = dataResult.data?.[0]
             
-            const now = new Date()
-            const lastUpdate = sensor.last_update ? new Date(sensor.last_update) : null
-            const timeDiff = lastUpdate ? Math.floor((now.getTime() - lastUpdate.getTime()) / 1000 / 60) : 999
-            
-            let status = '离线'
-            if (sensor.status === 'online') {
-              if (timeDiff < 5) {
-                status = '正常'
-              } else if (timeDiff < 30) {
-                status = '延迟'
-              } else {
-                status = '异常'
-              }
-            }
+            const updateTime = latestData?.timestamp || sensor.last_update
+            const status = getStatusFromTime(updateTime, sensor.status)
             
             const formatValue = (value: any, type: string): string => {
               const numValue = typeof value === 'string' ? parseFloat(value) : value
@@ -141,15 +153,11 @@ export function DetailedData() {
               value: latestData ? formatValue(latestData.value, sensor.type || 'unknown') : '--',
               valueColor: latestData ? getValueColor(latestData.value, sensor.type || 'unknown') : 'text-muted-foreground',
               location: sensor.location,
-              time: latestData 
-                ? new Date(latestData.timestamp).toLocaleString('zh-CN')
-                : '暂无数据',
+              time: formatRelativeTime(updateTime),
               status: status,
               unit: sensor.unit || '',
             }
           } catch (error) {
-            console.error('获取传感器', sensor.id, '数据失败:', error)
-            // 返回默认数据，确保表格能正常显示
             return {
               id: sensor.id,
               name: sensor.name,
@@ -166,11 +174,8 @@ export function DetailedData() {
         })
         
         const resolvedData = await Promise.all(dataPromises)
-        console.log('处理后的数据:', resolvedData)
         setSensorData(resolvedData)
         setLastUpdate(new Date())
-      } else {
-        console.error('获取传感器列表失败:', result.error)
       }
     } catch (error) {
       console.error('获取传感器数据失败:', error)
