@@ -16,26 +16,69 @@ interface KnowledgeItem extends RowDataPacket {
 
 /**
  * GET /api/knowledge/export
- * 导出知识库（支持JSON格式，包含元数据用于移植）
+ * 导出知识库（支持多种范围选择）
+ * 
+ * 查询参数：
+ * - format: json (默认) 或 file (下载)
+ * - range: all (全部) / category (按分类) / status (按状态) / ids (指定ID) / date (按日期)
+ * - category: 分类名称（range=category时必填）
+ * - status: 状态（range=status时必填）
+ * - ids: ID列表，逗号分隔（range=ids时必填）
+ * - start_date: 开始日期（range=date时必填）
+ * - end_date: 结束日期（range=date时必填）
  */
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
+    const range = url.searchParams.get('range') || 'all'
     const category = url.searchParams.get('category')
     const status = url.searchParams.get('status')
+    const ids = url.searchParams.get('ids')
+    const startDate = url.searchParams.get('start_date')
+    const endDate = url.searchParams.get('end_date')
     const format = url.searchParams.get('format') || 'json'
 
     let query = 'SELECT * FROM knowledge_base'
     const conditions: string[] = []
     const params: any[] = []
 
-    if (category) {
-      conditions.push('category = ?')
-      params.push(category)
-    }
-    if (status) {
-      conditions.push('status = ?')
-      params.push(status)
+    // 根据范围参数构建查询条件
+    switch (range) {
+      case 'category':
+        if (category) {
+          conditions.push('category = ?')
+          params.push(category)
+        }
+        break
+      case 'status':
+        if (status) {
+          conditions.push('status = ?')
+          params.push(status)
+        }
+        break
+      case 'ids':
+        if (ids) {
+          const idList = ids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+          if (idList.length > 0) {
+            conditions.push(`id IN (${idList.map(() => '?').join(',')})`)
+            params.push(...idList)
+          }
+        }
+        break
+      case 'date':
+        if (startDate) {
+          conditions.push('created_at >= ?')
+          params.push(startDate)
+        }
+        if (endDate) {
+          conditions.push('created_at <= ?')
+          params.push(endDate + ' 23:59:59')
+        }
+        break
+      case 'all':
+      default:
+        // 不添加条件，导出全部
+        break
     }
 
     if (conditions.length > 0) {

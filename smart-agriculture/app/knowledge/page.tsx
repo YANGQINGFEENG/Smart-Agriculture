@@ -156,6 +156,13 @@ export default function KnowledgePage() {
   const [smartAddResult, setSmartAddResult] = useState<SmartAddResult | null>(null)
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // 导出范围选择状态
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [exportRange, setExportRange] = useState<string>("all")
+  const [exportCategory, setExportCategory] = useState<string>("")
+  const [exportStartDate, setExportStartDate] = useState<string>("")
+  const [exportEndDate, setExportEndDate] = useState<string>("")
 
   // 编辑状态
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null)
@@ -342,7 +349,22 @@ export default function KnowledgePage() {
   // 导出功能
   const handleExport = async () => {
     try {
-      const response = await fetch('/api/knowledge/export?format=file')
+      const params = new URLSearchParams()
+      params.set('range', exportRange)
+      params.set('format', 'file')
+      
+      if (exportRange === 'category' && exportCategory) {
+        params.set('category', exportCategory)
+      }
+      if (exportRange === 'date') {
+        if (exportStartDate) params.set('start_date', exportStartDate)
+        if (exportEndDate) params.set('end_date', exportEndDate)
+      }
+      if (exportRange === 'ids' && selectedIds.size > 0) {
+        params.set('ids', Array.from(selectedIds).join(','))
+      }
+
+      const response = await fetch(`/api/knowledge/export?${params}`)
       if (response.ok) {
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
@@ -353,6 +375,7 @@ export default function KnowledgePage() {
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
+        setShowExportDialog(false)
       }
     } catch (error) {
       console.error("导出失败:", error)
@@ -445,7 +468,7 @@ export default function KnowledgePage() {
                   <Sparkles className="h-4 w-4 mr-1" />
                   智能添加
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleExport}>
+                <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)}>
                   <Download className="h-4 w-4 mr-1" />
                   导出
                 </Button>
@@ -821,6 +844,72 @@ export default function KnowledgePage() {
             ) : (
               <Button variant="outline" onClick={() => setShowSmartAdd(false)}>取消</Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 导出范围选择对话框 */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>导出知识库</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">导出范围</label>
+              <Select value={exportRange} onValueChange={setExportRange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部知识</SelectItem>
+                  <SelectItem value="category">按分类导出</SelectItem>
+                  <SelectItem value="date">按日期范围</SelectItem>
+                  {selectedIds.size > 0 && (
+                    <SelectItem value="ids">已选中的 {selectedIds.size} 条</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {exportRange === 'category' && (
+              <div>
+                <label className="text-sm font-medium">选择分类</label>
+                <Select value={exportCategory} onValueChange={setExportCategory}>
+                  <SelectTrigger><SelectValue placeholder="选择分类" /></SelectTrigger>
+                  <SelectContent>
+                    {categoryOptions.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {exportRange === 'date' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">开始日期</label>
+                  <Input type="date" value={exportStartDate} onChange={(e) => setExportStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">结束日期</label>
+                  <Input type="date" value={exportEndDate} onChange={(e) => setExportEndDate(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div className="text-sm text-muted-foreground">
+              {exportRange === 'all' && '将导出所有知识数据'}
+              {exportRange === 'category' && exportCategory && `将导出"${exportCategory}"分类下的所有知识`}
+              {exportRange === 'date' && exportStartDate && exportEndDate && `将导出${exportStartDate}至${exportEndDate}期间的知识`}
+              {exportRange === 'ids' && `将导出选中的${selectedIds.size}条知识`}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>取消</Button>
+            <Button onClick={handleExport} disabled={exportRange === 'category' && !exportCategory}>
+              <Download className="h-4 w-4 mr-1" />
+              导出
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
