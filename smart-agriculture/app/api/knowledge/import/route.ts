@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, ResultSetHeader } from '@/lib/db'
+import { syncKnowledgeToRag } from '@/lib/knowledge-rag'
 
 /**
  * POST /api/knowledge/import
- * 导入知识库（从JSON数据）
+ * 导入知识库（从JSON数据，支持重建RAG索引）
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { data, mode = 'skip' } = body
+    const { data, mode = 'skip', rebuild_index = false } = body
 
     if (!data || !data.data) {
       return NextResponse.json(
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
     let imported = 0
     let skipped = 0
     let updated = 0
+    const importedItems: any[] = []
     const errors: string[] = []
 
     // 遍历所有分类
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
             }
           } else {
             // 新增记录
-            await db.execute(
+            const result = await db.execute(
               `INSERT INTO knowledge_base (title, content, category, tags, source, status)
                VALUES (?, ?, ?, ?, ?, ?)`,
               [
@@ -67,11 +69,29 @@ export async function POST(request: NextRequest) {
                 item.status || 'published',
               ]
             )
+            const newId = (result as any).lastID || (result as any).insertId
+            importedItems.push({
+              id: newId,
+              title: item.title,
+              content: item.content,
+              category: category,
+              tags: item.tags ? (Array.isArray(item.tags) ? item.tags.join(',') : item.tags) : null,
+            })
             imported++
           }
         } catch (err) {
           errors.push(`导入失败: ${item.title} - ${err instanceof Error ? err.message : '未知错误'}`)
         }
+      }
+    }
+
+    // 可选：重建RAG索引
+    let ragSyncResult = null
+    if (rebuild_index && importedItems.length > 0) {
+      try {
+        ragSyncResult = await syncKnowledgeToRag(importedItems)
+      } catch (err) {
+        errors.push(`RAG索引重建失败: ${err instanceof Error ? err.message : '未知错误'}`)
       }
     }
 
@@ -83,6 +103,8 @@ export async function POST(request: NextRequest) {
         skipped,
         errors,
         total: imported + updated + skipped,
+        rag_synced: ragSyncResult ? true : false,
+        rag_chunks: ragSyncResult?.added_chunks || 0,
       },
       message: `导入完成: 新增 ${imported} 条, 更新 ${updated} 条, 跳过 ${skipped} 条`,
     })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { getRagStatus } from '@/lib/knowledge-rag'
 
 interface KnowledgeItem extends RowDataPacket {
   id: number
@@ -15,7 +16,7 @@ interface KnowledgeItem extends RowDataPacket {
 
 /**
  * GET /api/knowledge/export
- * 导出知识库为JSON格式（用于生成ZIP）
+ * 导出知识库（支持JSON格式，包含元数据用于移植）
  */
 export async function GET(request: NextRequest) {
   try {
@@ -62,12 +63,26 @@ export async function GET(request: NextRequest) {
       })
     })
 
+    // 获取RAG状态
+    let ragStatus = null
+    try {
+      ragStatus = await getRagStatus()
+    } catch (e) {}
+
     const exportData = {
-      version: '1.0',
+      version: '2.0',
       export_date: new Date().toISOString(),
+      export_type: 'knowledge_base',
       total_items: rows.length,
       categories: Object.keys(grouped).length,
+      rag_enabled: ragStatus?.status === 'ok',
+      rag_index_size: ragStatus?.index_size || 0,
       data: grouped,
+      metadata: {
+        platform: 'smart-agriculture',
+        version: '1.0',
+        description: '智慧农业知识库导出文件',
+      },
     }
 
     if (format === 'json') {
