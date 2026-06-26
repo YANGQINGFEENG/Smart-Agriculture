@@ -321,41 +321,111 @@ class InstallerApp(ctk.CTk):
                 
             current_step += 1
             
-            # 步骤3：克隆项目
+            # 步骤3：获取项目文件
             self.log("")
-            self.log("下载项目文件（请稍候，首次下载可能需要几分钟）...")
-            self.update_status("下载项目文件...", current_step / total_steps)
+            self.log("获取项目文件...")
+            self.update_status("获取项目文件...", current_step / total_steps)
             
-            repo_url = "https://github.com/YANGQINGFEENG/Smart-Agriculture.git"
             target_dir = install_path / "smart-agriculture"
             
             if target_dir.exists():
-                self.log("⚠ 项目目录已存在，跳过克隆", "warning")
+                self.log("✓ 项目目录已存在，跳过下载", "success")
             else:
-                def git_progress(line):
-                    if "Receiving objects:" in line:
-                        try:
-                            pct = line.split("Receiving objects:")[1].strip().split("%")[0].strip()
-                            if pct.isdigit():
-                                self.update_status(f"下载中... {pct}%", (current_step + int(pct) / 100) / total_steps)
-                        except:
-                            pass
-                    elif "Resolving deltas:" in line:
-                        try:
-                            pct = line.split("Resolving deltas:")[1].strip().split("%")[0].strip()
-                            if pct.isdigit():
-                                self.update_status(f"处理中... {pct}%", (current_step + 0.9) / total_steps)
-                        except:
-                            pass
+                # 尝试多个下载源
+                repo_urls = [
+                    "https://github.com/YANGQINGFEENG/Smart-Agriculture.git",
+                    "https://gitee.com/mirrors_yangqingfeeng/Smart-Agriculture.git",  # Gitee镜像
+                ]
                 
-                success, output = self.run_command_with_progress(
-                    f'git clone --progress {repo_url} "{target_dir}"',
-                    progress_callback=git_progress
-                )
-                if success:
-                    self.log("✓ 项目下载完成", "success")
-                else:
-                    self.log(f"✗ 下载失败: {output}", "error")
+                download_success = False
+                
+                # 方式1：尝试Git克隆
+                for repo_url in repo_urls:
+                    self.log(f"尝试下载: {repo_url}")
+                    
+                    def git_progress(line):
+                        if "Receiving objects:" in line:
+                            try:
+                                pct = line.split("Receiving objects:")[1].strip().split("%")[0].strip()
+                                if pct.isdigit():
+                                    self.update_status(f"下载中... {pct}%", (current_step + int(pct) / 100) / total_steps)
+                            except:
+                                pass
+                    
+                    success, output = self.run_command_with_progress(
+                        f'git clone --progress {repo_url} "{target_dir}"',
+                        progress_callback=git_progress
+                    )
+                    if success:
+                        download_success = True
+                        self.log("✓ 项目下载完成", "success")
+                        break
+                    else:
+                        self.log(f"  下载失败，尝试下一个源...")
+                        # 清理失败的目录
+                        if target_dir.exists():
+                            shutil.rmtree(target_dir, ignore_errors=True)
+                
+                # 方式2：如果Git都失败，提示用户手动选择
+                if not download_success:
+                    self.log("")
+                    self.log("⚠ 自动下载失败，可能原因：", "warning")
+                    self.log("  - 网络连接问题")
+                    self.log("  - 无法访问GitHub")
+                    self.log("")
+                    self.log("请选择以下方式之一继续：", "info")
+                    self.log("  1. 选择已下载的项目ZIP文件")
+                    self.log("  2. 选择已解压的项目文件夹")
+                    self.log("")
+                    
+                    # 弹出选择对话框
+                    from tkinter import messagebox
+                    choice = messagebox.askyesnocancel(
+                        "选择安装方式",
+                        "自动下载失败，请选择安装方式：\n\n"
+                        "是(Y) - 选择已下载的ZIP文件\n"
+                        "否(N) - 选择已解压的项目文件夹\n"
+                        "取消 - 退出安装"
+                    )
+                    
+                    if choice is None:  # 取消
+                        self.log("用户取消安装", "warning")
+                        return
+                    elif choice:  # 选择ZIP文件
+                        zip_path = filedialog.askopenfilename(
+                            title="选择项目ZIP文件",
+                            filetypes=[("ZIP文件", "*.zip"), ("所有文件", "*.*")]
+                        )
+                        if zip_path:
+                            self.log(f"选择文件: {zip_path}")
+                            try:
+                                import zipfile
+                                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                                    zip_ref.extractall(install_path)
+                                # 查找解压后的目录
+                                extracted_dirs = [d for d in install_path.iterdir() if d.is_dir() and "smart-agriculture" in d.name.lower()]
+                                if extracted_dirs:
+                                    extracted_dirs[0].rename(target_dir)
+                                self.log("✓ 项目文件解压完成", "success")
+                                download_success = True
+                            except Exception as e:
+                                self.log(f"✗ 解压失败: {e}", "error")
+                        else:
+                            self.log("未选择文件", "warning")
+                    else:  # 选择文件夹
+                        folder_path = filedialog.askdirectory(title="选择已解压的项目文件夹")
+                        if folder_path:
+                            folder_path = Path(folder_path)
+                            self.log(f"选择目录: {folder_path}")
+                            # 复制到目标目录
+                            shutil.copytree(folder_path, target_dir)
+                            self.log("✓ 项目文件复制完成", "success")
+                            download_success = True
+                        else:
+                            self.log("未选择目录", "warning")
+                
+                if not download_success:
+                    self.log("✗ 无法获取项目文件，安装终止", "error")
                     return
                     
             current_step += 1
