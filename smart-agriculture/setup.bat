@@ -115,6 +115,8 @@ if errorlevel 1 (
     echo ✓ Ollama安装完成
     echo   正在拉取AI模型...
     ollama pull qwen3:1.7b-q4_K_M
+    echo   正在拉取视觉模型...
+    ollama pull llava:7b
 ) else (
     echo ✓ Ollama已安装
 )
