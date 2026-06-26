@@ -8,41 +8,96 @@ echo "  智慧农业物联网平台 - 一键启动"
 echo "======================================"
 echo ""
 
-# 检测Node.js
-echo "[1/6] 检测Node.js..."
+# 检测并安装Node.js
+echo "[1/8] 检测Node.js..."
 if ! command -v node &> /dev/null; then
-    echo "✗ 未检测到Node.js，请先安装Node.js 20+"
-    echo "  访问: https://nodejs.org/"
-    exit 1
+    echo "✗ 未检测到Node.js，正在自动安装..."
+    
+    # 检测操作系统
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        if command -v brew &> /dev/null; then
+            brew install node@20
+        else
+            echo "  正在安装Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            brew install node@20
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux
+        if command -v apt-get &> /dev/null; then
+            # Ubuntu/Debian
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+        elif command -v yum &> /dev/null; then
+            # CentOS/RHEL
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+            sudo yum install -y nodejs
+        else
+            echo "  请手动安装Node.js: https://nodejs.org/"
+            exit 1
+        fi
+    fi
+    
+    echo "✓ Node.js安装完成"
+else
+    echo "✓ Node.js已安装"
 fi
-echo "✓ Node.js已安装"
 
-# 检测Python
-echo "[2/6] 检测Python..."
+# 检测并安装Python
+echo "[2/8] 检测Python..."
 if ! command -v python3 &> /dev/null; then
-    echo "✗ 未检测到Python，请先安装Python 3.11+"
-    echo "  访问: https://www.python.org/"
-    exit 1
+    echo "✗ 未检测到Python，正在自动安装..."
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        brew install python@3.11
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y python3.11 python3.11-venv python3-pip
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y python3
+        fi
+    fi
+    
+    echo "✓ Python安装完成"
+else
+    echo "✓ Python已安装"
 fi
-echo "✓ Python已安装"
 
-# 检测依赖
-echo "[3/6] 检测项目依赖..."
+# 检测pip
+echo "[3/8] 检测pip..."
+if ! command -v pip3 &> /dev/null; then
+    echo "✗ 未检测到pip，正在安装..."
+    python3 -m ensurepip --upgrade
+    python3 -m pip install --upgrade pip
+fi
+echo "✓ pip已安装"
+
+# 安装Node.js依赖
+echo "[4/8] 检测项目依赖..."
 if [ ! -d "node_modules" ]; then
     echo "  正在安装Node.js依赖..."
-    npm install
+    npm install || {
+        echo "  使用淘宝镜像重试..."
+        npm config set registry https://registry.npmmirror.com
+        npm install
+    }
 fi
 echo "✓ Node.js依赖已安装"
 
 # 安装Python依赖
-echo "[4/6] 检测Python依赖..."
+echo "[5/8] 检测Python依赖..."
 if [ ! -d "inference-service/venv" ]; then
     echo "  正在创建Python虚拟环境..."
     cd inference-service
     python3 -m venv venv
     source venv/bin/activate
-    pip install -r requirements.txt
-    pip install -r requirements-rag.txt
+    echo "  正在安装Python依赖（使用清华镜像）..."
+    pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+    pip install -r requirements-rag.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     cd ..
     echo "✓ Python依赖已安装"
 else
@@ -50,7 +105,7 @@ else
 fi
 
 # 初始化数据库
-echo "[5/6] 初始化数据库..."
+echo "[6/8] 初始化数据库..."
 if [ ! -f "smart_agriculture.db" ]; then
     echo "  正在创建数据库..."
     node scripts/init-db.js
@@ -58,7 +113,7 @@ fi
 echo "✓ 数据库已就绪"
 
 # 创建环境变量
-echo "[6/6] 检查环境变量..."
+echo "[7/8] 检查环境变量..."
 if [ ! -f ".env.local" ]; then
     echo "  正在创建环境变量文件..."
     cp .env.example .env.local
@@ -71,6 +126,18 @@ else
     echo "✓ 环境变量已存在"
 fi
 
+# 检测并安装Ollama
+echo "[8/8] 检测Ollama..."
+if ! command -v ollama &> /dev/null; then
+    echo "○ Ollama未安装，正在安装..."
+    curl -fsSL https://ollama.ai/install.sh | sh
+    echo "✓ Ollama安装完成"
+    echo "  正在拉取AI模型..."
+    ollama pull qwen3:1.7b-q4_K_M
+else
+    echo "✓ Ollama已安装"
+fi
+
 echo ""
 echo "======================================"
 echo "  启动服务"
@@ -81,13 +148,9 @@ echo ""
 echo "正在启动AI服务..."
 
 # 启动Ollama（后台）
-if command -v ollama &> /dev/null; then
-    ollama serve &
-    OLLAMA_PID=$!
-    echo "✓ Ollama已启动 (PID: $OLLAMA_PID)"
-else
-    echo "○ Ollama未安装，跳过"
-fi
+ollama serve &
+OLLAMA_PID=$!
+echo "✓ Ollama已启动 (PID: $OLLAMA_PID)"
 
 # 启动YOLO推理服务（后台）
 cd inference-service
@@ -103,7 +166,7 @@ echo "✓ RAG服务已启动 (PID: $RAG_PID)"
 cd ..
 
 # 等待服务启动
-sleep 3
+sleep 5
 
 echo ""
 echo "======================================"
