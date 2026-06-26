@@ -224,12 +224,19 @@ class InstallerApp(ctk.CTk):
         try:
             process = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, cwd=cwd, bufsize=1
+                cwd=cwd, bufsize=1
             )
             
             output_lines = []
-            for line in process.stdout:
-                line = line.strip()
+            for raw_line in process.stdout:
+                try:
+                    line = raw_line.decode('utf-8', errors='ignore').strip()
+                except:
+                    try:
+                        line = raw_line.decode('gbk', errors='ignore').strip()
+                    except:
+                        line = ""
+                
                 if line:
                     output_lines.append(line)
                     self.log(f"  {line}")
