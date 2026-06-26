@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
     const apiUrl = `${ollamaHost}/api/tags`
 
-    const response = await fetch(apiUrl)
+    const response = await fetch(apiUrl, { signal: AbortSignal.timeout(5000) })
     
     if (!response.ok) {
       const errorText = await response.text()
@@ -83,11 +83,15 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
-    console.error('获取模型列表失败:', error)
-    return NextResponse.json(
-      { success: false, error: 'Ollama服务未启动或连接失败' },
-      { status: 500 }
-    )
+    return NextResponse.json({
+      success: true,
+      data: {
+        models: [],
+        total: 0,
+        loadedModels: []
+      },
+      message: 'Ollama服务未启动，请先启动Ollama'
+    })
   }
 }
 
