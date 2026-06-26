@@ -377,15 +377,16 @@ class InstallerApp(ctk.CTk):
             # 创建桌面快捷方式（Windows）
             if os.name == 'nt':
                 desktop = Path.home() / "Desktop"
-                shortcut_path = desktop / "天工慧眼.bat"
+                shortcut_path = desktop / "TianGongHuiYan.bat"
                 
                 with open(shortcut_path, 'w', encoding='utf-8') as f:
                     f.write(f'@echo off\n')
+                    f.write(f'chcp 65001 >nul\n')
                     f.write(f'cd /d "{target_dir}"\n')
                     f.write(f'start http://localhost:3000\n')
                     f.write(f'npm run dev\n')
                     
-                self.log(f"✓ 桌面快捷方式已创建: {shortcut_path}", "success")
+                self.log(f"✓ Desktop shortcut created: {shortcut_path}", "success")
                 
             current_step += 1
             
@@ -401,7 +402,7 @@ class InstallerApp(ctk.CTk):
             self.log(f"  2. 运行: setup.bat (Windows) 或 ./setup.sh (Linux/macOS)")
             self.log(f"  3. 访问: http://localhost:3000")
             self.log("")
-            self.log("或双击桌面快捷方式 '天工慧眼.bat'")
+            self.log("Or double-click desktop shortcut 'TianGongHuiYan.bat'")
             
             self.update_status("安装完成！", 1.0)
             
