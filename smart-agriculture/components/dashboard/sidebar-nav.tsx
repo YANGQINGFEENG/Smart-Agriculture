@@ -131,8 +131,8 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
             <Leaf className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="font-semibold text-foreground text-sm">智慧农业</h1>
-            <p className="text-xs text-muted-foreground">物联网监控平台</p>
+            <h1 className="font-semibold text-foreground text-sm">天工慧眼</h1>
+            <p className="text-xs text-muted-foreground">智慧农业物联网平台</p>
           </div>
         </div>
         

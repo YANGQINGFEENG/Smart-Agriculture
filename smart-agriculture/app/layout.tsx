@@ -9,8 +9,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: '智慧农业物联网平台',
-  description: '智慧农业物联网数据监控与分析平台',
+  title: '天工慧眼 - 智慧农业物联网平台',
+  description: '天工慧眼智慧农业物联网数据监控与分析平台',
   generator: 'v0.app',
   icons: {
     icon: [

@@ -393,7 +393,7 @@ export default function DashboardPage() {
         
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">
           <p className="text-xs text-muted-foreground text-center">
-            智慧农业物联网监控平台 v1.0.0 | {mounted ? lastUpdate : '--:--:--'}
+            天工慧眼 - 智慧农业物联网监控平台 v1.0.0 | {mounted ? lastUpdate : '--:--:--'}
           </p>
         </footer>
       </div>

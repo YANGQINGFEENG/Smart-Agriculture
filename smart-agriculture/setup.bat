@@ -3,7 +3,8 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 echo ======================================
-echo   智慧农业物联网平台 - 一键启动
+echo   天工慧眼 - 智慧农业物联网平台
+echo   一键启动
 echo ======================================
 echo.
 
