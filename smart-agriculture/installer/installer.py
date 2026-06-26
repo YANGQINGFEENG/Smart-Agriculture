@@ -23,11 +23,19 @@ class InstallerApp(ctk.CTk):
         super().__init__()
         
         self.title("天工慧眼 - 智慧农业物联网平台 安装程序")
-        self.geometry("800x600")
-        self.resizable(False, False)
+        self.resizable(True, True)
+        self.minsize(700, 550)
+        
+        # 获取屏幕尺寸并设置窗口大小（80%屏幕）
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        win_width = min(800, int(screen_width * 0.8))
+        win_height = min(600, int(screen_height * 0.8))
         
         # 居中显示
-        self.center_window()
+        x = (screen_width - win_width) // 2
+        y = (screen_height - win_height) // 2
+        self.geometry(f"{win_width}x{win_height}+{x}+{y}")
         
         # 安装目录
         self.install_dir = ctk.StringVar(value=str(Path.home() / "TianGongHuiYan"))
@@ -38,29 +46,44 @@ class InstallerApp(ctk.CTk):
         # 创建UI
         self.create_widgets()
         
-    def center_window(self):
-        self.update_idletasks()
-        x = (self.winfo_screenwidth() // 2) - (800 // 2)
-        y = (self.winfo_screenheight() // 2) - (600 // 2)
-        self.geometry(f"800x600+{x}+{y}")
-        
     def create_widgets(self):
-        # 主框架
+        # ===== 底部：按钮（固定在底部） =====
+        button_frame = ctk.CTkFrame(self, fg_color="#1f2937", corner_radius=0)
+        button_frame.pack(fill="x", side="bottom")
+        
+        btn_inner = ctk.CTkFrame(button_frame, fg_color="transparent")
+        btn_inner.pack(fill="x", padx=20, pady=10)
+        
+        self.cancel_btn = ctk.CTkButton(btn_inner, text="取消", 
+                                         height=40, width=100,
+                                         font=("Microsoft YaHei", 13),
+                                         fg_color="#6b7280", hover_color="#4b5563",
+                                         command=self.cancel_install)
+        self.cancel_btn.pack(side="right")
+        
+        self.install_btn = ctk.CTkButton(btn_inner, text="开始安装", 
+                                          height=40, width=120,
+                                          font=("Microsoft YaHei", 13, "bold"),
+                                          fg_color="#2563eb", hover_color="#1d4ed8",
+                                          command=self.start_install)
+        self.install_btn.pack(side="right", padx=(10, 0))
+        
+        # ===== 主内容区域（可滚动） =====
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=(15, 5))
         
         # ===== 顶部：Logo和标题 =====
         header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        header_frame.pack(fill="x", pady=(0, 20))
+        header_frame.pack(fill="x", pady=(0, 15))
         
         # Logo区域
-        logo_frame = ctk.CTkFrame(header_frame, width=80, height=80, 
-                                   fg_color="#2563eb", corner_radius=16)
-        logo_frame.pack(side="left", padx=(0, 15))
+        logo_frame = ctk.CTkFrame(header_frame, width=60, height=60, 
+                                   fg_color="#2563eb", corner_radius=12)
+        logo_frame.pack(side="left", padx=(0, 12))
         logo_frame.pack_propagate(False)
         
         logo_label = ctk.CTkLabel(logo_frame, text="TG", 
-                                   font=("Microsoft YaHei", 28, "bold"),
+                                   font=("Microsoft YaHei", 22, "bold"),
                                    text_color="white")
         logo_label.place(relx=0.5, rely=0.5, anchor="center")
         
@@ -69,44 +92,44 @@ class InstallerApp(ctk.CTk):
         title_frame.pack(side="left", fill="y")
         
         ctk.CTkLabel(title_frame, text="天工慧眼", 
-                      font=("Microsoft YaHei", 24, "bold"),
+                      font=("Microsoft YaHei", 20, "bold"),
                       text_color="#ffffff").pack(anchor="w")
         ctk.CTkLabel(title_frame, text="智慧农业物联网监控平台 v1.0.0", 
-                      font=("Microsoft YaHei", 12),
+                      font=("Microsoft YaHei", 11),
                       text_color="#9ca3af").pack(anchor="w")
         
-        # ===== 中间：安装选项 =====
-        options_frame = ctk.CTkFrame(main_frame, corner_radius=12)
-        options_frame.pack(fill="x", pady=(0, 15))
+        # ===== 安装选项 =====
+        options_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        options_frame.pack(fill="x", pady=(0, 10))
         
         ctk.CTkLabel(options_frame, text="安装选项", 
-                      font=("Microsoft YaHei", 14, "bold")).pack(anchor="w", padx=20, pady=(15, 10))
+                      font=("Microsoft YaHei", 13, "bold")).pack(anchor="w", padx=15, pady=(10, 8))
         
         # 安装目录
         dir_frame = ctk.CTkFrame(options_frame, fg_color="transparent")
-        dir_frame.pack(fill="x", padx=20, pady=(0, 15))
+        dir_frame.pack(fill="x", padx=15, pady=(0, 10))
         
         ctk.CTkLabel(dir_frame, text="安装目录:", 
-                      font=("Microsoft YaHei", 12)).pack(anchor="w", pady=(0, 5))
+                      font=("Microsoft YaHei", 11)).pack(anchor="w", pady=(0, 3))
         
         dir_input_frame = ctk.CTkFrame(dir_frame, fg_color="transparent")
         dir_input_frame.pack(fill="x")
         
         self.dir_entry = ctk.CTkEntry(dir_input_frame, textvariable=self.install_dir,
-                                       height=40, font=("Microsoft YaHei", 11))
-        self.dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+                                       height=36, font=("Microsoft YaHei", 11))
+        self.dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         
-        browse_btn = ctk.CTkButton(dir_input_frame, text="浏览", width=80, height=40,
+        browse_btn = ctk.CTkButton(dir_input_frame, text="浏览", width=70, height=36,
                                     font=("Microsoft YaHei", 11),
                                     command=self.browse_directory)
         browse_btn.pack(side="right")
         
         # 组件选择
         components_frame = ctk.CTkFrame(options_frame, fg_color="transparent")
-        components_frame.pack(fill="x", padx=20, pady=(0, 15))
+        components_frame.pack(fill="x", padx=15, pady=(0, 10))
         
         ctk.CTkLabel(components_frame, text="安装组件:", 
-                      font=("Microsoft YaHei", 12)).pack(anchor="w", pady=(0, 5))
+                      font=("Microsoft YaHei", 11)).pack(anchor="w", pady=(0, 3))
         
         self.var_nodejs = ctk.BooleanVar(value=True)
         self.var_python = ctk.BooleanVar(value=True)
@@ -117,57 +140,41 @@ class InstallerApp(ctk.CTk):
         checks_frame = ctk.CTkFrame(components_frame, fg_color="transparent")
         checks_frame.pack(fill="x")
         
-        ctk.CTkCheckBox(checks_frame, text="Node.js 20+ (必需)", 
-                        variable=self.var_nodejs, font=("Microsoft YaHei", 11)).pack(side="left", padx=(0, 15))
-        ctk.CTkCheckBox(checks_frame, text="Python 3.11+ (必需)", 
-                        variable=self.var_python, font=("Microsoft YaHei", 11)).pack(side="left", padx=(0, 15))
-        ctk.CTkCheckBox(checks_frame, text="Ollama AI", 
-                        variable=self.var_ollama, font=("Microsoft YaHei", 11)).pack(side="left", padx=(0, 15))
-        ctk.CTkCheckBox(checks_frame, text="YOLO推理", 
-                        variable=self.var_yolo, font=("Microsoft YaHei", 11)).pack(side="left", padx=(0, 15))
-        ctk.CTkCheckBox(checks_frame, text="RAG服务", 
-                        variable=self.var_rag, font=("Microsoft YaHei", 11)).pack(side="left")
+        ctk.CTkCheckBox(checks_frame, text="Node.js", 
+                        variable=self.var_nodejs, font=("Microsoft YaHei", 10)).pack(side="left", padx=(0, 12))
+        ctk.CTkCheckBox(checks_frame, text="Python", 
+                        variable=self.var_python, font=("Microsoft YaHei", 10)).pack(side="left", padx=(0, 12))
+        ctk.CTkCheckBox(checks_frame, text="Ollama", 
+                        variable=self.var_ollama, font=("Microsoft YaHei", 10)).pack(side="left", padx=(0, 12))
+        ctk.CTkCheckBox(checks_frame, text="YOLO", 
+                        variable=self.var_yolo, font=("Microsoft YaHei", 10)).pack(side="left", padx=(0, 12))
+        ctk.CTkCheckBox(checks_frame, text="RAG", 
+                        variable=self.var_rag, font=("Microsoft YaHei", 10)).pack(side="left")
         
         # ===== 进度区域 =====
-        progress_frame = ctk.CTkFrame(main_frame, corner_radius=12)
-        progress_frame.pack(fill="both", expand=True, pady=(0, 15))
+        progress_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        progress_frame.pack(fill="both", expand=True, pady=(0, 5))
         
         ctk.CTkLabel(progress_frame, text="安装进度", 
-                      font=("Microsoft YaHei", 14, "bold")).pack(anchor="w", padx=20, pady=(15, 10))
+                      font=("Microsoft YaHei", 13, "bold")).pack(anchor="w", padx=15, pady=(10, 5))
         
         # 进度条
-        self.progress_bar = ctk.CTkProgressBar(progress_frame, height=8)
-        self.progress_bar.pack(fill="x", padx=20, pady=(0, 10))
+        self.progress_bar = ctk.CTkProgressBar(progress_frame, height=6)
+        self.progress_bar.pack(fill="x", padx=15, pady=(0, 5))
         self.progress_bar.set(0)
         
         # 状态标签
         self.status_label = ctk.CTkLabel(progress_frame, text="准备安装...", 
-                                          font=("Microsoft YaHei", 11),
+                                          font=("Microsoft YaHei", 10),
                                           text_color="#9ca3af")
-        self.status_label.pack(anchor="w", padx=20, pady=(0, 5))
+        self.status_label.pack(anchor="w", padx=15, pady=(0, 3))
         
         # 日志区域
-        self.log_text = ctk.CTkTextbox(progress_frame, height=200, 
+        self.log_text = ctk.CTkTextbox(progress_frame, height=150, 
                                         font=("Consolas", 10),
-                                        fg_color="#1f2937",
+                                        fg_color="#111827",
                                         text_color="#d1d5db")
-        self.log_text.pack(fill="both", expand=True, padx=20, pady=(0, 15))
-        
-        # ===== 底部：按钮 =====
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        button_frame.pack(fill="x")
-        
-        self.install_btn = ctk.CTkButton(button_frame, text="开始安装", 
-                                          height=45, font=("Microsoft YaHei", 14, "bold"),
-                                          fg_color="#2563eb", hover_color="#1d4ed8",
-                                          command=self.start_install)
-        self.install_btn.pack(side="right", padx=(10, 0))
-        
-        self.cancel_btn = ctk.CTkButton(button_frame, text="取消", 
-                                         height=45, font=("Microsoft YaHei", 14),
-                                         fg_color="#6b7280", hover_color="#4b5563",
-                                         command=self.cancel_install)
-        self.cancel_btn.pack(side="right")
+        self.log_text.pack(fill="both", expand=True, padx=15, pady=(0, 10))
         
     def browse_directory(self):
         directory = filedialog.askdirectory(initialdir=self.install_dir.get())
@@ -206,7 +213,32 @@ class InstallerApp(ctk.CTk):
         """运行命令"""
         try:
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd)
-            return result.returncode == 0, result.stdout + result.stderr
+            stdout = result.stdout or ""
+            stderr = result.stderr or ""
+            return result.returncode == 0, stdout + stderr
+        except Exception as e:
+            return False, str(e)
+            
+    def run_command_with_progress(self, cmd, cwd=None, progress_callback=None):
+        """运行命令并实时输出进度"""
+        try:
+            process = subprocess.Popen(
+                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, cwd=cwd, bufsize=1
+            )
+            
+            output_lines = []
+            for line in process.stdout:
+                line = line.strip()
+                if line:
+                    output_lines.append(line)
+                    self.log(f"  {line}")
+                    if progress_callback:
+                        progress_callback(line)
+                    self.update_idletasks()
+            
+            process.wait()
+            return process.returncode == 0, "\n".join(output_lines)
         except Exception as e:
             return False, str(e)
             
@@ -284,7 +316,7 @@ class InstallerApp(ctk.CTk):
             
             # 步骤3：克隆项目
             self.log("")
-            self.log("下载项目文件...")
+            self.log("下载项目文件（请稍候，首次下载可能需要几分钟）...")
             self.update_status("下载项目文件...", current_step / total_steps)
             
             repo_url = "https://github.com/YANGQINGFEENG/Smart-Agriculture.git"
@@ -293,7 +325,26 @@ class InstallerApp(ctk.CTk):
             if target_dir.exists():
                 self.log("⚠ 项目目录已存在，跳过克隆", "warning")
             else:
-                success, output = self.run_command(f'git clone {repo_url} "{target_dir}"')
+                def git_progress(line):
+                    if "Receiving objects:" in line:
+                        try:
+                            pct = line.split("Receiving objects:")[1].strip().split("%")[0].strip()
+                            if pct.isdigit():
+                                self.update_status(f"下载中... {pct}%", (current_step + int(pct) / 100) / total_steps)
+                        except:
+                            pass
+                    elif "Resolving deltas:" in line:
+                        try:
+                            pct = line.split("Resolving deltas:")[1].strip().split("%")[0].strip()
+                            if pct.isdigit():
+                                self.update_status(f"处理中... {pct}%", (current_step + 0.9) / total_steps)
+                        except:
+                            pass
+                
+                success, output = self.run_command_with_progress(
+                    f'git clone --progress {repo_url} "{target_dir}"',
+                    progress_callback=git_progress
+                )
                 if success:
                     self.log("✓ 项目下载完成", "success")
                 else:
@@ -304,11 +355,18 @@ class InstallerApp(ctk.CTk):
             
             # 步骤4：安装Node.js依赖
             self.log("")
-            self.log("安装 Node.js 依赖...")
+            self.log("安装 Node.js 依赖（请稍候）...")
             self.update_status("安装 Node.js 依赖...", current_step / total_steps)
             
             os.chdir(target_dir)
-            success, output = self.run_command("npm install", cwd=str(target_dir))
+            def npm_progress(line):
+                if "added" in line and "packages" in line:
+                    self.update_status("Node.js 依赖安装完成", (current_step + 0.9) / total_steps)
+                elif "npm warn" not in line.lower() and "npm ERR" not in line.lower():
+                    if len(line) < 100:
+                        self.update_status(f"npm: {line[:50]}...", current_step / total_steps)
+            
+            success, output = self.run_command_with_progress("npm install", cwd=str(target_dir), progress_callback=npm_progress)
             if success:
                 self.log("✓ Node.js 依赖安装完成", "success")
             else:
@@ -318,7 +376,7 @@ class InstallerApp(ctk.CTk):
             
             # 步骤5：安装Python依赖
             self.log("")
-            self.log("安装 Python 依赖...")
+            self.log("安装 Python 依赖（请稍候）...")
             self.update_status("安装 Python 依赖...", current_step / total_steps)
             
             venv_path = target_dir / "inference-service" / "venv"
@@ -332,7 +390,13 @@ class InstallerApp(ctk.CTk):
             else:
                 pip_cmd = f'source "{venv_path}/bin/activate" && pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple'
                 
-            success, output = self.run_command(pip_cmd, cwd=str(target_dir / "inference-service"))
+            def pip_progress(line):
+                if "Successfully installed" in line:
+                    self.update_status("Python 依赖安装完成", (current_step + 0.9) / total_steps)
+                elif "Downloading" in line or "Installing" in line:
+                    self.update_status(f"pip: {line[:60]}...", current_step / total_steps)
+            
+            success, output = self.run_command_with_progress(pip_cmd, cwd=str(target_dir / "inference-service"), progress_callback=pip_progress)
             if success:
                 self.log("✓ Python 依赖安装完成", "success")
             else:
