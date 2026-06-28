@@ -148,20 +148,29 @@ ${detectionText || '暂无图片识别数据'}
     const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
     const apiUrl = `${ollamaHost}/api/chat`
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'qwen3:1.7b-q4_K_M',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        stream: false
+    let response: Response
+    try {
+      response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'qwen3:1.7b-q4_K_M',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          stream: false
+        }),
+        signal: AbortSignal.timeout(120000) // 2分钟超时
       })
-    })
+    } catch (fetchError: any) {
+      if (fetchError.name === 'TimeoutError' || fetchError.cause?.code === 'UND_ERR_HEADERS_TIMEOUT') {
+        throw new Error('AI模型响应超时，请稍后重试或检查Ollama服务状态')
+      }
+      throw fetchError
+    }
 
     if (!response.ok) {
       const errorText = await response.text()
