@@ -83,23 +83,23 @@ function CollapsibleCard({
 
   return (
     <div
-      className="rounded-xl border border-gray-200 bg-white overflow-hidden transition-all duration-300 ease-out cursor-pointer"
+      className="rounded-lg border border-gray-200 bg-white overflow-hidden transition-all duration-300 ease-out cursor-pointer"
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-      <div className="p-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50 transition-colors">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className={`w-4 h-4 ${iconColor}`} />}
-          <span className="font-semibold text-gray-800">{title}</span>
+      <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50 transition-colors">
+        <div className="flex items-center gap-1.5">
+          {Icon && <Icon className={`w-3.5 h-3.5 ${iconColor}`} />}
+          <span className="font-medium text-gray-800 text-sm">{title}</span>
         </div>
         <ChevronDown
-          className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
         />
       </div>
       <div
         className={`transition-all duration-300 ease-out overflow-hidden ${isExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}
       >
-        <div className="p-4 pt-0">
+        <div className="p-3 pt-2">
           {children}
         </div>
       </div>
@@ -392,42 +392,44 @@ export function AIRealtimeMonitor() {
   }
 
   return (
-    <div className="h-full flex flex-col gap-6">
+    <div className="h-full flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">AI实时监测</h1>
-          <p className="text-gray-500 mt-1">基于传感器数据和图片识别的智能诊断系统</p>
+          <h1 className="text-xl font-bold">AI实时监测</h1>
+          <p className="text-gray-500 text-sm mt-1">基于传感器数据和图片识别的智能诊断系统</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             onClick={toggleMonitoring}
             className={isMonitoring ? 'bg-amber-500 hover:bg-amber-600' : 'bg-green-500 hover:bg-green-600'}
             disabled={isAnalyzing}
+            size="sm"
           >
-            {isMonitoring ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+            {isMonitoring ? <Pause className="w-4 h-4 mr-1" /> : <Play className="w-4 h-4 mr-1" />}
             {isMonitoring ? '停止监测' : '开始监测'}
           </Button>
           <Button
             onClick={performDiagnosis}
             disabled={isAnalyzing}
+            size="sm"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 mr-1 ${isAnalyzing ? 'animate-spin' : ''}`} />
             立即诊断
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
         <Card className="flex flex-col min-h-0">
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <span className="text-blue-600 font-bold text-sm">AI</span>
+          <CardHeader className="border-b py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                <span className="text-blue-600 font-bold text-xs">AI</span>
               </div>
               AI思考过程
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 relative overflow-hidden bg-gradient-to-br from-blue-50/50 to-indigo-50/50 flex flex-col">
+          <CardContent className="flex-1 relative overflow-hidden bg-gradient-to-br from-blue-50/50 to-indigo-50/50 flex flex-col p-4">
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute top-4 left-1/4 w-1 h-1 bg-blue-400 rounded-full opacity-60 animate-pulse" />
               <div className="absolute top-1/3 right-1/4 w-1 h-1 bg-indigo-400 rounded-full opacity-60 animate-pulse delay-300" />
@@ -435,20 +437,20 @@ export function AIRealtimeMonitor() {
               <div className="absolute top-1/2 left-1/2 w-1 h-1 bg-cyan-400 rounded-full opacity-60 animate-pulse delay-700" />
             </div>
 
-            <div className="flex-1 flex flex-col justify-center items-center p-8">
+            <div className="flex-1 flex flex-col justify-center items-center p-4">
               {!isAnalyzing && !currentThinking ? (
                 <div className="text-center text-gray-400">
-                  <RefreshCw className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>点击"立即诊断"开始AI分析</p>
-                  {isMonitoring && <p className="text-sm mt-2">系统将每60秒自动诊断一次</p>}
+                  <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">点击"立即诊断"开始AI分析</p>
+                  {isMonitoring && <p className="text-xs mt-1">系统将每60秒自动诊断一次</p>}
                 </div>
               ) : (
                 <div className="relative">
                   <div className="absolute -inset-4 bg-blue-400/20 rounded-full blur-2xl animate-pulse" />
-                  <div className="relative px-8 py-4 rounded-2xl bg-white/90 backdrop-blur-sm shadow-xl border border-blue-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="text-lg font-medium text-blue-800">{currentThinking}</span>
+                  <div className="relative px-6 py-3 rounded-2xl bg-white/90 backdrop-blur-sm shadow-xl border border-blue-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="text-sm font-medium text-blue-800">{currentThinking}</span>
                     </div>
                   </div>
                 </div>
@@ -471,24 +473,24 @@ export function AIRealtimeMonitor() {
         </Card>
 
         <Card className="flex flex-col min-h-0">
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
+          <CardHeader className="border-b py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-500" />
               诊断结果与执行策略
             </CardTitle>
             {lastUpdate && (
-              <p className="text-xs text-gray-400 mt-1">最后更新: {lastUpdate}</p>
+              <p className="text-xs text-gray-400">最后更新: {lastUpdate}</p>
             )}
           </CardHeader>
-          <CardContent className="flex-1 overflow-y-auto">
+          <CardContent className="flex-1 overflow-y-auto p-4">
             {diagnosisResult ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-100">
-                  <h3 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border border-green-100">
+                  <h3 className="font-medium text-green-800 mb-1 flex items-center gap-2 text-sm">
                     <CheckCircle className="w-4 h-4" />
                     诊断摘要
                   </h3>
-                  <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">
+                  <p className="text-gray-700 text-xs leading-relaxed whitespace-pre-wrap">
                     {diagnosisResult.summary || '暂无诊断摘要'}
                   </p>
                 </div>
@@ -692,19 +694,19 @@ export function AIRealtimeMonitor() {
       </div>
 
       <Card className="bg-gray-900">
-        <CardHeader className="border-b border-gray-700">
-          <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
-            <Terminal className="w-4 h-4" />
+        <CardHeader className="border-b border-gray-700 py-2">
+          <CardTitle className="text-xs font-medium text-gray-300 flex items-center gap-2">
+            <Terminal className="w-3 h-3" />
             诊断日志
           </CardTitle>
         </CardHeader>
-        <CardContent className="py-2 max-h-40 overflow-y-auto font-mono text-xs">
+        <CardContent className="py-1 max-h-32 overflow-y-auto font-mono text-xs">
           {logs.length === 0 ? (
-            <div className="text-gray-500">等待诊断开始...</div>
+            <div className="text-gray-500 py-2">等待诊断开始...</div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {logs.map((log) => (
-                <div key={log.id} className="flex items-start gap-2">
+                <div key={log.id} className="flex items-start gap-1">
                   <span className="text-gray-500 flex-shrink-0">[{log.timestamp}]</span>
                   <span className={getLogColor(log.type)}>{log.message}</span>
                 </div>
@@ -717,16 +719,16 @@ export function AIRealtimeMonitor() {
       {/* 策略执行日志 */}
       {executionLogs.length > 0 && (
         <Card className="bg-gray-900">
-          <CardHeader className="border-b border-gray-700">
-            <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
-              <Zap className="w-4 h-4" />
+          <CardHeader className="border-b border-gray-700 py-2">
+            <CardTitle className="text-xs font-medium text-gray-300 flex items-center gap-2">
+              <Zap className="w-3 h-3" />
               策略执行记录
             </CardTitle>
           </CardHeader>
-          <CardContent className="py-2 max-h-40 overflow-y-auto font-mono text-xs">
-            <div className="space-y-1">
+          <CardContent className="py-1 max-h-28 overflow-y-auto font-mono text-xs">
+            <div className="space-y-0.5">
               {executionLogs.map((log) => (
-                <div key={log.id} className="flex items-start gap-2">
+                <div key={log.id} className="flex items-start gap-1">
                   <span className="text-gray-500 flex-shrink-0">[{log.timestamp}]</span>
                   <span className={log.status === 'success' ? 'text-green-400' : 'text-red-400'}>
                     [{log.status === 'success' ? 'OK' : 'FAIL'}]
@@ -741,22 +743,22 @@ export function AIRealtimeMonitor() {
       )}
 
       <Card className="bg-gray-50/50">
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm font-medium text-gray-600">数据来源</CardTitle>
+        <CardHeader className="py-2">
+          <CardTitle className="text-xs font-medium text-gray-600">数据来源</CardTitle>
         </CardHeader>
-        <CardContent className="py-3">
-          <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+        <CardContent className="py-2">
+          <div className="flex flex-wrap gap-3 text-xs text-gray-500">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              传感器数据: {sensorData.length} 个设备
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              传感器: {sensorData.length}
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              图片识别: {detectionResults.length} 条记录
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              图片: {detectionResults.length}
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-purple-500" />
-              监测状态: {isMonitoring ? '运行中' : '已停止'}
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+              状态: {isMonitoring ? '运行中' : '已停止'}
             </span>
           </div>
         </CardContent>
