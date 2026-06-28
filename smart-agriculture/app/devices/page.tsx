@@ -232,7 +232,10 @@ export default function DevicesPage() {
             {/* 数据流说明 */}
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-4">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">📡 设备数据上报流程</h3>
+                <h3 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-2">
+                  <Wifi className="h-4 w-4" />
+                  设备数据上报流程
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-blue-700">
                   <div>
                     <p className="font-medium">场景1：WiFi直连传感器</p>

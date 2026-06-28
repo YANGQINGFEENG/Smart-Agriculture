@@ -39,6 +39,7 @@ import {
   Merge,
   Link,
   X,
+  Lightbulb,
 } from "lucide-react"
 
 interface KnowledgeItem {
@@ -712,8 +713,9 @@ export default function KnowledgePage() {
                       </div>
 
                       {/* 建议 */}
-                      <div className="px-4 py-2 bg-amber-50 border-t text-sm text-amber-700">
-                        💡 建议：{contra.suggestion}
+                      <div className="px-4 py-2 bg-amber-50 border-t text-sm text-amber-700 flex items-center gap-2">
+                        <Lightbulb className="h-4 w-4" />
+                        建议：{contra.suggestion}
                       </div>
                     </div>
                   ))}
@@ -761,8 +763,9 @@ export default function KnowledgePage() {
 
 系统会自动识别这是几条知识点，并提取标题、分类和标签。`}
                   rows={12} className="font-mono text-sm" />
-                <p className="text-xs text-muted-foreground mt-1">
-                  💡 AI会自动识别知识点数量，无需手动分隔
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3" />
+                  AI会自动识别知识点数量，无需手动分隔
                 </p>
               </div>
               <div className="flex items-center gap-4">
@@ -818,8 +821,9 @@ export default function KnowledgePage() {
                                     <p className="mt-1 line-clamp-4 text-gray-700">{c.existing_content}</p>
                                   </div>
                                 </div>
-                                <div className="px-2 py-1.5 bg-amber-50 text-xs text-amber-700">
-                                  💡 {c.suggestion}
+                                <div className="px-2 py-1.5 bg-amber-50 text-xs text-amber-700 flex items-center gap-1">
+                                  <Lightbulb className="h-3 w-3" />
+                                  {c.suggestion}
                                 </div>
                               </div>
                             ))}

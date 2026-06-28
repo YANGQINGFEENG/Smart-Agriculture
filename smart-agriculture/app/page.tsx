@@ -20,6 +20,13 @@ import {
   Loader2,
   TrendingUp,
   TrendingDown,
+  BarChart3,
+  Settings,
+  Building2,
+  Wifi,
+  BookOpen,
+  Camera,
+  Download,
 } from "lucide-react"
 import Link from "next/link"
 import { Menu } from "lucide-react"
@@ -191,7 +198,10 @@ export default function DashboardPage() {
               <>
                 {/* 传感器概览 */}
                 <div>
-                  <h2 className="text-lg font-semibold mb-3">📊 传感器概览</h2>
+                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    传感器概览
+                  </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {sensorStats.map((stat) => (
                       <Card key={stat.type} className="hover:shadow-md transition-shadow">
@@ -223,7 +233,10 @@ export default function DashboardPage() {
 
                 {/* 设备状态概览 */}
                 <div>
-                  <h2 className="text-lg font-semibold mb-3">⚙️ 设备状态</h2>
+                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    设备状态
+                  </h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Link href="/devices">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer">
@@ -294,7 +307,10 @@ export default function DashboardPage() {
 
                 {/* 报警概览 */}
                 <div>
-                  <h2 className="text-lg font-semibold mb-3">🔔 报警概览</h2>
+                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Bell className="h-5 w-5" />
+                    报警概览
+                  </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Link href="/alarms">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer">
@@ -346,41 +362,44 @@ export default function DashboardPage() {
 
                 {/* 快捷入口 */}
                 <div>
-                  <h2 className="text-lg font-semibold mb-3">🚀 快捷入口</h2>
+                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    快捷入口
+                  </h2>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     <Link href="/farms" className="block">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer text-center p-4">
-                        <p className="text-2xl mb-1">🏗️</p>
+                        <Building2 className="h-6 w-6 mx-auto mb-1 text-primary" />
                         <p className="text-sm font-medium">基地管理</p>
                       </Card>
                     </Link>
                     <Link href="/devices" className="block">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer text-center p-4">
-                        <p className="text-2xl mb-1">📡</p>
+                        <Wifi className="h-6 w-6 mx-auto mb-1 text-primary" />
                         <p className="text-sm font-medium">设备连接</p>
                       </Card>
                     </Link>
                     <Link href="/knowledge" className="block">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer text-center p-4">
-                        <p className="text-2xl mb-1">📚</p>
+                        <BookOpen className="h-6 w-6 mx-auto mb-1 text-primary" />
                         <p className="text-sm font-medium">知识库</p>
                       </Card>
                     </Link>
                     <Link href="/ai-video" className="block">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer text-center p-4">
-                        <p className="text-2xl mb-1">🎥</p>
+                        <Camera className="h-6 w-6 mx-auto mb-1 text-primary" />
                         <p className="text-sm font-medium">AI视频</p>
                       </Card>
                     </Link>
                     <Link href="/analysis" className="block">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer text-center p-4">
-                        <p className="text-2xl mb-1">📈</p>
+                        <BarChart3 className="h-6 w-6 mx-auto mb-1 text-primary" />
                         <p className="text-sm font-medium">数据分析</p>
                       </Card>
                     </Link>
                     <Link href="/export" className="block">
                       <Card className="hover:shadow-md transition-shadow cursor-pointer text-center p-4">
-                        <p className="text-2xl mb-1">📥</p>
+                        <Download className="h-6 w-6 mx-auto mb-1 text-primary" />
                         <p className="text-sm font-medium">数据导出</p>
                       </Card>
                     </Link>
