@@ -463,6 +463,7 @@
 ```json
 {
   "command": "value",
+  "control_type": "integer",
   "control_value": 75,
   "mode": "manual"
 }
@@ -471,6 +472,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | command | string | 是 | 控制命令：on / off / value |
+| control_type | string | 是 | 控制类型：boolean / integer / angle / float / string |
 | control_value | number | 否 | 控制值（command=value时必填） |
 | mode | string | 否 | 控制模式：auto / manual |
 
@@ -478,11 +480,16 @@
 ```json
 {
   "success": true,
-  "message": "指令已发送",
-  "command_id": 123,
-  "actuator_id": "MT-1-1001",
-  "status": "pending",
-  "timestamp": "2026-07-26T10:30:00.000Z"
+  "data": {
+    "actuator_id": "MT-1-1001",
+    "command": "value",
+    "control_value": 75,
+    "control_type": "integer",
+    "status": "pending",
+    "sent_via_websocket": false,
+    "timeout": 30
+  },
+  "message": "OK"
 }
 ```
 
@@ -610,40 +617,36 @@
 
 ### 3.2 硬件控制回执
 
-**接口地址**: `POST /api/device/ack`
+**接口地址**: `PATCH /api/actuators/[id]/commands`
 
 **功能说明**: 硬件端确认控制指令执行结果。
+
+**路径参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 执行器ID |
 
 **请求体**:
 ```json
 {
-  "gateway_ip": "192.168.1.100",
-  "actuator_id": "MT-1-1001",
   "command_id": 123,
   "status": "executed",
-  "control_value": 75,
-  "state": "on"
+  "control_value": 75
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| gateway_ip | string | 否 | 网关IP地址 |
-| actuator_id | string | 是 | 执行器ID |
-| command_id | number | 是 | 命令ID |
+| command_id | number | 是 | 命令ID（从查询指令接口获取） |
 | status | string | 是 | 执行状态：executed / failed |
-| control_value | number | 否 | 实际控制值 |
-| state | string | 否 | 执行器状态：on / off |
+| control_value | number | 数值控制必填 | 实际执行的控制值 |
 
 **响应示例**:
 ```json
 {
   "success": true,
-  "message": "OK",
-  "command_id": 123,
-  "actuator_id": "MT-1-1001",
-  "status": "executed",
-  "timestamp": "2026-07-26T10:30:05.000Z"
+  "message": "OK"
 }
 ```
 
@@ -651,32 +654,44 @@
 
 ### 3.3 获取待执行指令
 
-**接口地址**: `GET /api/device/ack`
+**接口地址**: `GET /api/actuators/[id]/commands`
 
-**功能说明**: 硬件端轮询获取待执行的控制指令。
+**功能说明**: 硬件端轮询获取待执行的控制指令。服务器返回待执行指令后自动将状态标记为`executing`。
+
+**路径参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 执行器ID |
 
 **请求参数**:
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| actuator_id | string | 否 | 执行器ID |
-| gateway_ip | string | 否 | 网关IP地址 |
+| frontend | boolean | 否 | 前端查询时设为true，返回最新指令状态；硬件端不传递此参数 |
 
-**响应示例**:
+**响应示例（有待执行指令）**:
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": 123,
-      "actuator_id": "MT-1-1001",
-      "command": "value",
-      "control_value": 75,
-      "status": "pending",
-      "created_at": "2026-07-26T10:30:00.000Z"
-    }
-  ],
-  "total": 1
+  "data": {
+    "id": 123,
+    "actuator_id": "MT-1-1001",
+    "command": "value",
+    "control_value": 75,
+    "status": "executing",
+    "created_at": "2026-07-26T10:30:00.000Z"
+  },
+  "message": "OK"
+}
+```
+
+**响应示例（无待执行指令）**:
+```json
+{
+  "success": true,
+  "data": null,
+  "message": "没有待执行的指令"
 }
 ```
 

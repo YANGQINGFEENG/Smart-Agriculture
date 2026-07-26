@@ -350,10 +350,17 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
   // 获取实际的设备配置（处理未知类型）
   const actualConfig = getDeviceTypeConfig(actualType)
 
-  // 构建控制配置信息（优先使用硬件上报的控制类型和范围）
-  const controlConfig = {
-    controlType: control_type || actualConfig?.controlType || ControlType.BOOLEAN,
-    controlRange: control_range || actualConfig?.controlRange || { min: 0, max: 100, step: 1, default: 0 },
+  // 构建控制配置信息（仅执行器需要，传感器不需要控制类型）
+  let controlConfig = {
+    controlType: ControlType.BOOLEAN as string,
+    controlRange: { min: 0, max: 100, step: 1, default: 0 } as ControlRange,
+  }
+
+  if (deviceClass === DeviceCategory.ACTUATOR) {
+    controlConfig = {
+      controlType: control_type || actualConfig?.controlType || ControlType.BOOLEAN,
+      controlRange: control_range || actualConfig?.controlRange || { min: 0, max: 100, step: 1, default: 0 },
+    }
   }
 
   try {
@@ -371,9 +378,9 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
       unit: unit || actualConfig?.unit || '',
       state: state || 'off',
       mode: mode || 'auto',
-      controlValue: control_value, // 执行器控制值
-      controlType: controlConfig.controlType, // 执行器控制类型
-      controlRange: controlConfig.controlRange, // 执行器控制范围
+      controlValue: deviceClass === DeviceCategory.ACTUATOR ? control_value : undefined, // 仅执行器传递控制值
+      controlType: deviceClass === DeviceCategory.ACTUATOR ? controlConfig.controlType : undefined, // 仅执行器传递控制类型
+      controlRange: deviceClass === DeviceCategory.ACTUATOR ? controlConfig.controlRange : undefined, // 仅执行器传递控制范围
       deviceClass,
       firmware_version: firmware_version || '',
       signal_strength: signal_strength || null,
@@ -406,21 +413,32 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
       )
     }
 
-    console.log(`[Report] 设备节点处理成功: ${node_id} -> ${type}(${actualType}) (${deviceClass}) 
-      [控制类型: ${controlConfig.controlType}, 控制范围: ${controlConfig.controlRange.min}-${controlConfig.controlRange.max}]`)
+    // 日志输出：传感器只显示基本信息，执行器显示控制类型
+    const logInfo = deviceClass === DeviceCategory.ACTUATOR 
+      ? `[控制类型: ${controlConfig.controlType}, 控制范围: ${controlConfig.controlRange.min}-${controlConfig.controlRange.max}]`
+      : ''
+    
+    console.log(`[Report] 设备节点处理成功: ${node_id} -> ${type}(${actualType}) (${deviceClass}) ${logInfo}`)
 
-    return {
+    // 返回结果：传感器不包含控制类型信息
+    const result: any = {
       node_id,
       type: actualType,
       original_type: type, // 返回原始类型
       name: syncResult.deviceId,
       category: deviceClass,
       area: deviceArea,    // 返回所属区域
-      control_type: controlConfig.controlType, // 返回控制类型
-      control_range: controlConfig.controlRange, // 返回控制范围
       success: true,
       message: deviceClass === DeviceCategory.UNASSIGNED ? '已分配到未分配类别' : '同步成功',
     }
+
+    // 仅执行器返回控制类型和控制范围
+    if (deviceClass === DeviceCategory.ACTUATOR) {
+      result.control_type = controlConfig.controlType
+      result.control_range = controlConfig.controlRange
+    }
+
+    return result
   } catch (error) {
     console.error(`[Report] 设备节点处理失败: ${node_id}`, error)
     return {
