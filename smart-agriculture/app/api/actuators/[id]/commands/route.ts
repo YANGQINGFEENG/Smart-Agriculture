@@ -69,17 +69,21 @@ export async function GET(
       })
     }
 
-    // 如果是硬件端查询待执行指令，返回第一条待执行的指令并标记为执行中
-    const pendingCommand = commands.find(c => c.status === 'pending')
+    // 如果是硬件端查询待执行指令，返回第一条待执行或执行中的指令
+    // 允许硬件端重新获取 executing 状态的指令（防止网络中断后无法恢复）
+    const pendingCommand = commands.find(c => c.status === 'pending' || c.status === 'executing')
     if (pendingCommand) {
-      await db.execute(
-        `UPDATE actuator_commands 
-         SET status = 'executing' 
-         WHERE id = ? AND actuator_id = ?`,
-        [pendingCommand.id, id]
-      )
+      // 如果是 pending 状态，标记为 executing
+      if (pendingCommand.status === 'pending') {
+        await db.execute(
+          `UPDATE actuator_commands 
+           SET status = 'executing' 
+           WHERE id = ? AND actuator_id = ?`,
+          [pendingCommand.id, id]
+        )
+      }
 
-      console.log(`[Command] 硬件端查询指令 - 执行器: ${id}, 指令: ${pendingCommand.command}, 控制值: ${pendingCommand.control_value}, 命令ID: ${pendingCommand.id}`)
+      console.log(`[Command] 硬件端查询指令 - 执行器: ${id}, 指令: ${pendingCommand.command}, 控制值: ${pendingCommand.control_value}, 命令ID: ${pendingCommand.id}, 当前状态: ${pendingCommand.status}`)
 
       return NextResponse.json({
         success: true,

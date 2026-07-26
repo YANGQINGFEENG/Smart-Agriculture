@@ -259,6 +259,35 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
     color: 'pink',
     controlType: ControlType.BOOLEAN,
   },
+  {
+    type: 'relay',
+    name: '继电器',
+    category: DeviceCategory.ACTUATOR,
+    description: '用于开关控制，支持通断操作',
+    icon: 'ToggleLeft',
+    color: 'gray',
+    controlType: ControlType.BOOLEAN,
+  },
+  {
+    type: 'laser',
+    name: '激光器',
+    category: DeviceCategory.ACTUATOR,
+    description: '用于激光控制，支持开关和功率调节',
+    icon: 'Crosshair',
+    color: 'red',
+    controlType: ControlType.INTEGER,
+    controlRange: { min: 0, max: 100, step: 10, default: 0 },
+  },
+  {
+    type: 'rgb_led',
+    name: 'RGB-LED',
+    category: DeviceCategory.ACTUATOR,
+    description: '用于RGB颜色控制，支持颜色值调节',
+    icon: 'Palette',
+    color: 'purple',
+    controlType: ControlType.INTEGER,
+    controlRange: { min: 0, max: 16777215, step: 1, default: 0 },
+  },
   // ========== 未分配设备类型（默认） ==========
   {
     type: 'unknown_sensor',
@@ -362,6 +391,9 @@ export function getDeviceTypePrefix(type: string): string {
         motor: 'MT',
         servo: 'SV',
         led: 'LED',
+        relay: 'RL',
+        laser: 'LS',
+        rgb_led: 'RGB',
       }
       return actuatorPrefixMap[type] || 'A'
     default:
