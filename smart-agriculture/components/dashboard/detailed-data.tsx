@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Filter, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { Search, Filter, ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react"
 
 interface SensorInfo {
   id: string
@@ -90,6 +90,26 @@ export function DetailedData() {
     if (diffMinutes < 5) return '正常'
     if (diffMinutes < 30) return '延迟'
     return '异常'
+  }
+
+  const handleDeleteSensor = async (id: string) => {
+    if (!confirm("确定要删除这个传感器吗？此操作将删除所有相关数据。")) return
+    
+    try {
+      const response = await fetch(`/api/sensors/${id}`, {
+        method: 'DELETE',
+      })
+      
+      if (response.ok) {
+        fetchSensorData()
+      } else {
+        const result = await response.json()
+        alert('删除失败: ' + (result.error || '未知错误'))
+      }
+    } catch (error) {
+      console.error('删除传感器失败:', error)
+      alert('删除失败: ' + (error as Error).message)
+    }
   }
 
   const fetchSensorData = async () => {
@@ -279,6 +299,7 @@ export function DetailedData() {
                     <TableHead className="text-muted-foreground">位置</TableHead>
                     <TableHead className="text-muted-foreground">更新时间</TableHead>
                     <TableHead className="text-muted-foreground">状态</TableHead>
+                    <TableHead className="text-muted-foreground">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -317,6 +338,16 @@ export function DetailedData() {
                             {item.status}
                           </Badge>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteSensor(item.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

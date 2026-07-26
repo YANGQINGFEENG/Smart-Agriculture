@@ -21,6 +21,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!smart-agriculture/lib/
 lib64/
 parts/
 sdist/

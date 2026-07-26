@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { sendCommandToActuator } from '@/app/api/websocket/route'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { ControlType } from '@/lib/device-types'
 
 /**
  * 控制指令接口
@@ -9,15 +10,21 @@ import { getBeijingTimeForDB } from '@/lib/beijing-time'
 interface ActuatorCommand extends RowDataPacket {
   id: number
   actuator_id: string
-  command: 'on' | 'off'
-  status: 'pending' | 'executing' | 'executed' | 'failed'
+  command: 'on' | 'off' | 'value'
+  control_value?: number
+  status: 'pending' | 'executing' | 'executed' | 'failed' | 'timeout'
   created_at: Date
   executed_at: Date | null
 }
 
 /**
+ * 控制指令超时时间（秒）
+ */
+const COMMAND_TIMEOUT_SECONDS = 30
+
+/**
  * GET /api/actuators/[id]/commands
- * 硬件端查询待执行的控制指令
+ * 硬件端查询待执行的控制指令 / 前端查询指令执行状态
  */
 export async function GET(
   request: NextRequest,
@@ -29,18 +36,28 @@ export async function GET(
     // 清理超时的命令
     await db.execute(
       `UPDATE actuator_commands 
-       SET status = 'failed', executed_at = ? 
-       WHERE actuator_id = ? AND status = 'pending' 
-       AND created_at < datetime('now', '-5 minutes')`,
+       SET status = 'timeout', executed_at = ? 
+       WHERE actuator_id = ? AND status IN ('pending', 'executing') 
+       AND created_at < NOW() - INTERVAL ${COMMAND_TIMEOUT_SECONDS} SECOND`,
       [getBeijingTimeForDB(), id]
     )
 
+    // 解锁超时的执行器
+    await db.execute(
+      `UPDATE actuators 
+       SET locked = 0 
+       WHERE id = ? AND locked = 1`,
+      [id]
+    )
+
     const commands = await db.query<ActuatorCommand[]>(
-      `SELECT id, actuator_id, command, status, created_at 
+      `SELECT id, actuator_id, command, 
+              control_value, 
+              status, created_at, executed_at
        FROM actuator_commands 
-       WHERE actuator_id = ? AND status = 'pending' 
-       ORDER BY created_at ASC 
-       LIMIT 1`,
+       WHERE actuator_id = ? 
+       ORDER BY created_at DESC 
+       LIMIT 5`,
       [id]
     )
 
@@ -52,25 +69,48 @@ export async function GET(
       })
     }
 
-    const command = commands[0]
+    // 如果是硬件端查询待执行指令，返回第一条待执行的指令并标记为执行中
+    const pendingCommand = commands.find(c => c.status === 'pending')
+    if (pendingCommand) {
+      await db.execute(
+        `UPDATE actuator_commands 
+         SET status = 'executing' 
+         WHERE id = ? AND actuator_id = ?`,
+        [pendingCommand.id, id]
+      )
+
+      console.log(`[Command] 硬件端查询指令 - 执行器: ${id}, 指令: ${pendingCommand.command}, 控制值: ${pendingCommand.control_value}, 命令ID: ${pendingCommand.id}`)
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...pendingCommand,
+          status: 'executing'
+        },
+        message: 'OK',
+      })
+    }
+
+    // 硬件端查询时，没有待执行指令则返回null
+    // 前端查询状态，返回最新一条指令（通过查询参数区分）
+    const url = new URL(request.url)
+    const isFrontend = url.searchParams.get('frontend') === 'true'
     
-    // 将命令状态更新为执行中，避免重复执行
-    await db.execute(
-      `UPDATE actuator_commands 
-       SET status = 'executing' 
-       WHERE id = ? AND actuator_id = ?`,
-      [command.id, id]
-    )
+    if (isFrontend && commands.length > 0) {
+      // 前端查询状态，返回最新一条指令
+      const latestCommand = commands[0]
+      return NextResponse.json({
+        success: true,
+        data: latestCommand,
+        message: 'OK',
+      })
+    }
 
-    console.log(`[Command] 硬件端查询指令 - 执行器: ${id}, 指令: ${command.command}, 命令ID: ${command.id}`)
-
+    // 硬件端查询，没有待执行指令
     return NextResponse.json({
       success: true,
-      data: {
-        ...command,
-        status: 'executing'
-      },
-      message: 'OK',
+      data: null,
+      message: '没有待执行的指令',
     })
   } catch (error) {
     console.error('[Command] 查询控制指令失败:', error)
@@ -88,6 +128,10 @@ export async function GET(
 /**
  * POST /api/actuators/[id]/commands
  * 网页端发送控制指令
+ * 支持多种控制类型：
+ * - 布尔值控制（on/off）：LED开关、继电器、水泵等
+ * - 整数值控制（0-100）：电机速度、亮度调节等
+ * - 角度控制（0-180/360）：舵机角度等
  */
 export async function POST(
   request: NextRequest,
@@ -97,28 +141,101 @@ export async function POST(
     const { id } = await params
     const body = await request.json()
 
-    if (!body.command || !['on', 'off'].includes(body.command)) {
-      return NextResponse.json(
-        { success: false, error: 'command 必须是 on 或 off' },
-        { status: 400 }
-      )
-    }
+    console.log(`[Command API] 收到控制指令 - 执行器ID: ${id}, Body:`, JSON.stringify(body))
 
-    const actuators = await db.query<RowDataPacket[]>(
-      'SELECT id FROM actuators WHERE id = ?',
+    // 获取执行器信息，确定控制类型
+    const actuatorInfo = await db.query<RowDataPacket[]>(
+      'SELECT id, type_id, area, locked, status FROM actuators WHERE id = ?',
       [id]
     )
 
-    if (actuators.length === 0) {
+    if (actuatorInfo.length === 0) {
       return NextResponse.json(
         { success: false, error: '执行器不存在' },
         { status: 404 }
       )
     }
 
+    const actuator = actuatorInfo[0]
+
+    // 检查执行器是否被锁定（正在执行其他指令）
+    if (actuator.locked === 1) {
+      return NextResponse.json(
+        { success: false, error: '执行器正在执行其他指令，请稍后再试' },
+        { status: 409 }
+      )
+    }
+
+    // 检查执行器是否在线（离线时仍然允许发送指令，等待设备上线后查询）
+    if (actuator.status !== 'online') {
+      console.warn(`[Command] 执行器离线，但仍接受指令: ${id}`)
+      // 继续处理，不阻止指令发送
+    }
+
+    // 获取执行器类型配置
+    const typeInfo = await db.query<RowDataPacket[]>(
+      'SELECT type FROM actuator_types WHERE id = ?',
+      [actuatorInfo[0].type_id]
+    )
+
+    let command: 'on' | 'off' | 'value' = 'on'
+    let controlValue: number | null = null
+    const controlType = body.control_type || 'boolean'
+
+    switch (controlType) {
+      case 'boolean':
+        if (!body.command || !['on', 'off'].includes(body.command)) {
+          return NextResponse.json(
+            { success: false, error: '布尔值控制：command 必须是 on 或 off' },
+            { status: 400 }
+          )
+        }
+        command = body.command as 'on' | 'off'
+        break
+      
+      case 'integer':
+      case 'angle':
+      case 'float':
+        if (body.value === undefined || body.value === null) {
+          return NextResponse.json(
+            { success: false, error: `${controlType}控制：必须提供value字段` },
+            { status: 400 }
+          )
+        }
+        command = 'value'
+        controlValue = parseFloat(body.value)
+        
+        // 验证数值范围（可选）
+        if (body.min !== undefined && controlValue < body.min) {
+          return NextResponse.json(
+            { success: false, error: `value不能小于${body.min}` },
+            { status: 400 }
+          )
+        }
+        if (body.max !== undefined && controlValue > body.max) {
+          return NextResponse.json(
+            { success: false, error: `value不能大于${body.max}` },
+            { status: 400 }
+          )
+        }
+        break
+
+      default:
+        return NextResponse.json(
+          { success: false, error: `不支持的控制类型: ${controlType}` },
+          { status: 400 }
+        )
+    }
+
+    // 锁定执行器，防止重复操作
+    await db.execute(
+      'UPDATE actuators SET locked = 1 WHERE id = ?',
+      [id]
+    )
+
     const result = await db.execute<ResultSetHeader>(
-      'INSERT INTO actuator_commands (actuator_id, command) VALUES (?, ?)',
-      [id, body.command]
+      'INSERT INTO actuator_commands (actuator_id, command, control_value) VALUES (?, ?, ?)',
+      [id, command, controlValue]
     )
 
     const commandId = result.lastID
@@ -127,23 +244,58 @@ export async function POST(
     const commandData = {
       id: commandId,
       actuator_id: id,
-      command: body.command,
+      command: command,
+      control_value: controlValue,
+      control_type: controlType,
       status: 'pending',
       created_at: new Date().toISOString()
     }
     
     const sentViaWebSocket = await sendCommandToActuator(id, commandData)
     
-    console.log(`[Command] 网页端发送指令 - 执行器: ${id}, 指令: ${body.command}, WebSocket: ${sentViaWebSocket}`)
+    console.log(`[Command] 网页端发送指令 - 执行器: ${id}, 指令: ${command}, 控制值: ${controlValue}, 控制类型: ${controlType}, WebSocket: ${sentViaWebSocket}`)
+
+    // 设置超时定时器（后端自动处理超时）
+    setTimeout(async () => {
+      try {
+        // 检查指令是否仍处于待执行或执行中状态
+        const checkResult = await db.query<ActuatorCommand[]>(
+          'SELECT status FROM actuator_commands WHERE id = ? AND actuator_id = ?',
+          [commandId, id]
+        )
+        
+        if (checkResult.length > 0 && 
+            (checkResult[0].status === 'pending' || checkResult[0].status === 'executing')) {
+          // 标记为超时
+          await db.execute(
+            'UPDATE actuator_commands SET status = ?, executed_at = ? WHERE id = ? AND actuator_id = ?',
+            ['timeout', getBeijingTimeForDB(), commandId, id]
+          )
+          
+          // 解锁执行器
+          await db.execute(
+            'UPDATE actuators SET locked = 0 WHERE id = ?',
+            [id]
+          )
+          
+          console.log(`[Command] 指令超时 - 执行器: ${id}, 指令ID: ${commandId}`)
+        }
+      } catch (error) {
+        console.error('[Command] 超时处理失败:', error)
+      }
+    }, COMMAND_TIMEOUT_SECONDS * 1000)
 
     return NextResponse.json({
       success: true,
       data: {
         id: commandId,
         actuator_id: id,
-        command: body.command,
+        command: command,
+        control_value: controlValue,
+        control_type: controlType,
         status: 'pending',
-        sent_via_websocket: sentViaWebSocket
+        sent_via_websocket: sentViaWebSocket,
+        timeout: COMMAND_TIMEOUT_SECONDS
       },
       message: 'OK',
     })
@@ -162,7 +314,7 @@ export async function POST(
 
 /**
  * PATCH /api/actuators/[id]/commands
- * 硬件端确认指令执行结果
+ * 硬件端确认指令执行结果（回执）
  */
 export async function PATCH(
   request: NextRequest,
@@ -172,6 +324,8 @@ export async function PATCH(
     const { id } = await params
     const body = await request.json()
 
+    console.log(`[Command PATCH] 收到回执 - 执行器ID: ${id}, Body:`, JSON.stringify(body))
+
     if (!body.command_id || !body.status || !['executed', 'failed'].includes(body.status)) {
       return NextResponse.json(
         { success: false, error: '缺少必要参数：command_id 和 status（executed/failed）' },
@@ -179,9 +333,9 @@ export async function PATCH(
       )
     }
 
-    // 验证命令是否存在且状态为执行中
+    // 验证命令是否存在且状态为执行中或待执行
     const existingCommand = await db.query<ActuatorCommand[]>(
-      `SELECT id, status FROM actuator_commands 
+      `SELECT id, status, command, control_value FROM actuator_commands 
        WHERE id = ? AND actuator_id = ?`,
       [body.command_id, id]
     )
@@ -200,6 +354,7 @@ export async function PATCH(
       )
     }
 
+    // 更新命令状态
     await db.execute<ResultSetHeader>(
       `UPDATE actuator_commands 
        SET status = ?, executed_at = ? 
@@ -207,13 +362,41 @@ export async function PATCH(
       [body.status, getBeijingTimeForDB(), body.command_id, id]
     )
 
+    // 如果指令执行成功，更新执行器状态
+    if (body.status === 'executed') {
+      const command = existingCommand[0]
+      const controlValue = body.control_value !== undefined ? body.control_value : command.control_value
+      
+      if (command.command === 'on' || command.command === 'off') {
+        await db.execute<ResultSetHeader>(
+          'UPDATE actuators SET state = ?, last_update = ? WHERE id = ?',
+          [command.command, getBeijingTimeForDB(), id]
+        )
+      } else if (command.command === 'value' && controlValue !== undefined && controlValue !== null) {
+        // 对于数值控制，更新控制值并根据值判断状态
+        const state = controlValue > 0 ? 'on' : 'off'
+        await db.execute<ResultSetHeader>(
+          'UPDATE actuators SET state = ?, control_value = ?, last_update = ? WHERE id = ?',
+          [state, controlValue, getBeijingTimeForDB(), id]
+        )
+      } else if (command.command === 'value') {
+        // 如果没有提供控制值，默认关闭
+        await db.execute<ResultSetHeader>(
+          'UPDATE actuators SET state = ?, last_update = ? WHERE id = ?',
+          ['off', getBeijingTimeForDB(), id]
+        )
+      }
+
+      console.log(`[Command] 硬件回执确认成功 - 执行器: ${id}, 指令ID: ${body.command_id}, 状态: ${body.status}, 控制值: ${controlValue}`)
+    } else {
+      console.log(`[Command] 硬件回执确认失败 - 执行器: ${id}, 指令ID: ${body.command_id}, 状态: ${body.status}`)
+    }
+
     // 解锁执行器，允许用户继续操作
     await db.execute<ResultSetHeader>(
       'UPDATE actuators SET locked = 0 WHERE id = ?',
       [id]
     )
-
-    console.log(`[Command] 硬件端确认指令 - 执行器: ${id}, 指令ID: ${body.command_id}, 状态: ${body.status}`)
 
     return NextResponse.json({
       success: true,

@@ -61,12 +61,12 @@ export async function GET(
 
     if (startTime) {
       query += ' AND timestamp >= ?'
-      queryParams.push(new Date(startTime))
+      queryParams.push(startTime)
     }
 
     if (endTime) {
       query += ' AND timestamp <= ?'
-      queryParams.push(new Date(endTime))
+      queryParams.push(endTime)
     }
 
     query += ' ORDER BY timestamp DESC LIMIT ?'
@@ -86,8 +86,8 @@ export async function GET(
     `
 
     const statsParams: any[] = [id]
-    if (startTime) statsParams.push(new Date(startTime))
-    if (endTime) statsParams.push(new Date(endTime))
+    if (startTime) statsParams.push(startTime)
+    if (endTime) statsParams.push(endTime)
 
     const statsResult = await db.query<(RowDataPacket & { avg: number | string; max: number | string; min: number | string })[]>(
       statsQuery,

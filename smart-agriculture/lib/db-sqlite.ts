@@ -53,6 +53,9 @@ async function createTables() {
       location TEXT NOT NULL,
       status TEXT DEFAULT 'offline',
       battery INTEGER DEFAULT 100,
+      area TEXT DEFAULT '',
+      farm_id INTEGER DEFAULT 0,
+      zone_id INTEGER DEFAULT NULL,
       last_update TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -89,6 +92,15 @@ async function createTables() {
       status TEXT DEFAULT 'offline',
       state TEXT DEFAULT 'off',
       mode TEXT DEFAULT 'auto',
+      control_value REAL DEFAULT NULL,
+      control_type TEXT DEFAULT 'boolean',
+      control_min REAL DEFAULT 0,
+      control_max REAL DEFAULT 100,
+      control_step REAL DEFAULT 1,
+      control_default REAL DEFAULT 0,
+      area TEXT DEFAULT '',
+      farm_id INTEGER DEFAULT 0,
+      zone_id INTEGER DEFAULT NULL,
       last_update TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       locked INTEGER DEFAULT 0
@@ -113,6 +125,7 @@ async function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       actuator_id TEXT NOT NULL,
       command TEXT NOT NULL,
+      control_value REAL DEFAULT NULL,
       status TEXT DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       executed_at TIMESTAMP NULL
@@ -344,6 +357,7 @@ async function createTables() {
       mac_address TEXT,
       protocol TEXT,
       status TEXT DEFAULT 'online',
+      area TEXT DEFAULT '',
       last_heartbeat TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
@@ -362,6 +376,7 @@ async function createTables() {
       location TEXT,
       config TEXT,
       status TEXT DEFAULT 'online',
+      area TEXT DEFAULT '',
       last_update TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE

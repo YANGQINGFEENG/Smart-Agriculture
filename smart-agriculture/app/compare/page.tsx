@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -36,6 +36,7 @@ import {
   FileText,
   TrendingUp,
   Menu,
+  HelpCircle,
 } from "lucide-react"
 import {
   LineChart,
@@ -49,7 +50,7 @@ import {
 } from "recharts"
 import { ChartContainer } from "@/components/ui/chart"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { format, subDays, subHours, subWeeks, subMonths, startOfDay, endOfDay } from "date-fns"
+import { format, subDays, subHours, startOfDay, endOfDay } from "date-fns"
 import { zhCN } from "date-fns/locale"
 
 /**
@@ -104,7 +105,6 @@ const chartColors = [
  */
 export default function ComparePage() {
   const [activeTab, setActiveTab] = useState("compare")
-  const [currentTime, setCurrentTime] = useState<string>("")
   const [sensors, setSensors] = useState<Sensor[]>([])
   const [selectedSensors, setSelectedSensors] = useState<string[]>([])
   const [timeRange, setTimeRange] = useState<string>("24h")
@@ -114,6 +114,7 @@ export default function ComparePage() {
   const [loading, setLoading] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<string>("")
   const [mounted, setMounted] = useState(false)
+  const [error, setError] = useState<string>("")
 
   useEffect(() => {
     setMounted(true)
@@ -138,6 +139,7 @@ export default function ComparePage() {
         }
       } catch (error) {
         console.error('获取传感器列表失败:', error)
+        setError('获取传感器列表失败')
       }
     }
     
@@ -146,9 +148,6 @@ export default function ComparePage() {
 
   /**
    * 滑动平均滤波
-   * @param data 原始数据数组
-   * @param windowSize 窗口大小
-   * @returns 滤波后的数据
    */
   const movingAverageFilter = (data: any[], windowSize: number = 3) => {
     if (data.length <= windowSize) {
@@ -176,29 +175,23 @@ export default function ComparePage() {
 
   /**
    * 异常值检测和处理
-   * @param data 数据数组
-   * @param threshold 阈值（默认2倍标准差）
-   * @returns 处理后的数据
    */
   const detectAndHandleOutliers = (data: any[], threshold: number = 2) => {
     if (data.length < 3) {
       return data
     }
 
-    // 计算均值和标准差
     const values = data.map(point => parseFloat(point.value))
     const mean = values.reduce((acc, val) => acc + val, 0) / values.length
     const stdDev = Math.sqrt(
       values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length
     )
 
-    // 处理异常值
     const processedData = data.map((point, index) => {
       const value = parseFloat(point.value)
       const isOutlier = Math.abs(value - mean) > threshold * stdDev
       
       if (isOutlier) {
-        // 用前后值的平均值替换异常值
         let replacementValue
         if (index === 0) {
           replacementValue = parseFloat(data[index + 1].value)
@@ -219,61 +212,16 @@ export default function ComparePage() {
   }
 
   /**
-   * 补全缺失数据
-   * @param data 数据数组
-   * @returns 补全后的数据
-   */
-  const fillMissingData = (data: any[]) => {
-    if (data.length < 2) {
-      return data
-    }
-
-    const filledData = []
-    
-    for (let i = 0; i < data.length; i++) {
-      filledData.push(data[i])
-      
-      // 检查是否有时间间隔过大的情况
-      if (i < data.length - 1) {
-        const currentTime = new Date(data[i].timestamp).getTime()
-        const nextTime = new Date(data[i + 1].timestamp).getTime()
-        const timeDiff = nextTime - currentTime
-        
-        // 如果时间间隔超过30秒，认为有缺失数据
-        if (timeDiff > 30000) {
-          const currentValue = parseFloat(data[i].value)
-          const nextValue = parseFloat(data[i + 1].value)
-          const valueDiff = nextValue - currentValue
-          
-          // 计算需要插入的点数
-          const insertCount = Math.floor(timeDiff / 10000) // 每10秒插入一个点
-          
-          for (let j = 1; j <= insertCount; j++) {
-            const interpolatedTime = new Date(currentTime + (timeDiff * j) / (insertCount + 1))
-            const interpolatedValue = currentValue + (valueDiff * j) / (insertCount + 1)
-            
-            filledData.push({
-              ...data[i],
-              timestamp: interpolatedTime,
-              value: interpolatedValue
-            })
-          }
-        }
-      }
-    }
-    
-    return filledData
-  }
-
-  /**
    * 获取对比数据
    */
   const fetchCompareData = async () => {
     if (selectedSensors.length === 0) {
+      setChartData([])
       return
     }
 
     setLoading(true)
+    setError("")
     
     try {
       let startTime: Date
@@ -281,7 +229,7 @@ export default function ComparePage() {
 
       if (timeRange === "custom") {
         if (!customStartDate || !customEndDate) {
-          alert('请选择自定义时间范围')
+          setError('请选择自定义时间范围')
           setLoading(false)
           return
         }
@@ -298,22 +246,30 @@ export default function ComparePage() {
         }
       }
 
+      // 将时间转换为数据库格式（北京时间）
+      const formatTimeForDB = (date: Date) => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        const seconds = String(date.getSeconds()).padStart(2, '0')
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+      }
+
       const dataPromises = selectedSensors.map(async (sensorId) => {
         const response = await fetch(
-          `/api/sensors/${sensorId}/data?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}&limit=1000`
+          `/api/sensors/${sensorId}/data?startTime=${encodeURIComponent(formatTimeForDB(startTime))}&endTime=${encodeURIComponent(formatTimeForDB(endTime))}&limit=1000`
         )
         const result = await response.json()
         
         let processedData = result.success ? result.data : []
         
-        // 1. 处理异常值
-        processedData = detectAndHandleOutliers(processedData)
-        
-        // 2. 滑动平均滤波
-        processedData = movingAverageFilter(processedData, 3)
-        
-        // 3. 补全缺失数据
-        processedData = fillMissingData(processedData)
+        // 数据处理
+        if (processedData.length > 0) {
+          processedData = detectAndHandleOutliers(processedData)
+          processedData = movingAverageFilter(processedData, 3)
+        }
         
         return {
           sensorId,
@@ -327,18 +283,18 @@ export default function ComparePage() {
 
       results.forEach(({ sensorId, data }) => {
         data.forEach((point: any) => {
-          const timeKey = format(new Date(point.timestamp), 'HH:mm:ss')
-          
+          const timeKey = format(new Date(point.timestamp), 'yyyy-MM-dd HH:mm:ss')
+
           if (!mergedData.has(timeKey)) {
             mergedData.set(timeKey, { timestamp: timeKey })
           }
-          
+
           const existingPoint = mergedData.get(timeKey)!
           existingPoint[sensorId] = parseFloat(parseFloat(point.value).toFixed(2))
         })
       })
 
-      const sortedData = Array.from(mergedData.values()).sort((a, b) => 
+      const sortedData = Array.from(mergedData.values()).sort((a, b) =>
         a.timestamp.localeCompare(b.timestamp)
       )
 
@@ -346,7 +302,7 @@ export default function ComparePage() {
       setLastUpdate(new Date().toLocaleTimeString("zh-CN"))
     } catch (error) {
       console.error('获取对比数据失败:', error)
-      alert('获取对比数据失败')
+      setError('获取对比数据失败')
     } finally {
       setLoading(false)
     }
@@ -358,10 +314,12 @@ export default function ComparePage() {
   useEffect(() => {
     if (selectedSensors.length > 0) {
       fetchCompareData()
-      
+
       const interval = setInterval(fetchCompareData, 30000)
-      
+
       return () => clearInterval(interval)
+    } else {
+      setChartData([])
     }
   }, [selectedSensors, timeRange, customStartDate, customEndDate])
 
@@ -461,30 +419,50 @@ export default function ComparePage() {
       temperature: "bg-chart-4/20 text-chart-4",
       humidity: "bg-chart-2/20 text-chart-2",
       light: "bg-chart-3/20 text-chart-3",
-      soil: "bg-primary/20 text-primary",
+      soil_moisture: "bg-primary/20 text-primary",
       soil_temperature: "bg-chart-5/20 text-chart-5",
       ec: "bg-chart-1/20 text-chart-1",
       ph: "bg-chart-2/20 text-chart-2",
+      pressure: "bg-chart-3/20 text-chart-3",
+      vibration: "bg-chart-4/20 text-chart-4",
+      co2: "bg-chart-5/20 text-chart-5",
     }
     return colorMap[type] || "bg-muted text-muted-foreground"
   }
 
   /**
-   * 格式化图表数据点
+   * 格式化图表数据（使用useMemo避免重复计算）
    */
-  const formatChartData = chartData.map(point => {
-    const formatted: any = { timestamp: point.timestamp }
-    selectedSensors.forEach(sensorId => {
-      if (point[sensorId] !== undefined) {
-        formatted[sensorId] = point[sensorId]
-      }
+  const formatChartData = useMemo(() => {
+    return chartData.map(point => {
+      const formatted: any = { timestamp: point.timestamp }
+      selectedSensors.forEach(sensorId => {
+        if (point[sensorId] !== undefined) {
+          formatted[sensorId] = point[sensorId]
+        }
+      })
+      return formatted
     })
-    return formatted
-  })
+  }, [chartData, selectedSensors])
+
+  /**
+   * 获取图表配置
+   */
+  const chartConfig = useMemo(() => {
+    return Object.fromEntries(
+      selectedSensors.map((id, index) => [
+        id,
+        {
+          label: sensors.find(s => s.id === id)?.name || id,
+          color: chartColors[index % chartColors.length],
+        },
+      ])
+    )
+  }, [selectedSensors, sensors])
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* 侧边栏 - 在大屏幕上显示，小屏幕上隐藏 */}
+      {/* 侧边栏 */}
       <div className="hidden lg:flex">
         <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
@@ -522,6 +500,14 @@ export default function ComparePage() {
             </div>
           </div>
 
+          {/* 错误提示 */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+              <HelpCircle className="w-4 h-4" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <Card className="lg:col-span-1">
               <CardHeader>
@@ -532,41 +518,48 @@ export default function ComparePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="max-h-[50vh] overflow-y-auto space-y-2">
-                  {sensors.map((sensor) => (
-                    <div
-                      key={sensor.id}
-                      className="flex items-start space-x-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <Checkbox
-                        id={sensor.id}
-                        checked={selectedSensors.includes(sensor.id)}
-                        onCheckedChange={() => toggleSensor(sensor.id)}
-                        disabled={
-                          !selectedSensors.includes(sensor.id) && 
-                          selectedSensors.length >= 5
-                        }
-                      />
-                      <div className="flex-1 min-w-0">
-                        <Label
-                          htmlFor={sensor.id}
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          {sensor.name}
-                        </Label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge 
-                            variant="secondary" 
-                            className={`text-xs ${getSensorColor(sensor.type)}`}
+                  {sensors.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <HelpCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">暂无传感器数据</p>
+                    </div>
+                  ) : (
+                    sensors.map((sensor) => (
+                      <div
+                        key={sensor.id}
+                        className="flex items-start space-x-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          id={sensor.id}
+                          checked={selectedSensors.includes(sensor.id)}
+                          onCheckedChange={() => toggleSensor(sensor.id)}
+                          disabled={
+                            !selectedSensors.includes(sensor.id) && 
+                            selectedSensors.length >= 5
+                          }
+                        />
+                        <div className="flex-1 min-w-0">
+                          <Label
+                            htmlFor={sensor.id}
+                            className="text-sm font-medium cursor-pointer"
                           >
-                            {sensor.type_name}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {sensor.location}
-                          </span>
+                            {sensor.name}
+                          </Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-xs ${getSensorColor(sensor.type)}`}
+                            >
+                              {sensor.type_name}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {sensor.location}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
                 
                 <div className="pt-4 border-t">
@@ -718,20 +711,13 @@ export default function ComparePage() {
                     </div>
                   ) : chartData.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground">
+                      <HelpCircle className="w-16 h-16 mb-4 opacity-50" />
                       <p className="text-lg font-medium">暂无数据</p>
                       <p className="text-sm">所选时间范围内没有数据记录</p>
                     </div>
                   ) : (
                     <ChartContainer
-                      config={Object.fromEntries(
-                        selectedSensors.map((id, index) => [
-                          id,
-                          {
-                            label: sensors.find(s => s.id === id)?.name || id,
-                            color: chartColors[index % chartColors.length],
-                          },
-                        ])
-                      )}
+                      config={chartConfig}
                       className="h-[50vh] w-full"
                     >
                       <ResponsiveContainer width="100%" height="100%">
@@ -860,7 +846,7 @@ export default function ComparePage() {
         
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">
           <p className="text-xs text-muted-foreground text-center">
-            天工慧眼 - 智慧农业物联网监控平台 v1.0.0 | 数据更新时间: {currentTime || "--"}
+            天工慧眼 - 智慧农业物联网监控平台 v1.0.0 | 数据更新时间: {lastUpdate || "--"}
           </p>
         </footer>
       </div>

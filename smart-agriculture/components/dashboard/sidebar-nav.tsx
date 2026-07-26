@@ -69,6 +69,7 @@ const navGroups: NavGroup[] = [
     icon: Settings,
     items: [
       { id: "farms", label: "基地管理", icon: MapPin, href: "/farms" },
+      { id: "areas", label: "区域视图", icon: Cpu, href: "/areas" },
       { id: "devices", label: "设备连接", icon: Wifi, href: "/devices" },
       { id: "actuators", label: "执行器控制", icon: Power, href: "/actuators" },
     ],

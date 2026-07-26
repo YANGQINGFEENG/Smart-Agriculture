@@ -39,24 +39,7 @@ export async function GET(request: NextRequest) {
     const type = url.searchParams.get('type')
     const farmId = url.searchParams.get('farm_id')
 
-    let query = `
-      SELECT 
-        s.id, 
-        s.name, 
-        s.type_id, 
-        s.location, 
-        s.status, 
-        s.battery, 
-        s.last_update, 
-        s.created_at,
-        s.farm_id,
-        s.zone_id,
-        st.type,
-        st.name as type_name,
-        st.unit
-      FROM sensors s
-      INNER JOIN sensor_types st ON s.type_id = st.id
-    `
+    let query = 'SELECT s.id, s.name, s.type_id, s.location, s.status, s.battery, s.last_update, s.created_at, s.area, st.type, st.name as type_name, st.unit, (SELECT sd.value FROM sensor_data sd WHERE sd.sensor_id = s.id ORDER BY sd.timestamp DESC LIMIT 1) as lastVal FROM sensors s INNER JOIN sensor_types st ON s.type_id = st.id'
 
     const conditions: string[] = []
     const params: any[] = []
@@ -66,8 +49,7 @@ export async function GET(request: NextRequest) {
       params.push(type)
     }
     if (farmId) {
-      conditions.push('s.farm_id = ?')
-      params.push(parseInt(farmId))
+      console.warn('sensors表不支持farm_id过滤，该参数已忽略')
     }
 
     if (conditions.length > 0) {
@@ -78,16 +60,21 @@ export async function GET(request: NextRequest) {
 
     const rows = await db.query<Sensor[]>(query, params)
 
+    const formattedRows = rows.map(row => ({
+      ...row,
+      value: row.lastVal !== null ? parseFloat(row.lastVal.toString()) : undefined,
+    }))
+
     return NextResponse.json({
       success: true,
-      data: rows,
-      total: rows.length,
+      data: formattedRows,
+      total: formattedRows.length,
     })
   } catch (error) {
     console.error('获取传感器列表失败:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: '获取传感器列表失败',
         details: error instanceof Error ? error.message : '未知错误'
       },
@@ -103,7 +90,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
+
     if (!body.name || !body.type_id || !body.location) {
       return NextResponse.json(
         { success: false, error: '缺少必要参数：name, type_id, location' },
@@ -124,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const typePrefix = types[0].type.charAt(0).toUpperCase()
-    
+
     const existingSensors = await db.query<Sensor[]>(
       'SELECT id FROM sensors WHERE id LIKE ? ORDER BY id DESC',
       [`${typePrefix}-%`]
@@ -142,27 +129,12 @@ export async function POST(request: NextRequest) {
     const sensorId = `${typePrefix}-${newIdNumber.toString().padStart(3, '0')}`
 
     await db.execute<ResultSetHeader>(
-      `INSERT INTO sensors (id, name, type_id, location, status, battery, last_update) 
-       VALUES (?, ?, ?, ?, 'offline', 100, NULL)`,
+      'INSERT INTO sensors (id, name, type_id, location, status, battery, last_update) VALUES (?, ?, ?, ?, "offline", 100, NULL)',
       [sensorId, body.name, body.type_id, body.location]
     )
 
     const newSensors = await db.query<Sensor[]>(
-      `SELECT 
-        s.id, 
-        s.name, 
-        s.type_id, 
-        s.location, 
-        s.status, 
-        s.battery, 
-        s.last_update, 
-        s.created_at,
-        st.type,
-        st.name as type_name,
-        st.unit
-      FROM sensors s
-      INNER JOIN sensor_types st ON s.type_id = st.id
-      WHERE s.id = ?`,
+      'SELECT s.id, s.name, s.type_id, s.location, s.status, s.battery, s.last_update, s.created_at, st.type, st.name as type_name, st.unit FROM sensors s INNER JOIN sensor_types st ON s.type_id = st.id WHERE s.id = ?',
       [sensorId]
     )
 
@@ -174,8 +146,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('创建传感器失败:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: '创建传感器失败',
         details: error instanceof Error ? error.message : '未知错误'
       },

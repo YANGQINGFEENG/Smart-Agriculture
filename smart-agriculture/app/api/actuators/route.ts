@@ -3,6 +3,7 @@ import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 
 /**
  * 执行器数据接口
+ * 支持硬件上报的控制类型和控制范围配置
  */
 interface Actuator extends RowDataPacket {
   id: string
@@ -12,6 +13,13 @@ interface Actuator extends RowDataPacket {
   status: 'online' | 'offline'
   state: 'on' | 'off'
   mode: 'auto' | 'manual'
+  control_value?: number
+  control_type?: string
+  control_min?: number
+  control_max?: number
+  control_step?: number
+  control_default?: number
+  area?: string
   last_update: Date | null
   created_at: Date
   locked: number
@@ -49,11 +57,17 @@ export async function GET(request: NextRequest) {
         a.status, 
         a.state, 
         a.mode,
+        a.control_value,
+        a.control_type,
+        a.control_min,
+        a.control_max,
+        a.control_step,
+        a.control_default,
+        a.area,
         a.last_update, 
         a.created_at,
         a.locked,
         a.farm_id,
-        a.zone_id,
         at.type,
         at.name as type_name,
         at.description

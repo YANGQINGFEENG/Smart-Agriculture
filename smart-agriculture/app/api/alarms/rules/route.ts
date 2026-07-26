@@ -98,3 +98,46 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+/**
+ * DELETE /api/alarms/rules?id=[id]
+ * 删除报警规则
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const url = new URL(request.url)
+    const id = url.searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: '缺少必要参数：id' },
+        { status: 400 }
+      )
+    }
+
+    const result = await db.execute<ResultSetHeader>(
+      'DELETE FROM alarm_rules WHERE id = ?',
+      [parseInt(id)]
+    )
+
+    const affectedRows = (result as any).affectedRows || 0
+    
+    if (affectedRows === 0) {
+      return NextResponse.json(
+        { success: false, error: '报警规则不存在' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '报警规则删除成功',
+    })
+  } catch (error) {
+    console.error('删除报警规则失败:', error)
+    return NextResponse.json(
+      { success: false, error: '删除报警规则失败', details: error instanceof Error ? error.message : '未知错误' },
+      { status: 500 }
+    )
+  }
+}

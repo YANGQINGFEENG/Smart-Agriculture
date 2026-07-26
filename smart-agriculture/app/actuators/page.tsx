@@ -1,23 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Header } from "@/components/dashboard/header"
 import { useFarm } from "@/lib/farm-context"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   RefreshCw,
   Power,
-  PowerOff,
   Droplets,
   Wind,
   Flame,
@@ -25,39 +16,21 @@ import {
   CircleDot,
   AlertCircle,
   Menu,
+  MapPin,
 } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ActuatorCard, Actuator, CommandStatus } from "@/components/dashboard/actuator-card"
+import { getDeviceTypeConfig, ControlType } from "@/lib/device-types"
 
 /**
- * 执行器数据接口
+ * 控制指令超时时间（秒）
  */
-interface Actuator {
-  id: string
-  name: string
-  type: string
-  type_name: string
-  description: string
-  location: string
-  status: 'online' | 'offline'
-  state: 'on' | 'off'
-  mode: 'auto' | 'manual'
-  last_update: string | null
-}
+const COMMAND_TIMEOUT_SECONDS = 30
 
 /**
- * 执行器图标映射
- */
-const actuatorIcons: Record<string, typeof Power> = {
-  water_pump: Droplets,
-  fan: Wind,
-  heater: Flame,
-  valve: CircleDot,
-  light: Lightbulb,
-}
-
-/**
- * 执行器控制页面
- * 显示所有执行器状态，支持开关控制和模式切换
+ * 执行器页面
+ * 显示所有执行器状态，支持多种控制类型和超时提醒
  */
 export default function ActuatorsPage() {
   const { selectedFarmId, farms } = useFarm()
@@ -66,8 +39,15 @@ export default function ActuatorsPage() {
   const [actuators, setActuators] = useState<Actuator[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
-  const [updating, setUpdating] = useState<string | null>(null)
+  
+  // 指令状态映射：actuatorId -> CommandStatus
+  const [commandStatusMap, setCommandStatusMap] = useState<Record<string, CommandStatus>>({})
+  // 指令超时定时器映射：actuatorId -> timerId
+  const [timeoutTimers, setTimeoutTimers] = useState<Record<string, ReturnType<typeof setTimeout>>>({})
 
+  /**
+   * 更新当前时间
+   */
   useEffect(() => {
     setCurrentTime(new Date().toLocaleString("zh-CN"))
     const interval = setInterval(() => {
@@ -86,7 +66,21 @@ export default function ActuatorsPage() {
       const result = await response.json()
       
       if (result.success && result.data) {
-        setActuators(result.data)
+        // 转换数据格式，添加control_value字段
+        const formattedActuators: Actuator[] = result.data.map((actuator: any) => ({
+          ...actuator,
+          control_value: actuator.control_value !== null ? parseFloat(actuator.control_value) : undefined,
+        }))
+        setActuators(formattedActuators)
+        
+        // 检查是否有pending的指令已执行完成
+        for (const actuator of formattedActuators) {
+          const status = commandStatusMap[actuator.id]
+          if (status === 'pending') {
+            // 如果执行器状态已经变化，说明指令已执行
+            // 这里可以进一步优化：检查是否有最新的command执行记录
+          }
+        }
       }
     } catch (error) {
       console.error('获取执行器列表失败:', error)
@@ -96,6 +90,9 @@ export default function ActuatorsPage() {
     }
   }
 
+  /**
+   * 初始加载和定时刷新
+   */
   useEffect(() => {
     fetchActuators()
     
@@ -105,38 +102,160 @@ export default function ActuatorsPage() {
   }, [selectedFarmId])
 
   /**
-   * 切换执行器开关状态（发送控制指令）
+   * 清除指令状态
    */
-  const toggleState = async (actuatorId: string, currentState: 'on' | 'off') => {
-    const newState = currentState === 'on' ? 'off' : 'on'
+  const clearCommandStatus = useCallback((actuatorId: string) => {
+    setCommandStatusMap(prev => {
+      const newMap = { ...prev }
+      delete newMap[actuatorId]
+      return newMap
+    })
+    if (timeoutTimers[actuatorId]) {
+      clearTimeout(timeoutTimers[actuatorId])
+      setTimeoutTimers(prev => {
+        const newTimers = { ...prev }
+        delete newTimers[actuatorId]
+        return newTimers
+      })
+    }
+  }, [timeoutTimers])
+
+  /**
+   * 设置指令超时定时器
+   */
+  const setupTimeoutTimer = useCallback((actuatorId: string) => {
+    // 清除之前的定时器
+    if (timeoutTimers[actuatorId]) {
+      clearTimeout(timeoutTimers[actuatorId])
+    }
     
-    setUpdating(actuatorId)
+    const timer = setTimeout(() => {
+      setCommandStatusMap(prev => ({
+        ...prev,
+        [actuatorId]: 'timeout'
+      }))
+      
+      // 3秒后自动清除状态
+      setTimeout(() => {
+        clearCommandStatus(actuatorId)
+      }, 3000)
+    }, COMMAND_TIMEOUT_SECONDS * 1000)
+    
+    setTimeoutTimers(prev => ({
+      ...prev,
+      [actuatorId]: timer
+    }))
+  }, [timeoutTimers, clearCommandStatus])
+
+  /**
+   * 发送控制指令
+   */
+  const sendControlCommand = async (actuatorId: string, command: 'on' | 'off' | 'value', value?: number) => {
+    // 设置指令状态为发送中
+    setCommandStatusMap(prev => ({
+      ...prev,
+      [actuatorId]: 'sending'
+    }))
     
     try {
+      const actuator = actuators.find(a => a.id === actuatorId)
+      if (!actuator) return
+      
+      const config = getDeviceTypeConfig(actuator.type)
+      const controlType = config?.controlType || ControlType.BOOLEAN
+      
+      const body: any = {
+        control_type: controlType,
+        command: command === 'value' ? 'value' : command,
+      }
+      
+      if (value !== undefined) {
+        body.value = value
+      }
+      
+      // 如果有控制范围配置，添加到请求中
+      if (config?.controlRange) {
+        body.min = config.controlRange.min
+        body.max = config.controlRange.max
+      }
+      
       const response = await fetch(`/api/actuators/${actuatorId}/commands`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          command: newState,
-        }),
+        body: JSON.stringify(body),
       })
       
       const result = await response.json()
       
       if (result.success) {
-        console.log('控制指令已发送:', result.data)
-        await fetchActuators()
-        alert(`已发送${newState === 'on' ? '开启' : '关闭'}指令，等待硬件执行...`)
+        // 设置指令状态为等待执行
+        setCommandStatusMap(prev => ({
+          ...prev,
+          [actuatorId]: 'pending'
+        }))
+        
+        // 设置超时定时器
+        setupTimeoutTimer(actuatorId)
+        
+        // 轮询检查指令执行状态
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands`)
+            const statusResult = await statusResponse.json()
+            
+            if (statusResult.success && statusResult.data) {
+              const cmdStatus = statusResult.data.status
+              if (cmdStatus === 'executed') {
+                setCommandStatusMap(prev => ({
+                  ...prev,
+                  [actuatorId]: 'executed'
+                }))
+                clearInterval(pollInterval)
+                await fetchActuators()
+                setTimeout(() => clearCommandStatus(actuatorId), 3000)
+              } else if (cmdStatus === 'failed') {
+                setCommandStatusMap(prev => ({
+                  ...prev,
+                  [actuatorId]: 'failed'
+                }))
+                clearInterval(pollInterval)
+                setTimeout(() => clearCommandStatus(actuatorId), 3000)
+              } else if (cmdStatus === 'timeout') {
+                setCommandStatusMap(prev => ({
+                  ...prev,
+                  [actuatorId]: 'timeout'
+                }))
+                clearInterval(pollInterval)
+                setTimeout(() => clearCommandStatus(actuatorId), 3000)
+              }
+            }
+          } catch (error) {
+            console.error('轮询指令状态失败:', error)
+            clearInterval(pollInterval)
+          }
+        }, 2000)
+        
+        // 设置轮询超时
+        setTimeout(() => {
+          clearInterval(pollInterval)
+        }, COMMAND_TIMEOUT_SECONDS * 1000 + 2000)
+        
       } else {
-        alert('操作失败: ' + result.error)
+        setCommandStatusMap(prev => ({
+          ...prev,
+          [actuatorId]: 'failed'
+        }))
+        setTimeout(() => clearCommandStatus(actuatorId), 3000)
       }
     } catch (error) {
       console.error('发送控制指令失败:', error)
-      alert('操作失败')
-    } finally {
-      setUpdating(null)
+      setCommandStatusMap(prev => ({
+        ...prev,
+        [actuatorId]: 'failed'
+      }))
+      setTimeout(() => clearCommandStatus(actuatorId), 3000)
     }
   }
 
@@ -145,8 +264,6 @@ export default function ActuatorsPage() {
    */
   const toggleMode = async (actuatorId: string, currentMode: 'auto' | 'manual') => {
     const newMode = currentMode === 'auto' ? 'manual' : 'auto'
-    
-    setUpdating(actuatorId)
     
     try {
       const response = await fetch(`/api/actuators/${actuatorId}`, {
@@ -170,55 +287,36 @@ export default function ActuatorsPage() {
     } catch (error) {
       console.error('切换执行器模式失败:', error)
       alert('操作失败')
-    } finally {
-      setUpdating(null)
     }
   }
 
   /**
-   * 获取状态徽章样式
+   * 按区域分组执行器
    */
-  const getStatusBadge = (status: string) => {
-    if (status === 'online') {
-      return <Badge className="bg-primary/20 text-primary">在线</Badge>
-    }
-    return <Badge className="bg-destructive/20 text-destructive">离线</Badge>
-  }
-
-  /**
-   * 获取开关状态徽章
-   */
-  const getStateBadge = (state: string) => {
-    if (state === 'on') {
-      return <Badge className="bg-chart-3/20 text-chart-3">开启</Badge>
-    }
-    return <Badge className="bg-muted text-muted-foreground">关闭</Badge>
-  }
-
-  /**
-   * 获取模式徽章
-   */
-  const getModeBadge = (mode: string) => {
-    if (mode === 'auto') {
-      return <Badge variant="outline" className="border-primary text-primary">自动</Badge>
-    }
-    return <Badge variant="outline" className="border-chart-4 text-chart-4">手动</Badge>
-  }
-
-  /**
-   * 格式化最后更新时间
-   */
-  const formatLastUpdate = (timestamp: string | null) => {
-    if (!timestamp) return '从未更新'
+  const getActuatorsGroupedByArea = () => {
+    const groups: Record<string, Actuator[]> = {}
     
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - date.getTime()) / 1000 / 60)
+    // 添加"未分组"区域
+    groups['未分组'] = []
     
-    if (diff < 1) return '刚刚'
-    if (diff < 60) return `${diff}分钟前`
-    if (diff < 1440) return `${Math.floor(diff / 60)}小时前`
-    return date.toLocaleString('zh-CN')
+    actuators.forEach(actuator => {
+      const area = actuator.area || '未分组'
+      if (!groups[area]) {
+        groups[area] = []
+      }
+      groups[area].push(actuator)
+    })
+    
+    return groups
+  }
+
+  /**
+   * 获取区域统计信息
+   */
+  const getAreaStats = (areaActuators: Actuator[]) => {
+    const onlineCount = areaActuators.filter(a => a.status === 'online').length
+    const runningCount = areaActuators.filter(a => a.state === 'on').length
+    return { onlineCount, runningCount, total: areaActuators.length }
   }
 
   return (
@@ -279,143 +377,122 @@ export default function ActuatorsPage() {
               <p className="text-sm">系统中还没有配置执行器设备</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {actuators.map((actuator) => {
-                const Icon = actuatorIcons[actuator.type] || Power
-                const isUpdating = updating === actuator.id
+            <div className="space-y-6">
+              {/* 按区域分组显示 */}
+              {Object.entries(getActuatorsGroupedByArea()).map(([area, areaActuators]) => {
+                const stats = getAreaStats(areaActuators)
                 
                 return (
-                  <Card key={actuator.id} className="bg-card border-border">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${
-                            actuator.state === 'on' 
-                              ? 'bg-chart-3/20' 
-                              : 'bg-muted'
-                          }`}>
-                            <Icon className={`w-5 h-5 ${
-                              actuator.state === 'on' 
-                                ? 'text-chart-3' 
-                                : 'text-muted-foreground'
-                            }`} />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">{actuator.name}</CardTitle>
-                            <CardDescription className="text-xs">
-                              {actuator.type_name} · {actuator.location}
-                            </CardDescription>
-                          </div>
-                        </div>
-                        {getStatusBadge(actuator.status)}
+                  <div key={area}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <MapPin className="w-5 h-5 text-primary" />
                       </div>
-                    </CardHeader>
+                      <div>
+                        <h2 className="text-lg font-semibold text-foreground">{area}</h2>
+                        <p className="text-xs text-muted-foreground">
+                          {stats.onlineCount}/{stats.total} 在线 · {stats.runningCount} 运行中
+                        </p>
+                      </div>
+                    </div>
                     
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">开关状态</span>
-                          {getStateBadge(actuator.state)}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant={actuator.state === 'on' ? 'destructive' : 'default'}
-                          onClick={() => toggleState(actuator.id, actuator.state)}
-                          disabled={actuator.status === 'offline' || isUpdating}
-                        >
-                          {isUpdating ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                          ) : actuator.state === 'on' ? (
-                            <>
-                              <PowerOff className="w-4 h-4 mr-2" />
-                              关闭
-                            </>
-                          ) : (
-                            <>
-                              <Power className="w-4 h-4 mr-2" />
-                              开启
-                            </>
-                          )}
-                        </Button>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">控制模式</span>
-                          {getModeBadge(actuator.mode)}
-                        </div>
-                        <Select
-                          value={actuator.mode}
-                          onValueChange={(value) => toggleMode(actuator.id, actuator.mode)}
-                          disabled={actuator.status === 'offline' || isUpdating}
-                        >
-                          <SelectTrigger className="w-[100px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">自动</SelectItem>
-                            <SelectItem value="manual">手动</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="pt-4 border-t border-border">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>最后更新</span>
-                          <span>{formatLastUpdate(actuator.last_update)}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {areaActuators.map((actuator) => (
+                        <ActuatorCard
+                          key={actuator.id}
+                          actuator={actuator}
+                          onControl={(command, value) => sendControlCommand(actuator.id, command, value)}
+                          commandStatus={commandStatusMap[actuator.id] || 'idle'}
+                          timeout={COMMAND_TIMEOUT_SECONDS}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )
               })}
             </div>
           )}
 
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-base">执行器说明</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                <div className="flex items-start gap-2">
-                  <Droplets className="w-4 h-4 text-chart-1 mt-0.5" />
-                  <div>
-                    <p className="font-medium">水泵</p>
-                    <p className="text-muted-foreground">用于灌溉和排水控制</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Wind className="w-4 h-4 text-chart-2 mt-0.5" />
-                  <div>
-                    <p className="font-medium">风扇</p>
-                    <p className="text-muted-foreground">用于通风和温度调节</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Flame className="w-4 h-4 text-chart-4 mt-0.5" />
-                  <div>
-                    <p className="font-medium">加热器</p>
-                    <p className="text-muted-foreground">用于温度控制</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CircleDot className="w-4 h-4 text-chart-3 mt-0.5" />
-                  <div>
-                    <p className="font-medium">电磁阀</p>
-                    <p className="text-muted-foreground">用于水流控制</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Lightbulb className="w-4 h-4 text-chart-5 mt-0.5" />
-                  <div>
-                    <p className="font-medium">补光灯</p>
-                    <p className="text-muted-foreground">用于光照调节</p>
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+            <div className="flex items-start gap-2 p-4 rounded-lg bg-primary/5 border border-primary/10">
+              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Power className="w-4 h-4 text-primary" />
               </div>
-            </CardContent>
-          </Card>
+              <div>
+                <p className="font-medium text-foreground">控制流程说明</p>
+                <p className="text-xs text-muted-foreground">
+                  发送控制指令 → 等待硬件回执 → 更新页面状态 → 超时提醒
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 p-4 rounded-lg bg-yellow/5 border border-yellow/10">
+              <div className="w-8 h-8 rounded-lg bg-yellow/20 flex items-center justify-center">
+                <AlertCircle className="w-4 h-4 text-yellow-600" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground">超时提醒</p>
+                <p className="text-xs text-muted-foreground">
+                  如果 {COMMAND_TIMEOUT_SECONDS} 秒内未收到硬件回执，系统将提示控制超时
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 p-4 rounded-lg bg-green/5 border border-green/10">
+              <div className="w-8 h-8 rounded-lg bg-green/20 flex items-center justify-center">
+                <RefreshCw className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground">自动刷新</p>
+                <p className="text-xs text-muted-foreground">
+                  页面每10秒自动刷新一次，保持数据最新
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+            <div className="flex items-start gap-2">
+              <Droplets className="w-4 h-4 text-chart-1 mt-0.5" />
+              <div>
+                <p className="font-medium">水泵</p>
+                <p className="text-muted-foreground">用于灌溉和排水控制</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Wind className="w-4 h-4 text-chart-2 mt-0.5" />
+              <div>
+                <p className="font-medium">风扇</p>
+                <p className="text-muted-foreground">用于通风和温度调节</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Flame className="w-4 h-4 text-chart-4 mt-0.5" />
+              <div>
+                <p className="font-medium">加热器</p>
+                <p className="text-muted-foreground">用于温度控制</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <CircleDot className="w-4 h-4 text-chart-3 mt-0.5" />
+              <div>
+                <p className="font-medium">电磁阀</p>
+                <p className="text-muted-foreground">用于水流控制</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Lightbulb className="w-4 h-4 text-chart-5 mt-0.5" />
+              <div>
+                <p className="font-medium">补光灯</p>
+                <p className="text-muted-foreground">用于光照调节</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Power className="w-4 h-4 text-chart-6 mt-0.5" />
+              <div>
+                <p className="font-medium">电机/舵机</p>
+                <p className="text-muted-foreground">支持速度和角度控制</p>
+              </div>
+            </div>
+          </div>
         </main>
         
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">
