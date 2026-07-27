@@ -672,6 +672,73 @@ async function handleAreaSync(ws, area) {
 }
 
 /**
+ * 发送命令到执行器（公开函数，供外部调用）
+ */
+function sendCommandToActuator(actuatorId, command) {
+  // 优先尝试通过执行器直接连接发送
+  let ws = actuatorConnections.get(actuatorId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: WebSocketMessageType.COMMAND,
+      data: command
+    }));
+    console.log(`[WS] Command sent directly to actuator: ${actuatorId}`);
+    return true;
+  }
+  
+  // 如果执行器没有直接连接，尝试通过网关连接发送
+  if (db) {
+    db.query('SELECT area FROM actuators WHERE id = ?', [actuatorId])
+      .then(([results]) => {
+        if (results.length > 0 && results[0].area) {
+          const area = results[0].area;
+          
+          // 通过区域名查找网关（区域名格式：区域-IP地址）
+          if (area && area.startsWith('区域-')) {
+            const gatewayIp = area.replace('区域-', '');
+            ws = gatewayConnections.get(gatewayIp);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: WebSocketMessageType.COMMAND,
+                data: {
+                  ...command,
+                  actuator_id: actuatorId
+                }
+              }));
+              console.log(`[WS] Command sent via gateway ${gatewayIp} to actuator: ${actuatorId}`);
+              return true;
+            }
+          }
+          
+          // 通过区域连接广播发送
+          const areaWsSet = areaConnections.get(area);
+          if (areaWsSet && areaWsSet.size > 0) {
+            areaWsSet.forEach(conn => {
+              if (conn.readyState === WebSocket.OPEN) {
+                conn.send(JSON.stringify({
+                  type: WebSocketMessageType.COMMAND,
+                  data: {
+                    ...command,
+                    actuator_id: actuatorId
+                  }
+                }));
+              }
+            });
+            console.log(`[WS] Command sent via area broadcast ${area} to actuator: ${actuatorId}`);
+            return true;
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('[WS] Error querying actuator area:', error);
+      });
+  }
+  
+  console.log(`[WS] No active connection found for actuator: ${actuatorId}`);
+  return false;
+}
+
+/**
  * 主函数
  */
 async function main() {
@@ -692,6 +759,52 @@ async function main() {
   
   // 初始化WebSocket服务器
   initWebSocketServer();
+  
+  // 创建HTTP服务器用于命令转发
+  const http = require('http');
+  const httpServer = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/send-command') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const { actuator_id, command } = data;
+          if (actuator_id && command) {
+            const sent = sendCommandToActuator(actuator_id, command);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, sent }));
+          } else {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Missing actuator_id or command' }));
+          }
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: error.message }));
+        }
+      });
+    } else if (req.method === 'GET' && req.url === '/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        connections: {
+          devices: deviceConnections.size,
+          actuators: actuatorConnections.size,
+          gateways: gatewayConnections.size,
+          areas: areaConnections.size
+        }
+      }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Not found' }));
+    }
+  });
+  
+  httpServer.listen(8081, () => {
+    console.log('[WS] HTTP command relay server started on port 8081');
+  });
   
   console.log('[WS] 独立WebSocket服务器启动完成');
 }

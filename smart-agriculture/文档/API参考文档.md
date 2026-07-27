@@ -6,6 +6,29 @@
 
 **基础URL**: `http://localhost:3000/api`
 
+### 系统架构
+
+平台采用分布式架构，由三个独立进程协同工作：
+
+| 进程 | 端口 | 职责 |
+|------|------|------|
+| **Next.js开发服务器** | 3000 | 提供HTTP API、渲染前端页面、数据库操作 |
+| **WebSocket服务器** | 8080 | 处理WebSocket实时连接、命令推送、状态同步 |
+| **HTTP转发接口** | 8081 | 接收HTTP命令并转发到WebSocket连接（桥梁作用） |
+
+### 命令下发流程
+
+```
+用户操作 → POST /api/actuators/{id}/commands → 写入数据库(pending)
+    → HTTP POST http://localhost:8081/send-command → WebSocket推送命令
+    → 硬件执行 → WebSocket command_ack回执 → 更新数据库(executed)
+```
+
+### 冗余保障
+
+- **优先使用WebSocket**：实时推送命令，响应延迟<500ms
+- **降级为HTTP轮询**：WebSocket断开时自动切换，确保命令不丢失
+
 ---
 
 ## 一、传感器相关API
@@ -379,18 +402,67 @@
       "id": 1,
       "type": "water_pump",
       "name": "水泵",
-      "description": "灌溉用水泵设备"
+      "description": "灌溉用水泵设备",
+      "control_type": "boolean"
     },
     {
       "id": 2,
       "type": "fan",
       "name": "风扇",
-      "description": "通风降温设备"
+      "description": "通风降温设备",
+      "control_type": "integer",
+      "control_range": {"min": 0, "max": 100, "step": 1, "default": 0}
+    },
+    {
+      "id": 3,
+      "type": "relay",
+      "name": "继电器",
+      "description": "用于开关控制，支持on/off",
+      "control_type": "boolean"
+    },
+    {
+      "id": 4,
+      "type": "laser",
+      "name": "激光器",
+      "description": "用于激光控制，支持开关控制",
+      "control_type": "boolean"
+    },
+    {
+      "id": 5,
+      "type": "rgb_led",
+      "name": "RGB-LED",
+      "description": "用于RGB颜色控制，支持颜色选择和亮度调节",
+      "control_type": "integer",
+      "control_range": {"min": 0, "max": 100, "step": 1, "default": 0}
     }
   ],
-  "total": 11
+  "total": 14
 }
 ```
+
+#### 新增执行器类型说明
+
+| 类型 | 名称 | 控制类型 | 说明 |
+|------|------|----------|------|
+| relay | 继电器 | boolean | 仅支持开关控制（on/off） |
+| laser | 激光器 | boolean | 仅支持开关控制（on/off） |
+| rgb_led | RGB-LED | integer | 支持0-100数值控制，映射为颜色值 |
+
+#### RGB-LED颜色值映射规则
+
+| control_value | 颜色/功能 | RGB值 |
+|---------------|-----------|-------|
+| 0 | 关闭 | (0, 0, 0) |
+| 1 | 红色 | (255, 0, 0) |
+| 2 | 绿色 | (0, 255, 0) |
+| 3 | 蓝色 | (0, 0, 255) |
+| 4 | 黄色 | (255, 255, 0) |
+| 5 | 青色 | (0, 255, 255) |
+| 6 | 品红色 | (255, 0, 255) |
+| 7 | 白色 | (255, 255, 255) |
+| 8 | 橙色 | (255, 128, 0) |
+| 9 | 紫色 | (128, 0, 255) |
+| 10-100 | 白色亮度 | 按百分比亮度（10=10%, 50=50%, 100=100%） |
 
 ---
 
@@ -1553,23 +1625,155 @@
 ### 11.1 连接地址
 
 ```
-ws://localhost:8080
+ws://localhost:8080?actuator_id={执行器ID}
 ```
+
+**参数说明**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| actuator_id | string | 执行器连接时必填 | 执行器唯一标识（如：VL-1-001） |
+| device_id | string | 设备连接时必填 | 设备唯一标识 |
+| gateway_ip | string | 网关连接时必填 | 网关IP地址 |
+| area | string | 区域订阅时必填 | 区域名称 |
 
 ### 11.2 消息类型
 
 | 类型 | 方向 | 说明 |
 |------|------|------|
-| heartbeat | 双向 | 心跳检测 |
+| heartbeat | 客户端→服务器 | 心跳检测（每30秒） |
+| heartbeat_ack | 服务器→客户端 | 心跳回执 |
+| welcome | 服务器→客户端 | 连接成功欢迎消息 |
 | sensor_data | 服务器→客户端 | 传感器数据更新 |
 | actuator_status | 服务器→客户端 | 执行器状态更新 |
-| command | 服务器→客户端 | 控制指令推送 |
-| command_ack | 客户端→服务器 | 命令回执（硬件端） |
+| command | 服务器→客户端 | 控制指令推送（实时） |
+| command_ack | 客户端→服务器 | 命令回执（硬件端执行完成后发送） |
 | command_status | 服务器→客户端 | 命令状态更新 |
 | area_update | 服务器→客户端 | 区域数据更新 |
 | area_sync | 客户端→服务器 | 订阅区域数据 |
+| device_register | 客户端→服务器 | 设备注册 |
+| gateway_register | 客户端→服务器 | 网关注册 |
+| data_report | 客户端→服务器 | 数据上报 |
+| status_update | 客户端→服务器 | 状态更新 |
+| error | 服务器→客户端 | 错误信息 |
 
-### 11.3 订阅区域示例
+### 11.3 连接流程
+
+#### 1. 执行器连接
+```
+硬件端 → WebSocket握手 → 服务器
+       ←-- welcome消息 --
+       → heartbeat（每30秒）
+       ←-- heartbeat_ack --
+```
+
+#### 2. 命令推送
+```
+服务器 → {"type":"command","data":{"id":8222,"actuator_id":"VL-1-001","command":"on","control_value":null}} → 硬件端
+硬件端 → {"type":"command_ack","actuator_id":"VL-1-001","command_id":8222,"status":"executed"} → 服务器
+```
+
+#### 3. 数值命令推送
+```
+服务器 → {"type":"command","data":{"id":8223,"actuator_id":"LT-1-002","command":"value","control_value":5}} → 硬件端
+硬件端 → {"type":"command_ack","actuator_id":"LT-1-002","command_id":8223,"status":"executed","control_value":5} → 服务器
+```
+
+### 11.4 消息格式详解
+
+#### heartbeat（心跳）
+**客户端发送**:
+```json
+{
+  "type": "heartbeat"
+}
+```
+
+**服务器响应**:
+```json
+{
+  "type": "heartbeat_ack"
+}
+```
+
+#### command（命令推送）
+**服务器发送**:
+```json
+{
+  "type": "command",
+  "data": {
+    "id": 8222,
+    "actuator_id": "VL-1-001",
+    "command": "on",
+    "control_value": null,
+    "control_type": "boolean",
+    "created_at": "2026-07-27T18:00:00.000Z"
+  }
+}
+```
+
+#### command_ack（命令回执）
+**硬件端发送**:
+```json
+{
+  "type": "command_ack",
+  "actuator_id": "VL-1-001",
+  "command_id": 8222,
+  "status": "executed",
+  "control_value": null
+}
+```
+
+| 状态值 | 说明 |
+|--------|------|
+| executed | 执行成功 |
+| failed | 执行失败 |
+
+### 11.5 HTTP转发接口（端口8081）
+
+WebSocket服务器提供HTTP转发接口，允许其他服务通过HTTP请求发送命令：
+
+#### 发送命令
+**接口地址**: `POST http://localhost:8081/send-command`
+
+**请求体**:
+```json
+{
+  "actuator_id": "VL-1-001",
+  "command": {
+    "id": 8222,
+    "actuator_id": "VL-1-001",
+    "command": "on",
+    "control_value": null
+  }
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "sent": true
+}
+```
+
+#### 获取连接状态
+**接口地址**: `GET http://localhost:8081/status`
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "connections": {
+    "devices": 0,
+    "actuators": 3,
+    "gateways": 0,
+    "areas": 0
+  }
+}
+```
+
+### 11.6 订阅区域示例
 
 **客户端发送**:
 ```json
@@ -1580,6 +1784,20 @@ ws://localhost:8080
   }
 }
 ```
+
+### 11.7 降级机制
+
+当WebSocket连接断开时，系统自动切换到HTTP轮询模式：
+
+1. **WebSocket在线**: 命令通过WebSocket实时推送（延迟<500ms）
+2. **WebSocket断开**: 硬件端使用HTTP轮询获取待执行指令（默认每10秒）
+3. **自动重连**: 硬件端实现指数退避重连策略，恢复WebSocket连接后自动切换回实时推送
+
+### 11.8 超时机制
+
+- 控制指令发送后，服务器等待30秒回执
+- 超时未收到回执，标记为`timeout`并提醒用户
+- 超时后执行器自动解锁，允许重新发送指令
 
 ---
 
