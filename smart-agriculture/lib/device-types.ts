@@ -272,11 +272,10 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
     type: 'laser',
     name: '激光器',
     category: DeviceCategory.ACTUATOR,
-    description: '用于激光控制，支持开关和功率调节',
+    description: '用于激光控制，支持开关控制',
     icon: 'Crosshair',
     color: 'red',
-    controlType: ControlType.INTEGER,
-    controlRange: { min: 0, max: 100, step: 10, default: 0 },
+    controlType: ControlType.BOOLEAN,
   },
   {
     type: 'rgb_led',
@@ -286,7 +285,7 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
     icon: 'Palette',
     color: 'purple',
     controlType: ControlType.INTEGER,
-    controlRange: { min: 0, max: 16777215, step: 1, default: 0 },
+    controlRange: { min: 0, max: 100, step: 1, default: 0 },
   },
   // ========== 未分配设备类型（默认） ==========
   {
