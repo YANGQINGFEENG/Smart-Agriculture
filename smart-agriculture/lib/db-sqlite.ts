@@ -468,10 +468,19 @@ async function insertInitialData() {
   const actuatorTypesCount = await databaseInstance.get<{ count: number }>('SELECT COUNT(*) as count FROM actuator_types');
   if (actuatorTypesCount && actuatorTypesCount.count === 0) {
     await databaseInstance.exec(`
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('water_pump', '水泵', '灌溉用水泵设备');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('fan', '风扇', '通风降温设备');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('light', '补光灯', '植物补光设备');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('valve', '电磁阀', '管路控制阀门');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('water_pump', '水泵', '用于灌溉和排水控制');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('fan', '风扇', '用于通风和温度调节');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('heater', '加热器', '用于温度控制');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('valve', '电磁阀', '用于水流控制');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('light', '补光灯', '用于光照调节');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('ventilator', '通风机', '用于空气循环');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('fogger', '雾化器', '用于湿度调节和降温');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('motor', '电机', '用于驱动控制，支持速度调节');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('servo', '舵机', '用于角度控制，支持0-180度旋转');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('led', 'LED灯', '用于照明和指示，支持开关控制');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('relay', '继电器', '用于开关控制，支持通断操作');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('laser', '激光器', '用于激光控制，支持开关控制');
+      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('rgb_led', 'RGB-LED', '用于RGB颜色控制，支持颜色值调节');
     `);
   }
 

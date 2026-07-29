@@ -119,13 +119,21 @@ INSERT INTO sensors (id, name, type_id, location, status, battery, last_update) 
 ('P-001', 'A区温室1号土壤pH传感器', 7, 'A区温室', 'online', 88, CURRENT_TIMESTAMP)
 ON DUPLICATE KEY UPDATE name = VALUES(name), type_id = VALUES(type_id), location = VALUES(location), status = VALUES(status), battery = VALUES(battery), last_update = VALUES(last_update);
 
--- 插入执行器类型（共5种）
+-- 插入执行器类型（共12种）
 INSERT INTO actuator_types (type, name, description) VALUES
 ('water_pump', '水泵', '用于灌溉和排水控制'),
 ('fan', '风扇', '用于通风和温度调节'),
 ('heater', '加热器', '用于温度控制'),
 ('valve', '电磁阀', '用于水流控制'),
-('light', '补光灯', '用于光照调节')
+('light', '补光灯', '用于光照调节'),
+('ventilator', '通风机', '用于空气循环'),
+('fogger', '雾化器', '用于湿度调节和降温'),
+('motor', '电机', '用于驱动控制，支持速度调节'),
+('servo', '舵机', '用于角度控制，支持0-180度旋转'),
+('led', 'LED灯', '用于照明和指示，支持开关控制'),
+('relay', '继电器', '用于开关控制，支持通断操作'),
+('laser', '激光器', '用于激光控制，支持开关控制'),
+('rgb_led', 'RGB-LED', '用于RGB颜色控制，支持颜色值调节')
 ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description);
 
 -- 插入执行器设备（共7个）

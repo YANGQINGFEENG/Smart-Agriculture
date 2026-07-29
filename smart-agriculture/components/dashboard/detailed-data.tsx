@@ -20,7 +20,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Filter, ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react"
+import { 
+  Search, 
+  Filter, 
+  ChevronLeft, 
+  ChevronRight, 
+  RefreshCw, 
+  Trash2,
+  Save,
+  X,
+  AlertCircle,
+  Lock
+} from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface SensorInfo {
   id: string
@@ -53,12 +65,34 @@ interface TableData {
   unit: string
 }
 
+/**
+ * 可编辑字段配置
+ */
+const editableFields: Record<string, { editable: boolean; label: string; type: 'text' | 'select' }> = {
+  id: { editable: false, label: '传感器ID', type: 'text' },
+  name: { editable: true, label: '名称', type: 'text' },
+  type: { editable: false, label: '类型', type: 'text' },
+  value: { editable: false, label: '当前数值', type: 'text' },
+  location: { editable: true, label: '位置', type: 'text' },
+  time: { editable: false, label: '更新时间', type: 'text' },
+  status: { editable: false, label: '状态', type: 'text' },
+}
+
 export function DetailedData() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [sensorData, setSensorData] = useState<TableData[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const { toast } = useToast()
+
+  // 编辑状态管理：{ sensorId_fieldName: { value, original } }
+  const [editingCell, setEditingCell] = useState<{ 
+    sensorId: string 
+    field: string 
+    value: string 
+    original: string 
+  } | null>(null)
 
   const formatRelativeTime = (dateStr: string | null): string => {
     if (!dateStr) return '暂无数据'
@@ -92,6 +126,9 @@ export function DetailedData() {
     return '异常'
   }
 
+  /**
+   * 删除传感器
+   */
   const handleDeleteSensor = async (id: string) => {
     if (!confirm("确定要删除这个传感器吗？此操作将删除所有相关数据。")) return
     
@@ -102,13 +139,132 @@ export function DetailedData() {
       
       if (response.ok) {
         fetchSensorData()
+        toast({
+          title: '删除成功',
+          description: '传感器已成功删除',
+          variant: 'default',
+        })
       } else {
         const result = await response.json()
-        alert('删除失败: ' + (result.error || '未知错误'))
+        toast({
+          title: '删除失败',
+          description: result.error || '未知错误',
+          variant: 'destructive',
+        })
       }
     } catch (error) {
       console.error('删除传感器失败:', error)
-      alert('删除失败: ' + (error as Error).message)
+      toast({
+        title: '删除失败',
+        description: (error as Error).message,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  /**
+   * 处理双击表格单元格
+   */
+  const handleDoubleClick = (sensorId: string, field: string, value: string) => {
+    const fieldConfig = editableFields[field]
+    
+    if (!fieldConfig?.editable) {
+      toast({
+        title: '无法编辑',
+        description: `${fieldConfig?.label || field}字段不支持编辑`,
+        variant: 'destructive',
+        duration: 2000,
+      })
+      return
+    }
+
+    if (editingCell && (editingCell.sensorId !== sensorId || editingCell.field !== field)) {
+      // 取消之前的编辑
+      setEditingCell(null)
+    }
+
+    setEditingCell({
+      sensorId,
+      field,
+      value: String(value),
+      original: String(value),
+    })
+  }
+
+  /**
+   * 保存编辑内容
+   */
+  const handleSaveEdit = async () => {
+    if (!editingCell) return
+    
+    const { sensorId, field, value, original } = editingCell
+    
+    if (value.trim() === original.trim()) {
+      setEditingCell(null)
+      return
+    }
+
+    if (!value.trim()) {
+      toast({
+        title: '输入无效',
+        description: `${editableFields[field]?.label || field}不能为空`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/sensors/${sensorId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ [field]: value.trim() }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: '更新成功',
+          description: `${editableFields[field]?.label || field}已更新`,
+          variant: 'default',
+        })
+        fetchSensorData()
+      } else {
+        toast({
+          title: '更新失败',
+          description: result.error || '未知错误',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('更新传感器失败:', error)
+      toast({
+        title: '更新失败',
+        description: (error as Error).message,
+        variant: 'destructive',
+      })
+    }
+
+    setEditingCell(null)
+  }
+
+  /**
+   * 取消编辑
+   */
+  const handleCancelEdit = () => {
+    setEditingCell(null)
+  }
+
+  /**
+   * 处理输入框回车保存
+   */
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit()
+    } else if (e.key === 'Escape') {
+      handleCancelEdit()
     }
   }
 
@@ -288,6 +444,12 @@ export function DetailedData() {
           </div>
         ) : (
           <>
+            {/* 编辑提示 */}
+            <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 px-3 py-2 rounded-lg">
+              <AlertCircle className="w-3 h-3" />
+              <span>双击表格字段可编辑（名称、位置），其他字段不支持编辑</span>
+            </div>
+            
             <div className="rounded-lg border border-border overflow-hidden">
               <Table>
                 <TableHeader>
@@ -305,16 +467,85 @@ export function DetailedData() {
                 <TableBody>
                   {filteredData.map((item) => (
                     <TableRow key={item.id} className="hover:bg-secondary/30">
-                      <TableCell className="font-mono text-sm text-foreground">{item.id}</TableCell>
-                      <TableCell className="text-foreground">{item.name}</TableCell>
+                      {/* 传感器ID - 不可编辑 */}
+                      <TableCell className="font-mono text-sm text-foreground">
+                        {item.id}
+                      </TableCell>
+                      
+                      {/* 名称 - 可编辑 */}
+                      <TableCell className="text-foreground">
+                        {editingCell?.sensorId === item.id && editingCell?.field === 'name' ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              autoFocus
+                              value={editingCell.value}
+                              onChange={(e) => setEditingCell(prev => prev ? { ...prev, value: e.target.value } : null)}
+                              onKeyDown={handleInputKeyDown}
+                              className="w-32"
+                            />
+                            <Button size="icon" variant="default" className="h-8 w-8" onClick={handleSaveEdit}>
+                              <Save className="w-3 h-3" />
+                            </Button>
+                            <Button size="icon" variant="outline" className="h-8 w-8" onClick={handleCancelEdit}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span 
+                            className="cursor-pointer hover:text-primary hover:underline"
+                            onDoubleClick={() => handleDoubleClick(item.id, 'name', item.name)}
+                          >
+                            {item.name}
+                          </span>
+                        )}
+                      </TableCell>
+                      
+                      {/* 类型 - 不可编辑 */}
                       <TableCell>
                         <Badge variant="secondary" className="bg-secondary text-muted-foreground">
                           {getTypeLabel(item.type)}
                         </Badge>
                       </TableCell>
-                      <TableCell className={`font-medium ${item.valueColor}`}>{item.value}</TableCell>
-                      <TableCell className="text-muted-foreground">{item.location}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{item.time}</TableCell>
+                      
+                      {/* 当前数值 - 不可编辑 */}
+                      <TableCell className={`font-medium ${item.valueColor}`}>
+                        {item.value}
+                      </TableCell>
+                      
+                      {/* 位置 - 可编辑 */}
+                      <TableCell className="text-muted-foreground">
+                        {editingCell?.sensorId === item.id && editingCell?.field === 'location' ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              autoFocus
+                              value={editingCell.value}
+                              onChange={(e) => setEditingCell(prev => prev ? { ...prev, value: e.target.value } : null)}
+                              onKeyDown={handleInputKeyDown}
+                              className="w-32"
+                            />
+                            <Button size="icon" variant="default" className="h-8 w-8" onClick={handleSaveEdit}>
+                              <Save className="w-3 h-3" />
+                            </Button>
+                            <Button size="icon" variant="outline" className="h-8 w-8" onClick={handleCancelEdit}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span 
+                            className="cursor-pointer hover:text-primary hover:underline"
+                            onDoubleClick={() => handleDoubleClick(item.id, 'location', item.location)}
+                          >
+                            {item.location}
+                          </span>
+                        )}
+                      </TableCell>
+                      
+                      {/* 更新时间 - 不可编辑 */}
+                      <TableCell className="text-muted-foreground text-sm">
+                        {item.time}
+                      </TableCell>
+                      
+                      {/* 状态 - 不可编辑 */}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className={`
@@ -339,6 +570,8 @@ export function DetailedData() {
                           </Badge>
                         </div>
                       </TableCell>
+                      
+                      {/* 操作 */}
                       <TableCell>
                         <Button 
                           variant="ghost" 

@@ -257,17 +257,29 @@ export default function ComparePage() {
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
       }
 
+      // 根据时间范围动态计算limit（获取足够多的数据覆盖整个时间范围）
+      const calculateLimit = () => {
+        const diffMs = endTime.getTime() - startTime.getTime()
+        const diffHours = diffMs / (1000 * 60 * 60)
+        // 数据库数据密度高（约每30秒一个数据点），每小时约120条
+        // 获取足够数据覆盖整个范围，并留有1.5倍余量
+        return Math.max(Math.ceil(diffHours * 120 * 1.5), 300)
+      }
+      
+      const limit = calculateLimit();
+
       const dataPromises = selectedSensors.map(async (sensorId) => {
+        // 使用order=asc获取从开始时间开始的数据
         const response = await fetch(
-          `/api/sensors/${sensorId}/data?startTime=${encodeURIComponent(formatTimeForDB(startTime))}&endTime=${encodeURIComponent(formatTimeForDB(endTime))}&limit=1000`
+          `/api/sensors/${sensorId}/data?startTime=${encodeURIComponent(formatTimeForDB(startTime))}&endTime=${encodeURIComponent(formatTimeForDB(endTime))}&limit=${limit}&order=asc`
         )
         const result = await response.json()
         
         let processedData = result.success ? result.data : []
         
-        // 数据处理
+        // 数据预处理：异常值检测和滤波
         if (processedData.length > 0) {
-          processedData = detectAndHandleOutliers(processedData)
+          processedData = detectAndHandleOutliers(processedData, 2)
           processedData = movingAverageFilter(processedData, 3)
         }
         
@@ -279,26 +291,99 @@ export default function ComparePage() {
 
       const results = await Promise.all(dataPromises)
 
-      const mergedData: Map<string, SensorDataPoint> = new Map()
+      // 计算统一时间轴参数
+      const diffMs = endTime.getTime() - startTime.getTime()
+      const diffHours = diffMs / (1000 * 60 * 60)
+      // 目标采样数：时间范围小时数 * 2（每30分钟一个点），最多200个点
+      const targetSamples = Math.min(Math.max(Math.ceil(diffHours * 2), 20), 200)
+      const intervalMs = diffMs / targetSamples
 
-      results.forEach(({ sensorId, data }) => {
-        data.forEach((point: any) => {
-          const timeKey = format(new Date(point.timestamp), 'yyyy-MM-dd HH:mm:ss')
-
-          if (!mergedData.has(timeKey)) {
-            mergedData.set(timeKey, { timestamp: timeKey })
+      /**
+       * 将数据对齐到统一时间轴（线性插值）
+       * @param data 原始数据数组
+       * @param timeline 统一时间轴
+       * @returns 对齐后的值数组
+       */
+      const alignToTimeline = (data: any[], timeline: Date[]) => {
+        if (data.length === 0) return timeline.map(() => null)
+        
+        // 按时间升序排序
+        const sortedData = [...data].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
+        
+        const result: (number | null)[] = []
+        let dataIndex = 0
+        
+        for (const targetTime of timeline) {
+          const targetMs = targetTime.getTime()
+          
+          // 找到目标时间前后的数据点
+          while (dataIndex < sortedData.length - 1 && 
+                 new Date(sortedData[dataIndex + 1].timestamp).getTime() < targetMs) {
+            dataIndex++
           }
+          
+          const currentPoint = sortedData[dataIndex]
+          const nextPoint = sortedData[dataIndex + 1]
+          
+          if (!currentPoint) {
+            result.push(null)
+            continue
+          }
+          
+          const currentMs = new Date(currentPoint.timestamp).getTime()
+          
+          if (nextPoint) {
+            const nextMs = new Date(nextPoint.timestamp).getTime()
+            
+            if (targetMs < currentMs) {
+              result.push(parseFloat(parseFloat(currentPoint.value).toFixed(2)))
+            } else if (targetMs > nextMs) {
+              result.push(parseFloat(parseFloat(nextPoint.value).toFixed(2)))
+            } else {
+              // 线性插值
+              const ratio = (targetMs - currentMs) / (nextMs - currentMs)
+              const interpolatedValue = parseFloat(currentPoint.value) + 
+                ratio * (parseFloat(nextPoint.value) - parseFloat(currentPoint.value))
+              result.push(parseFloat(interpolatedValue.toFixed(2)))
+            }
+          } else {
+            result.push(parseFloat(parseFloat(currentPoint.value).toFixed(2)))
+          }
+        }
+        
+        return result
+      }
 
-          const existingPoint = mergedData.get(timeKey)!
-          existingPoint[sensorId] = parseFloat(parseFloat(point.value).toFixed(2))
+      // 生成统一时间轴
+      const timeline: Date[] = []
+      for (let i = 0; i <= targetSamples; i++) {
+        timeline.push(new Date(startTime.getTime() + i * intervalMs))
+      }
+
+      // 对每个传感器的数据进行时间对齐
+      const alignedResults = results.map(({ sensorId, data }) => ({
+        sensorId,
+        alignedValues: alignToTimeline(data, timeline),
+      }))
+
+      // 构建最终合并数据（使用统一时间轴）
+      const mergedData: SensorDataPoint[] = timeline.map((time, index) => {
+        const timeKey = format(time, 'yyyy-MM-dd HH:mm:ss')
+        const point: SensorDataPoint = { timestamp: timeKey }
+        
+        alignedResults.forEach(({ sensorId, alignedValues }) => {
+          const value = alignedValues[index]
+          if (value !== null && value !== undefined) {
+            point[sensorId] = value
+          }
         })
+        
+        return point
       })
 
-      const sortedData = Array.from(mergedData.values()).sort((a, b) =>
-        a.timestamp.localeCompare(b.timestamp)
-      )
-
-      setChartData(sortedData)
+      setChartData(mergedData)
       setLastUpdate(new Date().toLocaleTimeString("zh-CN"))
     } catch (error) {
       console.error('获取对比数据失败:', error)

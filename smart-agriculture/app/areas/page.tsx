@@ -35,8 +35,14 @@ import {
   ChevronUp,
   Network,
   Shield,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ActuatorCard, Actuator, CommandStatus } from "@/components/dashboard/actuator-card"
 import { getDeviceTypeConfig, ControlType } from "@/lib/device-types"
 import { useToast } from "@/hooks/use-toast"
@@ -64,6 +70,11 @@ interface Sensor {
  * 控制指令超时时间（秒）
  */
 const COMMAND_TIMEOUT_SECONDS = 30
+
+/**
+ * 在线状态判断阈值（分钟）
+ */
+const ONLINE_THRESHOLD_MINUTES = 5
 
 /**
  * 传感器图标映射
@@ -105,21 +116,32 @@ export default function AreasPage() {
   const [actuators, setActuators] = useState<Actuator[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  
+
   // 指令状态映射：actuatorId -> CommandStatus
   const [commandStatusMap, setCommandStatusMap] = useState<Record<string, CommandStatus>>({})
   // 指令超时定时器映射
   const [timeoutTimers, setTimeoutTimers] = useState<Record<string, ReturnType<typeof setTimeout>>>({})
   // 展开/折叠状态映射
   const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({})
-  
+
   // WebSocket连接状态
   const [wsStatus, setWsStatus] = useState<WebSocketStatus>('disconnected')
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null)
 
+  // 区域管理相关状态
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showDeviceDeleteDialog, setShowDeviceDeleteDialog] = useState(false)
+  const [editingArea, setEditingArea] = useState<string | null>(null)
+  const [deletingArea, setDeletingArea] = useState<string | null>(null)
+  const [deletingDevice, setDeletingDevice] = useState<{ type: 'sensor' | 'actuator'; id: string; name: string } | null>(null)
+  const [createForm, setCreateForm] = useState({ name: '' })
+  const [editForm, setEditForm] = useState({ name: '' })
+
   /**
- * 更新当前时间
- */
+   * 更新当前时间
+   */
   useEffect(() => {
     setCurrentTime(new Date().toLocaleString("zh-CN"))
     const interval = setInterval(() => {
@@ -139,7 +161,7 @@ export default function AreasPage() {
     const connectionTimeout = 5000 // 5秒连接超时
     let ws: WebSocket | null = null
     let timeoutTimer: ReturnType<typeof setTimeout> | null = null
-    
+
     // 构建WebSocket连接URL（始终连接到端口8080）
     const buildWsUrl = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -147,22 +169,22 @@ export default function AreasPage() {
       // WebSocket服务器始终运行在端口8080
       return `${protocol}//${hostname}:8080`
     }
-    
+
     const connect = () => {
       const wsUrl = buildWsUrl()
-      
+
       // 清理之前的超时定时器
       if (timeoutTimer) {
         clearTimeout(timeoutTimer)
         timeoutTimer = null
       }
-      
+
       ws = new WebSocket(wsUrl)
       setWsStatus('connecting')
       setWsConnection(ws)
-      
+
       console.log('[WebSocket] 正在连接:', wsUrl)
-      
+
       // 设置连接超时
       timeoutTimer = setTimeout(() => {
         if (ws && ws.readyState === WebSocket.CONNECTING) {
@@ -170,7 +192,7 @@ export default function AreasPage() {
           ws.close(1006, '连接超时') // 1006表示异常关闭
         }
       }, connectionTimeout)
-      
+
       // 连接成功
       ws.onopen = () => {
         // 清除超时定时器
@@ -178,11 +200,11 @@ export default function AreasPage() {
           clearTimeout(timeoutTimer)
           timeoutTimer = null
         }
-        
+
         setWsStatus('connected')
         reconnectAttempts = 0
         console.log('[WebSocket] 连接成功')
-        
+
         // 订阅所有区域
         getAllAreas().forEach(area => {
           ws?.send(JSON.stringify({
@@ -191,12 +213,12 @@ export default function AreasPage() {
           }))
         })
       }
-      
+
       // 接收消息
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
-          
+
           switch (message.type) {
             case 'command_status':
               // 命令状态更新
@@ -223,7 +245,7 @@ export default function AreasPage() {
           console.error('[WebSocket] 消息解析失败:', error)
         }
       }
-      
+
       // 连接关闭（统一处理所有断开情况，包括错误）
       ws.onclose = (event) => {
         // 清除超时定时器
@@ -231,10 +253,10 @@ export default function AreasPage() {
           clearTimeout(timeoutTimer)
           timeoutTimer = null
         }
-        
+
         setWsStatus('disconnected')
         console.log('[WebSocket] 连接关闭，代码:', event.code, '原因:', event.reason)
-        
+
         // 自动重连（排除手动关闭的情况）
         if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++
@@ -246,7 +268,7 @@ export default function AreasPage() {
           console.error('[WebSocket] 已达到最大重连次数，停止尝试')
         }
       }
-      
+
       // 连接错误（仅记录日志，重连逻辑在onclose中统一处理）
       ws.onerror = (event) => {
         // WebSocket连接过程中可能短暂触发error事件但连接仍能成功建立
@@ -258,10 +280,10 @@ export default function AreasPage() {
         // 不在这里触发重连，等待onclose事件统一处理
       }
     }
-    
+
     // 启动连接
     connect()
-    
+
     // 清理函数
     return () => {
       // 清除超时定时器
@@ -288,13 +310,13 @@ export default function AreasPage() {
     state?: string | null
   }) => {
     const { actuator_id, status, control_value, state } = data
-    
+
     // 更新指令状态映射
     setCommandStatusMap(prev => ({
       ...prev,
       [actuator_id]: status as CommandStatus
     }))
-    
+
     // 如果指令执行成功，更新执行器数据
     if (status === 'executed') {
       setActuators(prev => prev.map(actuator => {
@@ -309,14 +331,14 @@ export default function AreasPage() {
         }
         return actuator
       }))
-      
+
       toast({
         title: '执行成功',
         description: '设备已成功执行控制指令',
         variant: 'default',
         duration: 3000,
       })
-      
+
       // 3秒后清除指令状态
       setTimeout(() => {
         clearCommandStatus(actuator_id)
@@ -328,7 +350,7 @@ export default function AreasPage() {
         variant: 'destructive',
         duration: 3000,
       })
-      
+
       setTimeout(() => {
         clearCommandStatus(actuator_id)
       }, 3000)
@@ -339,12 +361,12 @@ export default function AreasPage() {
         variant: 'destructive',
         duration: 5000,
       })
-      
+
       setTimeout(() => {
         clearCommandStatus(actuator_id)
       }, 3000)
     }
-    
+
     // 清除超时定时器
     if (timeoutTimers[actuator_id]) {
       clearTimeout(timeoutTimers[actuator_id])
@@ -381,7 +403,7 @@ export default function AreasPage() {
       const url = selectedFarmId ? `/api/sensors?farm_id=${selectedFarmId}` : '/api/sensors'
       const response = await fetch(url)
       const result = await response.json()
-      
+
       if (result.success && result.data) {
         setSensors(result.data)
       }
@@ -398,7 +420,7 @@ export default function AreasPage() {
       const url = selectedFarmId ? `/api/actuators?farm_id=${selectedFarmId}` : '/api/actuators'
       const response = await fetch(url)
       const result = await response.json()
-      
+
       if (result.success && result.data) {
         const formattedActuators: Actuator[] = result.data.map((actuator: any) => ({
           ...actuator,
@@ -416,17 +438,17 @@ export default function AreasPage() {
    */
   useEffect(() => {
     setLoading(true)
-    
+
     const fetchData = async () => {
       await Promise.all([fetchSensors(), fetchActuators()])
       setLoading(false)
       setLastUpdate(new Date())
     }
-    
+
     fetchData()
-    
+
     const interval = setInterval(fetchData, 10000)
-    
+
     return () => clearInterval(interval)
   }, [selectedFarmId])
 
@@ -456,25 +478,25 @@ export default function AreasPage() {
     if (timeoutTimers[actuatorId]) {
       clearTimeout(timeoutTimers[actuatorId])
     }
-    
+
     const timer = setTimeout(() => {
       setCommandStatusMap(prev => ({
         ...prev,
         [actuatorId]: 'timeout'
       }))
-      
+
       toast({
         title: '控制超时',
         description: '设备未在规定时间内响应，请检查网络连接或重试',
         variant: 'destructive',
         duration: 5000,
       })
-      
+
       setTimeout(() => {
         clearCommandStatus(actuatorId)
       }, 3000)
     }, COMMAND_TIMEOUT_SECONDS * 1000)
-    
+
     setTimeoutTimers(prev => ({
       ...prev,
       [actuatorId]: timer
@@ -490,40 +512,40 @@ export default function AreasPage() {
       ...prev,
       [actuatorId]: 'sending'
     }))
-    
+
     try {
       const actuator = actuators.find(a => a.id === actuatorId)
       if (!actuator) return
-      
+
       // 获取设备类型配置
       const deviceTypeConfig = getDeviceTypeConfig(actuator.type)
-      
+
       // 优先使用数据库中存储的控制类型（硬件上报的配置），如果没有则使用设备类型字典中的配置
       const controlType = actuator.control_type || deviceTypeConfig?.controlType || ControlType.BOOLEAN
-      
+
       // 对于布尔控制类型，确保command只能是on或off
       let finalCommand = command
       if ((controlType === 'boolean' || controlType === ControlType.BOOLEAN) && command === 'value') {
         // 如果是布尔控制但收到了value命令，转换为on/off
         finalCommand = value && value > 0 ? 'on' : 'off'
       }
-      
+
       const body: any = {
         // 确保发送的是字符串类型，而不是枚举对象
         control_type: typeof controlType === 'string' ? controlType : 'boolean',
         command: finalCommand,
       }
-      
+
       if (value !== undefined && (controlType === 'integer' || controlType === 'angle' || controlType === 'float')) {
         // 确保value是数字类型
         body.value = typeof value === 'number' ? value : parseFloat(value)
       }
-      
+
       if (deviceTypeConfig?.controlRange) {
         body.min = deviceTypeConfig.controlRange.min
         body.max = deviceTypeConfig.controlRange.max
       }
-      
+
       const response = await fetch(`/api/actuators/${actuatorId}/commands`, {
         method: 'POST',
         headers: {
@@ -531,25 +553,25 @@ export default function AreasPage() {
         },
         body: JSON.stringify(body),
       })
-      
+
       const result = await response.json()
-      
+
       if (result.success) {
         // 设置指令状态为等待执行
         setCommandStatusMap(prev => ({
           ...prev,
           [actuatorId]: 'pending'
         }))
-        
+
         // 设置超时定时器
         setupTimeoutTimer(actuatorId)
-        
+
         // 轮询检查指令执行状态
         const pollInterval = setInterval(async () => {
           try {
             const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
             const statusResult = await statusResponse.json()
-            
+
             if (statusResult.success && statusResult.data) {
               const cmdStatus = statusResult.data.status
               if (cmdStatus === 'executed') {
@@ -598,12 +620,12 @@ export default function AreasPage() {
             clearInterval(pollInterval)
           }
         }, 1500)
-        
+
         // 设置轮询超时
         setTimeout(() => {
           clearInterval(pollInterval)
         }, COMMAND_TIMEOUT_SECONDS * 1000 + 2000)
-        
+
       } else {
         setCommandStatusMap(prev => ({
           ...prev,
@@ -639,15 +661,15 @@ export default function AreasPage() {
   const getAllAreas = () => {
     const areas = new Set<string>()
     areas.add('未分组')
-    
+
     sensors.forEach(s => {
       if (s.area) areas.add(s.area)
     })
-    
+
     actuators.forEach(a => {
       if (a.area) areas.add(a.area)
     })
-    
+
     return Array.from(areas)
   }
 
@@ -666,17 +688,36 @@ export default function AreasPage() {
   }
 
   /**
+   * 判断设备是否在线
+   * 结合设备状态和最后更新时间综合判断
+   */
+  const isDeviceOnline = (device: { status: string; last_update: string | null }): boolean => {
+    if (device.status !== 'online') return false
+    if (!device.last_update) return false
+
+    const lastUpdateDate = new Date(device.last_update)
+    const now = new Date()
+    const diffMinutes = Math.floor((now.getTime() - lastUpdateDate.getTime()) / 1000 / 60)
+
+    return diffMinutes <= ONLINE_THRESHOLD_MINUTES
+  }
+
+  /**
    * 获取区域统计信息
    */
   const getAreaStats = (area: string) => {
     const areaSensors = getSensorsByArea(area)
     const areaActuators = getActuatorsByArea(area)
-    
+
+    const sensorOnline = areaSensors.filter(s => isDeviceOnline(s)).length
+    const actuatorOnline = areaActuators.filter(a => isDeviceOnline(a)).length
+
     return {
       sensorCount: areaSensors.length,
       actuatorCount: areaActuators.length,
-      sensorOnline: areaSensors.filter(s => s.status === 'online').length,
-      actuatorOnline: areaActuators.filter(a => a.status === 'online').length,
+      sensorOnline,
+      actuatorOnline,
+      isOnline: sensorOnline > 0 || actuatorOnline > 0,
       actuatorRunning: areaActuators.filter(a => a.state === 'on').length,
     }
   }
@@ -688,11 +729,11 @@ export default function AreasPage() {
     if (sensor.value === undefined || sensor.value === null) {
       return '--'
     }
-    
+
     if (sensor.type === 'temperature' || sensor.type === 'humidity') {
       return sensor.value.toFixed(1)
     }
-    
+
     return Math.round(sensor.value).toString()
   }
 
@@ -733,13 +774,273 @@ export default function AreasPage() {
     }))
   }
 
+  /**
+   * 打开新建区域对话框
+   */
+  const openCreateDialog = () => {
+    setCreateForm({ name: '' })
+    setShowCreateDialog(true)
+  }
+
+  /**
+   * 关闭新建区域对话框
+   */
+  const closeCreateDialog = () => {
+    setShowCreateDialog(false)
+    setCreateForm({ name: '' })
+  }
+
+  /**
+   * 创建区域
+   */
+  const createArea = async () => {
+    if (!createForm.name.trim()) {
+      toast({
+        title: '输入无效',
+        description: '区域名称不能为空',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const areaName = createForm.name.trim()
+
+    // 检查名称是否已存在
+    if (getAllAreas().includes(areaName)) {
+      toast({
+        title: '名称已存在',
+        description: '该区域名称已存在，请使用其他名称',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    closeCreateDialog()
+    toast({
+      title: '创建成功',
+      description: `区域 "${areaName}" 已创建`,
+    })
+  }
+
+  /**
+   * 打开编辑区域对话框
+   */
+  const openEditDialog = (area: string) => {
+    setEditingArea(area)
+    setEditForm({ name: area })
+    setShowEditDialog(true)
+  }
+
+  /**
+   * 关闭编辑区域对话框
+   */
+  const closeEditDialog = () => {
+    setShowEditDialog(false)
+    setEditingArea(null)
+    setEditForm({ name: '' })
+  }
+
+  /**
+   * 保存区域编辑
+   */
+  const saveAreaEdit = async () => {
+    if (!editingArea || !editForm.name.trim()) {
+      toast({
+        title: '输入无效',
+        description: '区域名称不能为空',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const newName = editForm.name.trim()
+
+    // 如果名称没有变化，直接关闭
+    if (newName === editingArea) {
+      closeEditDialog()
+      return
+    }
+
+    // 检查新名称是否已存在
+    if (getAllAreas().includes(newName)) {
+      toast({
+        title: '名称已存在',
+        description: '该区域名称已存在，请使用其他名称',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      // 更新传感器的区域
+      const areaSensors = getSensorsByArea(editingArea)
+      for (const sensor of areaSensors) {
+        await fetch(`/api/sensors/${sensor.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ area: newName }),
+        })
+      }
+
+      // 更新执行器的区域
+      const areaActuators = getActuatorsByArea(editingArea)
+      for (const actuator of areaActuators) {
+        await fetch(`/api/actuators/${actuator.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ area: newName }),
+        })
+      }
+
+      // 刷新数据
+      await Promise.all([fetchSensors(), fetchActuators()])
+
+      toast({
+        title: '编辑成功',
+        description: `区域已重命名为 "${newName}"`,
+      })
+    } catch (error) {
+      toast({
+        title: '编辑失败',
+        description: '更新区域信息时发生错误',
+        variant: 'destructive',
+      })
+    }
+
+    closeEditDialog()
+  }
+
+  /**
+   * 打开删除区域对话框
+   */
+  const openDeleteDialog = (area: string) => {
+    console.log('openDeleteDialog called with area:', area)
+    setDeletingArea(area)
+    setShowDeleteDialog(true)
+  }
+
+  /**
+   * 关闭删除区域对话框
+   */
+  const closeDeleteDialog = () => {
+    setShowDeleteDialog(false)
+    setDeletingArea(null)
+  }
+
+  /**
+   * 删除区域（将区域内设备移到"未分组"）
+   */
+  const deleteArea = async () => {
+    console.log('deleteArea called, deletingArea:', deletingArea)
+    if (!deletingArea) return
+
+    try {
+      // 将区域内设备移到"未分组"
+      const areaSensors = getSensorsByArea(deletingArea)
+      console.log('Sensors in area:', areaSensors.length)
+      const sensorPromises = areaSensors.map(sensor =>
+        fetch(`/api/sensors/${sensor.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ area: null }),
+        })
+      )
+      await Promise.all(sensorPromises)
+
+      const areaActuators = getActuatorsByArea(deletingArea)
+      console.log('Actuators in area:', areaActuators.length)
+      const actuatorPromises = areaActuators.map(actuator =>
+        fetch(`/api/actuators/${actuator.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ area: null }),
+        })
+      )
+      await Promise.all(actuatorPromises)
+
+      // 刷新数据
+      await Promise.all([fetchSensors(), fetchActuators()])
+
+      toast({
+        title: '删除成功',
+        description: '区域已删除，设备已移到未分组',
+      })
+    } catch (error) {
+      console.error('删除区域失败:', error)
+      toast({
+        title: '删除失败',
+        description: '删除区域时发生错误',
+        variant: 'destructive',
+      })
+    }
+
+    closeDeleteDialog()
+  }
+
+  /**
+   * 打开设备删除确认对话框
+   */
+  const openDeviceDeleteDialog = (type: 'sensor' | 'actuator', id: string, name: string) => {
+    setDeletingDevice({ type, id, name })
+    setShowDeviceDeleteDialog(true)
+  }
+
+  /**
+   * 关闭设备删除确认对话框
+   */
+  const closeDeviceDeleteDialog = () => {
+    setShowDeviceDeleteDialog(false)
+    setDeletingDevice(null)
+  }
+
+  /**
+   * 确认删除设备
+   */
+  const confirmDeleteDevice = async () => {
+    if (!deletingDevice) return
+
+    const { type, id, name } = deletingDevice
+
+    try {
+      const response = await fetch(`/api/${type}s/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '删除失败')
+      }
+
+      // 刷新数据
+      if (type === 'sensor') {
+        await fetchSensors()
+      } else {
+        await fetchActuators()
+      }
+
+      toast({
+        title: '删除成功',
+        description: `${type === 'sensor' ? '传感器' : '执行器'} "${name}" 已删除`,
+      })
+    } catch (error) {
+      console.error('删除设备失败:', error)
+      toast({
+        title: '删除失败',
+        description: '删除设备时发生错误',
+        variant: 'destructive',
+      })
+    }
+
+    closeDeviceDeleteDialog()
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       {/* 侧边栏 */}
       <div className="hidden lg:flex">
         <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
-      
+
       <div className="flex-1 flex flex-col min-h-screen">
         {/* 移动端导航按钮 */}
         <div className="lg:hidden fixed top-4 left-4 z-50">
@@ -754,16 +1055,16 @@ export default function AreasPage() {
             </SheetContent>
           </Sheet>
         </div>
-        
+
         <Header activeTab={activeTab} />
-        
+
         <main className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6">
           {/* 页面标题 */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-foreground">区域视图</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {farms.find(f => f.id === selectedFarmId)?.name || '未选择基地'} 
+                {farms.find(f => f.id === selectedFarmId)?.name || '未选择基地'}
                 · 共 {getAllAreas().length} 个区域
                 · {sensors.length} 个传感器
                 · {actuators.length} 个执行器
@@ -774,20 +1075,28 @@ export default function AreasPage() {
                 <RefreshCw className="w-3 h-3" />
                 <span>最后更新: {lastUpdate?.toLocaleTimeString('zh-CN') || '--:--:--'}</span>
               </div>
-              <Button 
-                onClick={() => { 
+              <Button
+                onClick={() => {
                   setLoading(true)
-                  Promise.all([fetchSensors(), fetchActuators()]).then(() => { 
+                  Promise.all([fetchSensors(), fetchActuators()]).then(() => {
                     setLoading(false)
                     setLastUpdate(new Date())
-                  }) 
-                }} 
-                disabled={loading} 
+                  })
+                }}
+                disabled={loading}
                 size="sm"
                 className="h-9"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 刷新数据
+              </Button>
+              <Button
+                onClick={openCreateDialog}
+                size="sm"
+                className="h-9"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                新建区域
               </Button>
             </div>
           </div>
@@ -848,21 +1157,22 @@ export default function AreasPage() {
                 const colors = getAreaColor(areaIndex)
                 const ipAddress = extractIpFromArea(area)
                 const isExpanded = expandedAreas[area] !== false
-                
+
                 if (areaSensors.length === 0 && areaActuators.length === 0) {
                   return null
                 }
-                
+
                 return (
-                  <div key={area} className="bg-card rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div key={area} className={`bg-card rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow ${stats.isOnline ? 'border-green-200/50' : 'border-gray-200/50'
+                    }`}>
                     {/* 区域标题栏 - 可点击展开/折叠 */}
-                    <button
-                      onClick={() => toggleAreaExpand(area)}
-                      className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
-                    >
+                    <div className="flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2.5 rounded-xl ${colors.bg}/10`}>
+                        <div className={`p-2.5 rounded-xl ${colors.bg}/10 relative`}>
                           <MapPin className={`w-5 h-5 ${colors.text}`} />
+                          {/* 在线状态指示器 */}
+                          <div className={`absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card ${stats.isOnline ? 'bg-green-500' : 'bg-gray-400'
+                            }`} />
                         </div>
                         <div className="text-left">
                           <div className="flex items-center gap-2">
@@ -873,10 +1183,15 @@ export default function AreasPage() {
                                 {ipAddress}
                               </Badge>
                             )}
+                            {/* 区域在线状态标签 */}
+                            <Badge variant={stats.isOnline ? 'default' : 'secondary'} className={`text-xs ${stats.isOnline ? 'bg-green-100 text-green-700 border-green-200' : ''
+                              }`}>
+                              {stats.isOnline ? '在线' : '离线'}
+                            </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {stats.sensorOnline}/{stats.sensorCount} 传感器在线 · 
-                            {stats.actuatorOnline}/{stats.actuatorCount} 执行器在线 · 
+                            {stats.sensorOnline}/{stats.sensorCount} 传感器在线 ·
+                            {stats.actuatorOnline}/{stats.actuatorCount} 执行器在线 ·
                             {stats.actuatorRunning} 执行器运行中
                           </p>
                         </div>
@@ -896,13 +1211,41 @@ export default function AreasPage() {
                             </Badge>
                           )}
                         </div>
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                        )}
+                        {/* 编辑和删除按钮 */}
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={(e) => { e.stopPropagation(); openEditDialog(area) }}
+                            title="编辑区域"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          {area !== '未分组' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={(e) => { e.stopPropagation(); openDeleteDialog(area) }}
+                              title="删除区域"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => toggleAreaExpand(area)}
+                          className="p-1 hover:bg-muted/50 rounded-md transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                          )}
+                        </button>
                       </div>
-                    </button>
+                    </div>
 
                     {/* 区域内容 */}
                     {isExpanded && (
@@ -928,26 +1271,35 @@ export default function AreasPage() {
                                     {areaSensors.map((sensor) => {
                                       const Icon = sensorIcons[sensor.type] || Thermometer
                                       const config = getDeviceTypeConfig(sensor.type)
-                                      const isOnline = sensor.status === 'online'
-                                      
+                                      const deviceOnline = isDeviceOnline(sensor)
+
                                       return (
                                         <div
                                           key={sensor.id}
-                                          className={`p-3.5 rounded-lg border transition-all hover:shadow-sm ${
-                                            isOnline 
-                                              ? 'bg-blue-50/30 border-blue-100 hover:border-blue-200' 
-                                              : 'bg-gray-50/30 border-gray-200 opacity-60'
-                                          }`}
+                                          className={`p-3.5 rounded-lg border transition-all hover:shadow-sm ${deviceOnline
+                                            ? 'bg-blue-50/30 border-blue-100 hover:border-blue-200'
+                                            : 'bg-gray-50/30 border-gray-200 opacity-60'
+                                            }`}
                                         >
                                           <div className="flex items-center justify-between mb-2.5">
-                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                                              isOnline ? 'bg-blue-200/50 text-blue-700' : 'bg-gray-200/50 text-gray-500'
-                                            }`}>
+                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${deviceOnline ? 'bg-blue-200/50 text-blue-700' : 'bg-gray-200/50 text-gray-500'
+                                              }`}>
                                               <Icon className="h-4 w-4" />
                                             </div>
-                                            <Badge variant={isOnline ? 'default' : 'secondary'} className="text-xs px-2 py-0.5">
-                                              {isOnline ? '在线' : '离线'}
-                                            </Badge>
+                                            <div className="flex items-center gap-1">
+                                              <Badge variant={deviceOnline ? 'default' : 'secondary'} className="text-xs px-2 py-0.5">
+                                                {deviceOnline ? '在线' : '离线'}
+                                              </Badge>
+                                              {!deviceOnline && (
+                                                <button
+                                                  onClick={() => openDeviceDeleteDialog('sensor', sensor.id, sensor.name)}
+                                                  className="p-1 hover:bg-red-100 rounded-md text-gray-400 hover:text-red-500 transition-colors"
+                                                  title="删除设备"
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </button>
+                                              )}
+                                            </div>
                                           </div>
                                           <p className="text-xs font-medium text-foreground truncate mb-1">
                                             {sensor.name}
@@ -957,7 +1309,7 @@ export default function AreasPage() {
                                           </p>
                                           <div className="flex items-end justify-between">
                                             <div>
-                                              <span className={`text-xl font-bold ${isOnline ? 'text-blue-600' : 'text-gray-400'}`}>
+                                              <span className={`text-xl font-bold ${deviceOnline ? 'text-blue-600' : 'text-gray-400'}`}>
                                                 {formatSensorValue(sensor)}
                                               </span>
                                               <span className="text-sm text-muted-foreground ml-1">
@@ -965,10 +1317,9 @@ export default function AreasPage() {
                                               </span>
                                             </div>
                                             {sensor.battery !== undefined && (
-                                              <div className={`flex items-center gap-1 text-xs ${
-                                                sensor.battery >= 50 ? 'text-green-600' : 
+                                              <div className={`flex items-center gap-1 text-xs ${sensor.battery >= 50 ? 'text-green-600' :
                                                 sensor.battery >= 20 ? 'text-yellow-600' : 'text-red-600'
-                                              }`}>
+                                                }`}>
                                                 <Server className="w-3 h-3" />
                                                 {sensor.battery}%
                                               </div>
@@ -999,16 +1350,30 @@ export default function AreasPage() {
                                   </div>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                  {areaActuators.map((actuator) => (
-                                    <div key={actuator.id} className="bg-background/50 rounded-lg p-1">
-                                      <ActuatorCard
-                                        actuator={actuator}
-                                        onControl={(command, value) => sendControlCommand(actuator.id, command, value)}
-                                        commandStatus={commandStatusMap[actuator.id] || 'idle'}
-                                        timeout={COMMAND_TIMEOUT_SECONDS}
-                                      />
-                                    </div>
-                                  ))}
+                                  {areaActuators.map((actuator) => {
+                                    const actuatorOnline = isDeviceOnline(actuator)
+                                    return (
+                                      <div key={actuator.id} className="bg-background/50 rounded-lg p-1">
+                                        <div className="relative">
+                                          <ActuatorCard
+                                            actuator={actuator}
+                                            onControl={(command, value) => sendControlCommand(actuator.id, command, value)}
+                                            commandStatus={commandStatusMap[actuator.id] || 'idle'}
+                                            timeout={COMMAND_TIMEOUT_SECONDS}
+                                          />
+                                          {!actuatorOnline && (
+                                            <button
+                                              onClick={() => openDeviceDeleteDialog('actuator', actuator.id, actuator.name)}
+                                              className="absolute top-2 right-2 p-1.5 hover:bg-red-100 rounded-lg text-gray-400 hover:text-red-500 transition-colors z-10"
+                                              title="删除设备"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
                                 </CardContent>
                               </Card>
                             </div>
@@ -1070,13 +1435,112 @@ export default function AreasPage() {
             </div>
           </div>
         </main>
-        
+
         <footer className="h-12 border-t border-border bg-card/50 flex items-center justify-center px-4">
           <p className="text-xs text-muted-foreground text-center">
             天工慧眼 - 智慧农业物联网监控平台 v1.0.0 | 数据更新时间: {currentTime || "--"}
           </p>
         </footer>
       </div>
+
+      {/* 新建区域对话框 */}
+      <Dialog open={showCreateDialog} onOpenChange={closeCreateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建区域</DialogTitle>
+            <DialogDescription>
+              创建一个新的区域，用于分组管理设备
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">区域名称</Label>
+              <Input
+                id="name"
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ name: e.target.value })}
+                placeholder="请输入区域名称"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeCreateDialog} type="button">取消</Button>
+            <Button onClick={createArea} type="button">创建</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑区域对话框 */}
+      <Dialog open={showEditDialog} onOpenChange={closeEditDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>编辑区域</DialogTitle>
+            <DialogDescription>
+              修改区域名称，区域内所有设备将自动更新归属
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">区域名称</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ name: e.target.value })}
+                placeholder="请输入区域名称"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditDialog} type="button">取消</Button>
+            <Button onClick={saveAreaEdit} type="button">保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除区域对话框 */}
+      <Dialog open={showDeleteDialog} onOpenChange={closeDeleteDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认删除区域</DialogTitle>
+            <DialogDescription>
+              删除区域后，该区域内所有设备将被移至"未分组"。此操作无法撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              即将删除区域：<span className="font-medium text-foreground">{deletingArea}</span>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDeleteDialog} type="button">取消</Button>
+            <Button variant="destructive" onClick={deleteArea} type="button">删除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除设备对话框 */}
+      <Dialog open={showDeviceDeleteDialog} onOpenChange={closeDeviceDeleteDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认删除设备</DialogTitle>
+            <DialogDescription>
+              删除设备后，所有关联数据将被永久删除。此操作无法撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              即将删除：<span className="font-medium text-foreground">{deletingDevice?.name}</span>
+              <span className="text-muted-foreground ml-2">({deletingDevice?.type === 'sensor' ? '传感器' : '执行器'})</span>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDeviceDeleteDialog} type="button">取消</Button>
+            <Button variant="destructive" onClick={confirmDeleteDevice} type="button">删除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

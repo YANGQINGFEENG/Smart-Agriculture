@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         a.name, 
         a.type_id, 
         a.location, 
-        a.status, 
+        a.status as original_status,
         a.state, 
         a.mode,
         a.control_value,
@@ -95,10 +95,24 @@ export async function GET(request: NextRequest) {
 
     const rows = await db.query<Actuator[]>(query, params)
 
+    // 基于last_update判断在线状态（5分钟阈值）
+    const ONLINE_THRESHOLD_MINUTES = 5
+    const now = new Date()
+    const processedRows = rows.map(row => {
+      const lastUpdateDate = row.last_update ? new Date(row.last_update) : null
+      const isOnline = lastUpdateDate && 
+        (now.getTime() - lastUpdateDate.getTime()) / 1000 / 60 <= ONLINE_THRESHOLD_MINUTES
+      
+      return {
+        ...row,
+        status: isOnline ? 'online' : 'offline'
+      }
+    })
+
     return NextResponse.json({
       success: true,
-      data: rows,
-      total: rows.length,
+      data: processedRows,
+      total: processedRows.length,
     })
   } catch (error) {
     console.error('获取执行器列表失败:', error)

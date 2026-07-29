@@ -43,6 +43,7 @@ export async function GET(
     const startTime = url.searchParams.get('startTime')
     const endTime = url.searchParams.get('endTime')
     const limit = parseInt(url.searchParams.get('limit') || '100', 10)
+    const order = url.searchParams.get('order') || 'desc'  // 排序方向：desc或asc
 
     const sensors = await db.query<Sensor[]>(
       'SELECT id FROM sensors WHERE id = ?',
@@ -69,7 +70,8 @@ export async function GET(
       queryParams.push(endTime)
     }
 
-    query += ' ORDER BY timestamp DESC LIMIT ?'
+    // 根据order参数决定排序方向
+    query += order === 'asc' ? ' ORDER BY timestamp ASC LIMIT ?' : ' ORDER BY timestamp DESC LIMIT ?'
     queryParams.push(limit)
 
     const data = await db.query<SensorData[]>(query, queryParams)

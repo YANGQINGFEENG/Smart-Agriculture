@@ -459,6 +459,101 @@ export async function POST(
 }
 
 /**
+ * PUT /api/actuators/[id]
+ * 更新执行器信息
+ * 支持更新：name（名称）、location（位置）、area（区域）等字段
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json()
+
+    // 检查执行器是否存在
+    const existing = await db.query<Actuator[]>(
+      'SELECT id FROM actuators WHERE id = ?',
+      [id]
+    )
+
+    if (existing.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '执行器不存在' },
+        { status: 404 }
+      )
+    }
+
+    const updates: string[] = []
+    const values: any[] = []
+
+    // 允许更新的字段
+    if (body.name !== undefined && body.name !== null) {
+      updates.push('name = ?')
+      values.push(body.name)
+    }
+    if (body.location !== undefined && body.location !== null) {
+      updates.push('location = ?')
+      values.push(body.location)
+    }
+    if (body.area !== undefined) {
+      updates.push('area = ?')
+      values.push(body.area)
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '没有提供需要更新的字段' },
+        { status: 400 }
+      )
+    }
+
+    values.push(id)
+    await db.execute(
+      `UPDATE actuators SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    )
+
+    // 获取更新后的执行器信息
+    const updatedActuator = await db.query<Actuator[]>(
+      `SELECT 
+        a.id, 
+        a.name, 
+        a.type_id, 
+        a.location, 
+        a.status, 
+        a.state, 
+        a.mode,
+        a.last_update, 
+        a.created_at,
+        at.type,
+        at.name as type_name,
+        at.description
+      FROM actuators a
+      INNER JOIN actuator_types at ON a.type_id = at.id
+      WHERE a.id = ?`,
+      [id]
+    )
+
+    return NextResponse.json({
+      success: true,
+      data: updatedActuator[0],
+      message: '执行器信息更新成功',
+    })
+  } catch (error) {
+    console.error('更新执行器失败:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: '更新执行器失败',
+        details: error instanceof Error ? error.message : '未知错误'
+      },
+      { status: 500 }
+    )
+  }
+}
+
+/**
  * DELETE /api/actuators/[id]
  * 删除执行器
  */

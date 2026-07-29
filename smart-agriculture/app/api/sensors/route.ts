@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const type = url.searchParams.get('type')
     const farmId = url.searchParams.get('farm_id')
 
-    let query = 'SELECT s.id, s.name, s.type_id, s.location, s.status, s.battery, s.last_update, s.created_at, s.area, st.type, st.name as type_name, st.unit, (SELECT sd.value FROM sensor_data sd WHERE sd.sensor_id = s.id ORDER BY sd.timestamp DESC LIMIT 1) as lastVal FROM sensors s INNER JOIN sensor_types st ON s.type_id = st.id'
+    let query = 'SELECT s.id, s.name, s.type_id, s.location, s.status as original_status, s.battery, s.last_update, s.created_at, s.area, st.type, st.name as type_name, st.unit, (SELECT sd.value FROM sensor_data sd WHERE sd.sensor_id = s.id ORDER BY sd.timestamp DESC LIMIT 1) as lastVal FROM sensors s INNER JOIN sensor_types st ON s.type_id = st.id'
 
     const conditions: string[] = []
     const params: any[] = []
@@ -60,10 +60,20 @@ export async function GET(request: NextRequest) {
 
     const rows = await db.query<Sensor[]>(query, params)
 
-    const formattedRows = rows.map(row => ({
-      ...row,
-      value: row.lastVal !== null ? parseFloat(row.lastVal.toString()) : undefined,
-    }))
+    // 基于last_update判断在线状态（5分钟阈值）
+    const ONLINE_THRESHOLD_MINUTES = 5
+    const now = new Date()
+    const formattedRows = rows.map(row => {
+      const lastUpdateDate = row.last_update ? new Date(row.last_update) : null
+      const isOnline = lastUpdateDate && 
+        (now.getTime() - lastUpdateDate.getTime()) / 1000 / 60 <= ONLINE_THRESHOLD_MINUTES
+      
+      return {
+        ...row,
+        value: row.lastVal !== null ? parseFloat(row.lastVal.toString()) : undefined,
+        status: isOnline ? 'online' : 'offline'
+      }
+    })
 
     return NextResponse.json({
       success: true,
