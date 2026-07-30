@@ -406,17 +406,41 @@ async function createTables() {
 async function insertInitialData() {
   if (!databaseInstance) throw new Error('数据库未初始化');
   
-  const sensorTypesCount = await databaseInstance.get<{ count: number }>('SELECT COUNT(*) as count FROM sensor_types');
-  if (sensorTypesCount && sensorTypesCount.count === 0) {
-    await databaseInstance.exec(`
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('temperature', '温度传感器', '°C');
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('humidity', '空气湿度传感器', '%');
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('soil', '土壤湿度传感器', '%');
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('soil_temperature', '土壤温度传感器', '°C');
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('light', '光照传感器', 'lux');
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('ph', 'pH传感器', 'pH');
-      INSERT OR IGNORE INTO sensor_types (type, name, unit) VALUES ('co2', 'CO2传感器', 'ppm');
-    `);
+  // 检查并补充缺失的传感器类型（即使表不为空，也要检查每个类型是否存在）
+  const requiredSensorTypes = [
+    { type: 'temperature', name: '温度传感器', unit: '°C' },
+    { type: 'humidity', name: '空气湿度传感器', unit: '%' },
+    { type: 'soil_moisture', name: '土壤湿度传感器', unit: '%' },
+    { type: 'soil_temperature', name: '土壤温度传感器', unit: '°C' },
+    { type: 'light', name: '光照传感器', unit: 'lux' },
+    { type: 'ph', name: 'pH传感器', unit: 'pH' },
+    { type: 'co2', name: 'CO2传感器', unit: 'ppm' },
+    { type: 'ec', name: '电导率传感器', unit: 'μS/cm' },
+    { type: 'pm25', name: 'PM2.5传感器', unit: 'μg/m³' },
+    { type: 'water_level', name: '水位传感器', unit: 'cm' },
+    { type: 'battery', name: '电池电量传感器', unit: '%' },
+    { type: 'pressure', name: '气压传感器', unit: 'hPa' },
+    { type: 'vibration', name: '振动传感器', unit: 'mm/s' },
+    { type: 'altitude', name: '海拔传感器', unit: 'm' },
+  ];
+  
+  let missingSensorTypes = 0;
+  for (const typeInfo of requiredSensorTypes) {
+    const existing = await databaseInstance.get<{ id: number }>(
+      'SELECT id FROM sensor_types WHERE type = ?',
+      [typeInfo.type]
+    );
+    if (!existing) {
+      await databaseInstance.run(
+        'INSERT INTO sensor_types (type, name, unit) VALUES (?, ?, ?)',
+        [typeInfo.type, typeInfo.name, typeInfo.unit]
+      );
+      missingSensorTypes++;
+      console.log(`[DB] 补充缺失的传感器类型: ${typeInfo.type} (${typeInfo.name})`);
+    }
+  }
+  if (missingSensorTypes > 0) {
+    console.log(`[DB] 共补充了 ${missingSensorTypes} 个缺失的传感器类型`);
   }
   
   // 检查是否已有传感器数据
@@ -465,23 +489,41 @@ async function insertInitialData() {
     }
   }
 
-  const actuatorTypesCount = await databaseInstance.get<{ count: number }>('SELECT COUNT(*) as count FROM actuator_types');
-  if (actuatorTypesCount && actuatorTypesCount.count === 0) {
-    await databaseInstance.exec(`
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('water_pump', '水泵', '用于灌溉和排水控制');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('fan', '风扇', '用于通风和温度调节');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('heater', '加热器', '用于温度控制');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('valve', '电磁阀', '用于水流控制');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('light', '补光灯', '用于光照调节');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('ventilator', '通风机', '用于空气循环');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('fogger', '雾化器', '用于湿度调节和降温');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('motor', '电机', '用于驱动控制，支持速度调节');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('servo', '舵机', '用于角度控制，支持0-180度旋转');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('led', 'LED灯', '用于照明和指示，支持开关控制');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('relay', '继电器', '用于开关控制，支持通断操作');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('laser', '激光器', '用于激光控制，支持开关控制');
-      INSERT OR IGNORE INTO actuator_types (type, name, description) VALUES ('rgb_led', 'RGB-LED', '用于RGB颜色控制，支持颜色值调节');
-    `);
+  // 检查并补充缺失的执行器类型（即使表不为空，也要检查每个类型是否存在）
+  const requiredActuatorTypes = [
+    { type: 'water_pump', name: '水泵', description: '用于灌溉和排水控制' },
+    { type: 'fan', name: '风扇', description: '用于通风和温度调节' },
+    { type: 'heater', name: '加热器', description: '用于温度控制' },
+    { type: 'valve', name: '电磁阀', description: '用于水流控制' },
+    { type: 'light', name: '补光灯', description: '用于光照调节' },
+    { type: 'ventilator', name: '通风机', description: '用于空气循环' },
+    { type: 'fogger', name: '雾化器', description: '用于湿度调节和降温' },
+    { type: 'motor', name: '电机', description: '用于驱动控制，支持速度调节' },
+    { type: 'servo', name: '舵机', description: '用于角度控制，支持0-180度旋转' },
+    { type: 'led', name: 'LED灯', description: '用于照明和指示，支持开关控制' },
+    { type: 'relay', name: '继电器', description: '用于开关控制，支持通断操作' },
+    { type: 'laser', name: '激光器', description: '用于激光控制，支持开关控制' },
+    { type: 'buzzer', name: '蜂鸣器', description: '用于声音提示，支持多种蜂鸣模式' },
+    { type: 'rgb_led', name: 'RGB-LED', description: '用于RGB颜色控制，支持颜色值调节' },
+  ];
+  
+  let missingTypes = 0;
+  for (const typeInfo of requiredActuatorTypes) {
+    const existing = await databaseInstance.get<{ id: number }>(
+      'SELECT id FROM actuator_types WHERE type = ?',
+      [typeInfo.type]
+    );
+    if (!existing) {
+      await databaseInstance.run(
+        'INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)',
+        [typeInfo.type, typeInfo.name, typeInfo.description]
+      );
+      missingTypes++;
+      console.log(`[DB] 补充缺失的执行器类型: ${typeInfo.type} (${typeInfo.name})`);
+    }
+  }
+  if (missingTypes > 0) {
+    console.log(`[DB] 共补充了 ${missingTypes} 个缺失的执行器类型`);
   }
 
   // 检查是否已有执行器数据

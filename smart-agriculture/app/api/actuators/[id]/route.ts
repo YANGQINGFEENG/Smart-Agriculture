@@ -13,8 +13,10 @@ interface Actuator extends RowDataPacket {
   status: 'online' | 'offline'
   state: 'on' | 'off'
   mode: 'auto' | 'manual'
+  control_value: number | null
   last_update: Date | null
   locked: number
+  feedback: string | null
 }
 
 /**
@@ -49,8 +51,10 @@ export async function GET(
         a.status, 
         a.state, 
         a.mode,
+        a.control_value,
         a.last_update, 
         a.created_at,
+        a.feedback,
         at.type,
         at.name as type_name,
         at.description
@@ -67,9 +71,28 @@ export async function GET(
       )
     }
 
+    // 解析feedback JSON字段
+    const actuator = actuators[0]
+    const result: any = { ...actuator }
+    
+    // feedback可能是：
+    // 1. null (数据库返回的NULL)
+    // 2. 字符串 (需要JSON.parse)
+    // 3. 对象 (mysql2自动解析了JSON字段)
+    if (result.feedback !== null && result.feedback !== undefined) {
+      if (typeof result.feedback === 'string') {
+        try {
+          result.feedback = JSON.parse(result.feedback)
+        } catch {
+          result.feedback = {}
+        }
+      }
+      // 如果已经是对象，直接使用
+    }
+    
     return NextResponse.json({
       success: true,
-      data: actuators[0],
+      data: result,
     })
   } catch (error) {
     console.error('获取执行器详情失败:', error)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { syncDevice } from '@/lib/device-sync'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
-import { DeviceCategory, isSensorType, isActuatorType, getDeviceTypeConfig, getUnassignedDeviceType, ControlType } from '@/lib/device-types'
+import { DeviceCategory, isSensorType, isActuatorType, getDeviceTypeConfig, getActuatorTypeConfig, getSensorTypeConfig, getUnassignedDeviceType, ControlType } from '@/lib/device-types'
 
 interface Gateway extends RowDataPacket {
   id: number
@@ -40,7 +40,7 @@ interface ReportNode {
   unit?: string                          // 单位（可选，使用类型字典中的默认值）
   location?: string                      // 安装位置（可选）
   area?: string                          // 区域名称（可选，可覆盖网关级区域设置）
-  state?: 'on' | 'off'                   // 执行器状态（执行器必填）
+  state?: 'on' | 'off' | 'error'         // 执行器状态（执行器必填，支持error状态）
   mode?: 'auto' | 'manual'               // 执行器模式（可选，默认auto）
   control_value?: number                 // 执行器当前控制值（如电机速度、舵机角度）
   control_type?: NodeControlType         // 执行器控制类型（可选，服务器根据此自动加载对应控制卡片）
@@ -53,6 +53,9 @@ interface ReportNode {
   firmware_version?: string              // 固件版本（可选）
   signal_strength?: number               // 信号强度（可选，0-100）
   battery_level?: number                 // 电池电量（可选，0-100）
+  feedback?: Record<string, any>         // 设备回馈数据（可选，存储设备特有回馈信息）
+                                         // 风扇示例: {direction: 'forward', speed: 0.75, pins: {in1: 5, in2: 6, pwm: 9}, initialized: true}
+                                         // 蜂鸣器示例: {pattern: 'alarm', duration: 0.5, command_count: 42, pin: 10}
 }
 
 /**
@@ -297,7 +300,8 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
     control_range,
     firmware_version,
     signal_strength,
-    battery_level
+    battery_level,
+    feedback  // 设备回馈数据
   } = nodeData
 
   if (!node_id || !type) {
@@ -315,21 +319,40 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
   }
 
   // 检查是否为已知设备类型
-  const deviceConfig = getDeviceTypeConfig(correctedType)
+  const sensorConfig = getSensorTypeConfig(correctedType)
+  const actuatorConfig = getActuatorTypeConfig(correctedType)
 
   // 确定设备类别和实际类型
   let deviceClass: DeviceCategory
   let actualType: string
 
-  if (deviceConfig && deviceConfig.category !== DeviceCategory.UNASSIGNED) {
-    // 已知类型，使用修正后的类型
-    actualType = correctedType
-    if (isSensorType(correctedType)) {
-      deviceClass = DeviceCategory.SENSOR
-    } else if (isActuatorType(correctedType)) {
+  if (sensorConfig || actuatorConfig) {
+    // 已知类型
+    // 当同一类型名同时存在于传感器和执行器中时（如light），
+    // 根据上报数据特征判断：有state字段=执行器，有value字段=传感器
+    if (sensorConfig && actuatorConfig) {
+      // 类型冲突，根据数据特征判断
+      if (state !== undefined) {
+        deviceClass = DeviceCategory.ACTUATOR
+        actualType = correctedType
+        console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据state字段判断为执行器`)
+      } else if (value !== undefined) {
+        deviceClass = DeviceCategory.SENSOR
+        actualType = correctedType
+        console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据value字段判断为传感器`)
+      } else {
+        // 默认为传感器
+        deviceClass = DeviceCategory.SENSOR
+        actualType = correctedType
+      }
+    } else if (actuatorConfig) {
+      // 仅执行器
+      actualType = correctedType
       deviceClass = DeviceCategory.ACTUATOR
     } else {
-      deviceClass = DeviceCategory.GATEWAY
+      // 仅传感器
+      actualType = correctedType
+      deviceClass = DeviceCategory.SENSOR
     }
   } else {
     // 未知类型，分配到"未分配"类别
@@ -348,7 +371,9 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
   }
 
   // 获取实际的设备配置（处理未知类型）
-  const actualConfig = getDeviceTypeConfig(actualType)
+  const actualConfig = deviceClass === DeviceCategory.ACTUATOR 
+    ? getActuatorTypeConfig(actualType) 
+    : getSensorTypeConfig(actualType) || getDeviceTypeConfig(actualType)
 
   // 构建控制配置信息（仅执行器需要，传感器不需要控制类型）
   let controlConfig = {
@@ -385,6 +410,7 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
       firmware_version: firmware_version || '',
       signal_strength: signal_strength || null,
       battery_level: battery_level || null,
+      feedback: feedback || undefined,  // 传递设备回馈数据
     })
 
     // 存储原始数据到device_data表（仅传感器）
@@ -411,6 +437,15 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
           syncResult.deviceId
         ]
       )
+    }
+
+    // 如果是执行器且上报了回馈数据，更新feedback字段
+    if (deviceClass === DeviceCategory.ACTUATOR && feedback) {
+      await db.execute(
+        `UPDATE actuators SET feedback = ? WHERE id = ?`,
+        [JSON.stringify(feedback), syncResult.deviceId]
+      )
+      console.log(`[Report] 已更新执行器回馈数据: ${syncResult.deviceId}`)
     }
 
     // 日志输出：传感器只显示基本信息，执行器显示控制类型

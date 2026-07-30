@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
         a.created_at,
         a.locked,
         a.farm_id,
+        a.feedback,
         at.type,
         at.name as type_name,
         at.description
@@ -103,9 +104,23 @@ export async function GET(request: NextRequest) {
       const isOnline = lastUpdateDate && 
         (now.getTime() - lastUpdateDate.getTime()) / 1000 / 60 <= ONLINE_THRESHOLD_MINUTES
       
+      // 解析 feedback JSON 字段
+      let feedbackData = null
+      if (row.feedback) {
+        try {
+          feedbackData = typeof row.feedback === 'string' 
+            ? JSON.parse(row.feedback) 
+            : row.feedback
+        } catch (e) {
+          console.warn(`[Actuators API] 解析 feedback 失败: ${row.id}`, e)
+          feedbackData = null
+        }
+      }
+      
       return {
         ...row,
-        status: isOnline ? 'online' : 'offline'
+        status: isOnline ? 'online' : 'offline',
+        feedback: feedbackData  // 返回解析后的 feedback 对象
       }
     })
 

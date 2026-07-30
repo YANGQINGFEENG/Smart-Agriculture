@@ -506,7 +506,7 @@ export default function AreasPage() {
   /**
    * 发送控制指令
    */
-  const sendControlCommand = async (actuatorId: string, command: 'on' | 'off' | 'value', value?: number) => {
+  const sendControlCommand = async (actuatorId: string, command: any, value?: number) => {
     // 设置指令状态为发送中
     setCommandStatusMap(prev => ({
       ...prev,
@@ -517,33 +517,56 @@ export default function AreasPage() {
       const actuator = actuators.find(a => a.id === actuatorId)
       if (!actuator) return
 
-      // 获取设备类型配置
-      const deviceTypeConfig = getDeviceTypeConfig(actuator.type)
+      // 判断是否为 RGBCommand 格式
+      const isRgbCommand = typeof command === 'object' && command !== null && 'command' in command
 
-      // 优先使用数据库中存储的控制类型（硬件上报的配置），如果没有则使用设备类型字典中的配置
-      const controlType = actuator.control_type || deviceTypeConfig?.controlType || ControlType.BOOLEAN
+      let body: any
 
-      // 对于布尔控制类型，确保command只能是on或off
-      let finalCommand = command
-      if ((controlType === 'boolean' || controlType === ControlType.BOOLEAN) && command === 'value') {
-        // 如果是布尔控制但收到了value命令，转换为on/off
-        finalCommand = value && value > 0 ? 'on' : 'off'
-      }
+      if (isRgbCommand) {
+        // RGB 命令格式: { command: 'value'|'color'|'preset', value?, r?, g?, b?, preset? }
+        const rgbCmd = command
+        body = {
+          control_type: 'rgb',
+          command: rgbCmd.command,
+        }
 
-      const body: any = {
-        // 确保发送的是字符串类型，而不是枚举对象
-        control_type: typeof controlType === 'string' ? controlType : 'boolean',
-        command: finalCommand,
-      }
+        // 根据命令类型添加参数
+        if (rgbCmd.command === 'value' && rgbCmd.value !== undefined) {
+          body.value = rgbCmd.value
+        } else if (rgbCmd.command === 'color') {
+          body.r = rgbCmd.r || 0
+          body.g = rgbCmd.g || 0
+          body.b = rgbCmd.b || 0
+        } else if (rgbCmd.command === 'preset') {
+          body.preset = rgbCmd.preset
+        }
+      } else {
+        // 标准命令格式: ('on' | 'off' | 'value', value?)
+        const strCommand = command as 'on' | 'off' | 'value'
 
-      if (value !== undefined && (controlType === 'integer' || controlType === 'angle' || controlType === 'float')) {
-        // 确保value是数字类型
-        body.value = typeof value === 'number' ? value : parseFloat(value)
-      }
+        // 获取设备类型配置
+        const deviceTypeConfig = getDeviceTypeConfig(actuator.type)
+        const controlType = actuator.control_type || deviceTypeConfig?.controlType || ControlType.BOOLEAN
 
-      if (deviceTypeConfig?.controlRange) {
-        body.min = deviceTypeConfig.controlRange.min
-        body.max = deviceTypeConfig.controlRange.max
+        // 对于布尔控制类型，确保command只能是on或off
+        let finalCommand = strCommand
+        if ((controlType === 'boolean' || controlType === ControlType.BOOLEAN) && strCommand === 'value') {
+          finalCommand = value && value > 0 ? 'on' : 'off'
+        }
+
+        body = {
+          control_type: typeof controlType === 'string' ? controlType : 'boolean',
+          command: finalCommand,
+        }
+
+        if (value !== undefined && (controlType === 'integer' || controlType === 'angle' || controlType === 'float')) {
+          body.value = typeof value === 'number' ? value : parseFloat(value)
+        }
+
+        if (deviceTypeConfig?.controlRange) {
+          body.min = deviceTypeConfig.controlRange.min
+          body.max = deviceTypeConfig.controlRange.max
+        }
       }
 
       const response = await fetch(`/api/actuators/${actuatorId}/commands`, {
@@ -575,10 +598,28 @@ export default function AreasPage() {
             if (statusResult.success && statusResult.data) {
               const cmdStatus = statusResult.data.status
               if (cmdStatus === 'executed') {
+                // 立即更新本地状态，不等待API响应
                 setCommandStatusMap(prev => ({
                   ...prev,
                   [actuatorId]: 'executed'
                 }))
+
+                // 立即在本地更新执行器状态（乐观更新）
+                const executedData = statusResult.data
+                setActuators(prev => prev.map(a => {
+                  if (a.id === actuatorId) {
+                    const newState = executedData.command === 'off' ? 'off' :
+                      executedData.command === 'on' ? 'on' : a.state
+                    return {
+                      ...a,
+                      state: newState as 'on' | 'off',
+                      control_value: executedData.control_value ? parseFloat(executedData.control_value) : a.control_value,
+                      last_update: new Date().toISOString(),
+                    }
+                  }
+                  return a
+                }))
+
                 toast({
                   title: '执行成功',
                   description: '设备已成功执行控制指令',
@@ -586,7 +627,8 @@ export default function AreasPage() {
                   duration: 3000,
                 })
                 clearInterval(pollInterval)
-                await fetchActuators()
+                // 异步刷新服务器数据（不阻塞UI）
+                fetchActuators()
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               } else if (cmdStatus === 'failed') {
                 setCommandStatusMap(prev => ({
@@ -619,7 +661,80 @@ export default function AreasPage() {
           } catch (error) {
             clearInterval(pollInterval)
           }
-        }, 1500)
+        }, 300)  // 优化：300ms轮询间隔，快速响应状态更新
+
+          // 立即执行第一次轮询，减少初始延时
+          (async () => {
+            try {
+              const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
+              const statusResult = await statusResponse.json()
+              if (statusResult.success && statusResult.data) {
+                const cmdStatus = statusResult.data.status
+                if (cmdStatus === 'executed') {
+                  // 立即更新本地状态
+                  setCommandStatusMap(prev => ({
+                    ...prev,
+                    [actuatorId]: 'executed'
+                  }))
+
+                  // 乐观更新执行器状态
+                  const executedData = statusResult.data
+                  setActuators(prev => prev.map(a => {
+                    if (a.id === actuatorId) {
+                      const newState = executedData.command === 'off' ? 'off' :
+                        executedData.command === 'on' ? 'on' : a.state
+                      return {
+                        ...a,
+                        state: newState as 'on' | 'off',
+                        control_value: executedData.control_value ? parseFloat(executedData.control_value) : a.control_value,
+                        last_update: new Date().toISOString(),
+                      }
+                    }
+                    return a
+                  }))
+
+                  toast({
+                    title: '执行成功',
+                    description: '设备已成功执行控制指令',
+                    variant: 'default',
+                    duration: 3000,
+                  })
+                  clearInterval(pollInterval)
+                  // 异步刷新，不阻塞
+                  fetchActuators()
+                  setTimeout(() => clearCommandStatus(actuatorId), 3000)
+                } else if (cmdStatus === 'failed') {
+                  setCommandStatusMap(prev => ({
+                    ...prev,
+                    [actuatorId]: 'failed'
+                  }))
+                  toast({
+                    title: '执行失败',
+                    description: '设备执行指令失败，请重试',
+                    variant: 'destructive',
+                    duration: 3000,
+                  })
+                  clearInterval(pollInterval)
+                  setTimeout(() => clearCommandStatus(actuatorId), 3000)
+                } else if (cmdStatus === 'timeout') {
+                  setCommandStatusMap(prev => ({
+                    ...prev,
+                    [actuatorId]: 'timeout'
+                  }))
+                  toast({
+                    title: '控制超时',
+                    description: '设备未在规定时间内响应',
+                    variant: 'destructive',
+                    duration: 3000,
+                  })
+                  clearInterval(pollInterval)
+                  setTimeout(() => clearCommandStatus(actuatorId), 3000)
+                }
+              }
+            } catch (error) {
+              // 忽略错误，继续轮询
+            }
+          })()
 
         // 设置轮询超时
         setTimeout(() => {
@@ -1099,6 +1214,82 @@ export default function AreasPage() {
                 新建区域
               </Button>
             </div>
+          </div>
+
+          {/* 全局在线状态统计 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            {/* 在线设备总数 */}
+            <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200/50">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-green-700 font-medium">在线设备</p>
+                    <p className="text-2xl font-bold text-green-700 mt-1">
+                      {actuators.filter(a => isDeviceOnline(a)).length}
+                      <span className="text-sm font-normal text-green-600 ml-1">/ {actuators.length}</span>
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 运行中执行器 */}
+            <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200/50">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-blue-700 font-medium">运行中</p>
+                    <p className="text-2xl font-bold text-blue-700 mt-1">
+                      {actuators.filter(a => a.state === 'on').length}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Power className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 离线设备 */}
+            <Card className="bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200/50">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-600 font-medium">离线设备</p>
+                    <p className="text-2xl font-bold text-gray-600 mt-1">
+                      {actuators.filter(a => !isDeviceOnline(a)).length}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <XCircle className="w-5 h-5 text-gray-500" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 区域数量 */}
+            <Card className="bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200/50">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-purple-700 font-medium">在线区域</p>
+                    <p className="text-2xl font-bold text-purple-700 mt-1">
+                      {getAllAreas().filter(area => {
+                        const stats = getAreaStats(area);
+                        return stats.isOnline;
+                      }).length}
+                      <span className="text-sm font-normal text-purple-600 ml-1">/ {getAllAreas().length}</span>
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <MapPin className="w-5 h-5 text-purple-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* 控制流程说明 */}

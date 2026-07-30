@@ -32,7 +32,38 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-
+    const url = new URL(request.url)
+    const isFrontend = url.searchParams.get('frontend') === 'true'
+    
+    // 前端查询：直接返回最新命令状态，不执行超时清理（快速响应）
+    if (isFrontend) {
+      const commands = await db.query<ActuatorCommand[]>(
+        `SELECT id, actuator_id, command, 
+                control_value, 
+                status, created_at, executed_at
+         FROM actuator_commands 
+         WHERE actuator_id = ? 
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [id]
+      )
+      
+      if (commands.length > 0) {
+        return NextResponse.json({
+          success: true,
+          data: commands[0],
+          message: 'OK',
+        })
+      }
+      
+      return NextResponse.json({
+        success: true,
+        data: null,
+        message: '没有指令记录',
+      })
+    }
+    
+    // 硬件端查询：执行超时清理逻辑
     // 清理超时的命令
     await db.execute(
       `UPDATE actuator_commands 
@@ -91,21 +122,6 @@ export async function GET(
           ...pendingCommand,
           status: 'executing'
         },
-        message: 'OK',
-      })
-    }
-
-    // 硬件端查询时，没有待执行指令则返回null
-    // 前端查询状态，返回最新一条指令（通过查询参数区分）
-    const url = new URL(request.url)
-    const isFrontend = url.searchParams.get('frontend') === 'true'
-    
-    if (isFrontend && commands.length > 0) {
-      // 前端查询状态，返回最新一条指令
-      const latestCommand = commands[0]
-      return NextResponse.json({
-        success: true,
-        data: latestCommand,
         message: 'OK',
       })
     }
@@ -182,9 +198,12 @@ export async function POST(
       [actuatorInfo[0].type_id]
     )
 
-    let command: 'on' | 'off' | 'value' = 'on'
+    let command: string = 'on'
     let controlValue: number | null = null
     const controlType = body.control_type || 'boolean'
+    
+    // 存储完整命令数据（用于WebSocket转发和硬件端执行）
+    let commandPayload: any = null
 
     switch (controlType) {
       case 'boolean':
@@ -209,7 +228,6 @@ export async function POST(
         command = 'value'
         controlValue = parseFloat(body.value)
         
-        // 验证数值范围（可选）
         if (body.min !== undefined && controlValue < body.min) {
           return NextResponse.json(
             { success: false, error: `value不能小于${body.min}` },
@@ -219,6 +237,60 @@ export async function POST(
         if (body.max !== undefined && controlValue > body.max) {
           return NextResponse.json(
             { success: false, error: `value不能大于${body.max}` },
+            { status: 400 }
+          )
+        }
+        break
+
+      case 'rgb':
+        // RGB-LED控制：支持value/color/preset三种命令
+        // command字段只存储基本命令(value)，扩展信息存储在command_data中
+        command = 'value'  // RGB所有命令都映射为value基本命令
+        const rgbCommand = body.command || 'value'
+        
+        if (rgbCommand === 'value') {
+          // 预设颜色(1-9)或白色亮度(10-100)或关闭(0)
+          if (body.value === undefined || body.value === null) {
+            return NextResponse.json(
+              { success: false, error: 'RGB value命令：必须提供value字段 (0-100)' },
+              { status: 400 }
+            )
+          }
+          controlValue = parseFloat(body.value)
+          if (controlValue < 0 || controlValue > 100) {
+            return NextResponse.json(
+              { success: false, error: 'RGB value必须在0-100范围内' },
+              { status: 400 }
+            )
+          }
+          // 存储命令类型标记
+          commandPayload = { type: 'value', value: controlValue }
+        } else if (rgbCommand === 'color') {
+          // 自定义RGB颜色
+          if (body.r === undefined || body.g === undefined || body.b === undefined) {
+            return NextResponse.json(
+              { success: false, error: 'RGB color命令：必须提供r, g, b字段' },
+              { status: 400 }
+            )
+          }
+          const r = Math.max(0, Math.min(255, parseInt(body.r)))
+          const g = Math.max(0, Math.min(255, parseInt(body.g)))
+          const b = Math.max(0, Math.min(255, parseInt(body.b)))
+          // 计算等效亮度值用于control_value
+          controlValue = Math.round((r + g + b) / (3 * 255) * 100)
+          commandPayload = { type: 'color', r, g, b }
+        } else if (rgbCommand === 'preset') {
+          // 预设颜色名称
+          if (!body.preset) {
+            return NextResponse.json(
+              { success: false, error: 'RGB preset命令：必须提供preset字段' },
+              { status: 400 }
+            )
+          }
+          commandPayload = { type: 'preset', preset: body.preset }
+        } else {
+          return NextResponse.json(
+            { success: false, error: `RGB不支持的命令: ${rgbCommand}` },
             { status: 400 }
           )
         }
@@ -237,15 +309,25 @@ export async function POST(
       [id]
     )
 
+    // 构建插入数据
+    const insertValues = commandPayload 
+      ? [id, command, controlValue, JSON.stringify(commandPayload)]
+      : [id, command, controlValue, null]
+    
+    console.log(`[Command] 插入命令数据 - insertValues:`, insertValues)
+    
     const result = await db.execute<ResultSetHeader>(
-      'INSERT INTO actuator_commands (actuator_id, command, control_value) VALUES (?, ?, ?)',
-      [id, command, controlValue]
+      `INSERT INTO actuator_commands (actuator_id, command, control_value, command_data) 
+       VALUES (?, ?, ?, ?)`,
+      insertValues
     )
 
-    const commandId = result.lastID
+    const commandId = result.insertId || result.lastID
+    console.log(`[Command] 命令插入结果 - insertId: ${result.insertId}, lastID: ${result.lastID}, commandId: ${commandId}`)
     
     // 尝试通过WebSocket发送实时命令
-    const commandData = {
+    // 构建完整的命令数据，包含RGB扩展信息
+    const commandData: any = {
       id: commandId,
       actuator_id: id,
       command: command,
@@ -255,9 +337,24 @@ export async function POST(
       created_at: new Date().toISOString()
     }
     
+    // 添加RGB扩展命令数据
+    if (commandPayload) {
+      commandData.command_data = commandPayload
+      commandData.rgb_command = commandPayload.type
+      if (commandPayload.type === 'value') {
+        commandData.value = commandPayload.value
+      } else if (commandPayload.type === 'color') {
+        commandData.r = commandPayload.r
+        commandData.g = commandPayload.g
+        commandData.b = commandPayload.b
+      } else if (commandPayload.type === 'preset') {
+        commandData.preset = commandPayload.preset
+      }
+    }
+    
     const sentViaWebSocket = await sendCommandToActuator(id, commandData)
     
-    console.log(`[Command] 网页端发送指令 - 执行器: ${id}, 指令: ${command}, 控制值: ${controlValue}, 控制类型: ${controlType}, WebSocket: ${sentViaWebSocket}`)
+    console.log(`[Command] 网页端发送指令 - 执行器: ${id}, 指令: ${command}, 控制值: ${controlValue}, 控制类型: ${controlType}, ${commandPayload ? 'RGB命令: ' + commandPayload.type : ''}, WebSocket: ${sentViaWebSocket}`)
 
     // 设置超时定时器（后端自动处理超时）
     setTimeout(async () => {
@@ -351,6 +448,17 @@ export async function PATCH(
       )
     }
 
+    // 支持幂等操作：如果命令已经是目标状态，直接返回成功
+    // 这处理了WebSocket和HTTP双通道回执的竞态条件
+    if (existingCommand[0].status === body.status) {
+      console.log(`[Command PATCH] 命令已是${body.status}状态，跳过更新（幂等）`)
+      return NextResponse.json({
+        success: true,
+        message: '命令已是目标状态',
+        id: body.command_id,
+      })
+    }
+    
     if (existingCommand[0].status !== 'executing' && existingCommand[0].status !== 'pending') {
       return NextResponse.json(
         { success: false, error: '命令状态不正确' },

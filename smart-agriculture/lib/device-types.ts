@@ -278,6 +278,15 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
     controlType: ControlType.BOOLEAN,
   },
   {
+    type: 'buzzer',
+    name: '蜂鸣器',
+    category: DeviceCategory.ACTUATOR,
+    description: '用于声音提示，支持多种蜂鸣模式',
+    icon: 'Volume2',
+    color: 'amber',
+    controlType: ControlType.BOOLEAN,
+  },
+  {
     type: 'rgb_led',
     name: 'RGB-LED',
     category: DeviceCategory.ACTUATOR,
@@ -308,9 +317,26 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
 
 /**
  * 根据类型获取设备配置
+ * 注意：当同一类型名同时存在于传感器和执行器中时（如light），
+ * 优先返回传感器配置。使用getActuatorTypeConfig获取执行器配置。
  */
 export function getDeviceTypeConfig(type: string): DeviceTypeConfig | undefined {
   return DEVICE_TYPES.find(t => t.type === type)
+}
+
+/**
+ * 根据类型获取执行器配置
+ * 用于处理light等同时存在于传感器和执行器中的类型名
+ */
+export function getActuatorTypeConfig(type: string): DeviceTypeConfig | undefined {
+  return DEVICE_TYPES.find(t => t.type === type && t.category === DeviceCategory.ACTUATOR)
+}
+
+/**
+ * 根据类型获取传感器配置
+ */
+export function getSensorTypeConfig(type: string): DeviceTypeConfig | undefined {
+  return DEVICE_TYPES.find(t => t.type === type && t.category === DeviceCategory.SENSOR)
 }
 
 /**
@@ -336,18 +362,20 @@ export function getActuatorTypes(): DeviceTypeConfig[] {
 
 /**
  * 判断是否为传感器类型
+ * 对于light等同时存在于传感器和执行器中的类型，返回true
  */
 export function isSensorType(type: string): boolean {
-  const config = getDeviceTypeConfig(type)
-  return config?.category === DeviceCategory.SENSOR
+  const config = getSensorTypeConfig(type)
+  return config !== undefined
 }
 
 /**
  * 判断是否为执行器类型
+ * 对于light等同时存在于传感器和执行器中的类型，返回true
  */
 export function isActuatorType(type: string): boolean {
-  const config = getDeviceTypeConfig(type)
-  return config?.category === DeviceCategory.ACTUATOR
+  const config = getActuatorTypeConfig(type)
+  return config !== undefined
 }
 
 /**

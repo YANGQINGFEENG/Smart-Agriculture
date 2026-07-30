@@ -28,6 +28,8 @@ import {
   Zap,
   Crosshair,
   Palette,
+  Volume2,
+  Star,
 } from "lucide-react"
 import { ControlType, getDeviceTypeConfig } from "@/lib/device-types"
 
@@ -44,7 +46,7 @@ export interface Actuator {
   location: string
   area?: string
   status: 'online' | 'offline'
-  state: 'on' | 'off'
+  state: 'on' | 'off' | 'error'
   mode: 'auto' | 'manual'
   control_value?: number
   control_type?: string           // 执行器控制类型（boolean/integer/angle/float/string）
@@ -54,6 +56,7 @@ export interface Actuator {
   control_default?: number        // 控制默认值
   last_update: string | null
   locked?: number
+  feedback?: Record<string, any>  // 设备回馈数据（方向、速度、蜂鸣模式等）
 }
 
 /**
@@ -77,6 +80,7 @@ const actuatorIcons: Record<string, typeof Power> = {
   led: Lightbulb,
   relay: Zap,
   laser: Crosshair,
+  buzzer: Volume2,
   rgb_led: Palette,
 }
 
@@ -147,6 +151,74 @@ function formatLastUpdate(timestamp: string | null) {
   if (diff < 60) return `${diff}分钟前`
   if (diff < 1440) return `${Math.floor(diff / 60)}小时前`
   return date.toLocaleString('zh-CN')
+}
+
+/**
+ * 设备回馈信息显示组件
+ * 根据设备类型显示特定的回馈信息
+ */
+function FeedbackDisplay({ actuator }: { actuator: Actuator }) {
+  if (!actuator.feedback) return null
+  
+  const feedback = actuator.feedback
+  const type = actuator.type
+  
+  // 风扇回馈信息
+  if (type === 'fan') {
+    return (
+      <div className="flex flex-wrap gap-2 mt-2 p-2 rounded-lg bg-muted/30">
+        {feedback.direction !== undefined && (
+          <Badge variant="outline" className="text-xs">
+            方向: {feedback.direction === 'forward' ? '正转' : feedback.direction === 'backward' ? '反转' : '停止'}
+          </Badge>
+        )}
+        {feedback.speed !== undefined && (
+          <Badge variant="outline" className="text-xs">
+            速度: {(feedback.speed * 100).toFixed(0)}%
+          </Badge>
+        )}
+        {feedback.initialized !== undefined && (
+          <Badge variant="outline" className={`text-xs ${feedback.initialized ? 'text-green-600' : 'text-red-600'}`}>
+            {feedback.initialized ? '已初始化' : '未初始化'}
+          </Badge>
+        )}
+      </div>
+    )
+  }
+  
+  // 蜂鸣器回馈信息
+  if (type === 'buzzer') {
+    return (
+      <div className="flex flex-wrap gap-2 mt-2 p-2 rounded-lg bg-muted/30">
+        {feedback.pattern && (
+          <Badge variant="outline" className="text-xs">
+            模式: {feedback.pattern === 'alarm' ? '连续长响' : feedback.pattern === 'success' ? '短响3次' : feedback.pattern === 'warning' ? '长短交替' : '单次短响'}
+          </Badge>
+        )}
+        {feedback.command_count !== undefined && (
+          <Badge variant="outline" className="text-xs">
+            命令: {feedback.command_count}次
+          </Badge>
+        )}
+        {feedback.pin !== undefined && (
+          <Badge variant="outline" className="text-xs">
+            引脚: {feedback.pin}
+          </Badge>
+        )}
+      </div>
+    )
+  }
+  
+  // 通用回馈信息显示
+  return (
+    <div className="flex flex-wrap gap-2 mt-2 p-2 rounded-lg bg-muted/30">
+      {Object.entries(feedback).map(([key, value]) => (
+        <Badge key={key} variant="outline" className="text-xs">
+          {key}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+        </Badge>
+      ))}
+    </div>
+  )
 }
 
 /**
@@ -293,6 +365,9 @@ function BooleanControlCard({ actuator, onToggle, commandStatus, timeout }: {
             <span>最后更新</span>
             <span>{formatLastUpdate(actuator.last_update)}</span>
           </div>
+          
+          {/* 设备回馈信息 */}
+          <FeedbackDisplay actuator={actuator} />
         </div>
       </CardContent>
     </Card>
@@ -539,6 +614,9 @@ function NumericControlCard({ actuator, onValueChange, commandStatus, timeout }:
             <span>最后更新</span>
             <span>{formatLastUpdate(actuator.last_update)}</span>
           </div>
+          
+          {/* 设备回馈信息 */}
+          <FeedbackDisplay actuator={actuator} />
         </div>
       </CardContent>
     </Card>
@@ -595,11 +673,36 @@ const valueToRgb = (value: number): { name: string; r: number; g: number; b: num
 
 /**
  * RGB颜色控制卡片（RGB-LED等）
- * 控制值范围：0-100
+ * 支持三种命令格式：
+ * 1. value命令 - 0-100 (0关闭, 1-9预设颜色, 10-100白色亮度)
+ * 2. color命令 - 自定义RGB (r,g,b)
+ * 3. preset命令 - 预设颜色名称 (red/green/blue等)
  */
-function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
+export interface RGBCommand {
+  command: 'value' | 'color' | 'preset'
+  value?: number           // value命令: 0-100
+  r?: number               // color命令: 红色 0-255
+  g?: number               // color命令: 绿色 0-255
+  b?: number               // color命令: 蓝色 0-255
+  preset?: string          // preset命令: 颜色名称
+}
+
+// 预设颜色名称映射
+const presetColorNames: Record<number, string> = {
+  1: 'red',
+  2: 'green',
+  3: 'blue',
+  4: 'yellow',
+  5: 'cyan',
+  6: 'magenta',
+  7: 'white',
+  8: 'orange',
+  9: 'purple',
+}
+
+function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
   actuator: Actuator
-  onValueChange: (value: number) => void
+  onControl: (cmd: RGBCommand) => void
   commandStatus: CommandStatus
   timeout: number
 }) {
@@ -608,30 +711,82 @@ function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
   const isLocked = actuator.locked === 1
   const isOnline = actuator.status === 'online'
   
-  // 获取当前颜色信息
-  const currentValue = actuator.control_value || 0
-  const currentColor = valueToRgb(currentValue)
+  // 获取当前状态 - 优先使用feedback中的颜色信息
+  const feedbackColor = actuator.feedback?.color
+  const feedbackBrightness = actuator.feedback?.brightness
+  const feedbackState = actuator.feedback?.state
   
-  // 颜色选择列表（值1-9）
-  const colorOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(value => ({
+  // 当前颜色显示
+  const currentR = feedbackColor?.r ?? 0
+  const currentG = feedbackColor?.g ?? 0
+  const currentB = feedbackColor?.b ?? 0
+  const currentBrightness = feedbackBrightness ?? actuator.control_value ?? 0
+  const currentState = feedbackState ?? actuator.state
+  
+  // 判断当前显示模式
+  const isOff = currentState === 'off' || (currentR === 0 && currentG === 0 && currentB === 0 && currentBrightness === 0)
+  
+  // 计算当前颜色HEX
+  const currentHex = `#${currentR.toString(16).padStart(2, '0')}${currentG.toString(16).padStart(2, '0')}${currentB.toString(16).padStart(2, '0')}`.toUpperCase()
+  
+  // 预设颜色列表（value 1-9）
+  const presetColors = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(value => ({
     value,
-    ...valueToRgb(value),
+    name: presetColorNames[value],
+    color: valueToRgb(value),
   }))
+  
+  // 自定义RGB输入状态
+  const [customR, setCustomR] = useState(0)
+  const [customG, setCustomG] = useState(0)
+  const [customB, setCustomB] = useState(0)
 
-  const handleColorClick = (value: number) => {
-    onValueChange(value)
+  /**
+   * 处理预设颜色点击
+   */
+  const handlePresetColorClick = (value: number) => {
+    onControl({ command: 'value', value })
   }
 
+  /**
+   * 处理白色亮度变化
+   */
   const handleBrightnessChange = (value: number) => {
-    onValueChange(value)
+    if (value === 0) {
+      onControl({ command: 'value', value: 0 }) // 关闭
+    } else {
+      onControl({ command: 'value', value }) // 白色亮度
+    }
   }
 
+  /**
+   * 处理开关切换
+   */
   const handleToggle = () => {
-    if (currentValue === 0) {
-      onValueChange(100) // 开启为100%亮度白色
+    if (isOff) {
+      onControl({ command: 'value', value: 100 }) // 开启为100%白色
     } else {
-      onValueChange(0) // 关闭
+      onControl({ command: 'value', value: 0 }) // 关闭
     }
+  }
+
+  /**
+   * 发送自定义RGB颜色
+   */
+  const handleSendCustomRgb = () => {
+    onControl({ 
+      command: 'color', 
+      r: customR, 
+      g: customG, 
+      b: customB 
+    })
+  }
+
+  /**
+   * 发送预设颜色名称
+   */
+  const handleSendPresetName = (preset: string) => {
+    onControl({ command: 'preset', preset })
   }
 
   return (
@@ -640,57 +795,58 @@ function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl transition-colors ${
-              actuator.state === 'on' ? 'bg-chart-3/20' : 'bg-muted/50'
+              currentState === 'on' ? 'bg-chart-3/20' : 'bg-muted/50'
             }`}>
               <Icon className={`w-5 h-5 transition-colors ${
-                actuator.state === 'on' ? 'text-chart-3' : 'text-muted-foreground'
+                currentState === 'on' ? 'text-chart-3' : 'text-muted-foreground'
               }`} />
             </div>
             <div>
               <CardTitle className="text-base font-semibold">{actuator.name}</CardTitle>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
                 {actuator.type_name} · {actuator.location}
-                {actuator.area && ` · ${actuator.area}`}
+                {actuator.area && ` · {actuator.area}`}
               </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {getStatusBadge(actuator.status)}
-            {actuator.state === 'on' && (
+            {currentState === 'on' && (
               <Badge className="bg-chart-3/20 text-chart-3 text-xs px-2 py-0.5">运行中</Badge>
             )}
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         {/* 当前颜色预览 */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">当前状态</span>
             <div 
-              className="w-12 h-12 rounded-xl border-2 border-border shadow-inner transition-colors"
-              style={{ backgroundColor: currentColor.hex }}
+              className={`w-14 h-14 rounded-xl border-2 shadow-inner transition-all ${
+                isOff ? 'border-border' : 'border-primary/30'
+              }`}
+              style={{ backgroundColor: isOff ? 'transparent' : currentHex }}
             />
             <div>
-              <span className="text-lg font-bold text-primary">
-                {currentColor.name}
-              </span>
-              <div className="text-xs text-muted-foreground">
-                值: {currentValue}
+              <div className="text-sm font-semibold text-foreground">
+                {isOff ? '已关闭' : currentBrightness >= 10 ? `亮度 ${currentBrightness}%` : presetColorNames[Math.round(currentBrightness)] || '自定义颜色'}
+              </div>
+              <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                {isOff ? '#000000' : currentHex}
               </div>
             </div>
           </div>
           <Button
             size="sm"
-            variant={actuator.state === 'on' ? 'destructive' : 'default'}
+            variant={!isOff ? 'destructive' : 'default'}
             onClick={handleToggle}
             disabled={!isOnline || isUpdating || isLocked}
-            className="h-9 px-4 transition-all"
+            className="h-9 px-4"
           >
             {isUpdating ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : actuator.state === 'on' ? (
+            ) : !isOff ? (
               <>
                 <PowerOff className="w-4 h-4 mr-2" />
                 关闭
@@ -704,47 +860,48 @@ function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
           </Button>
         </div>
 
-        {/* 颜色选择 */}
+        {/* 模式一：预设颜色选择 (value 1-9) */}
         <div className="space-y-2">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Palette className="w-3 h-3" />
-            选择颜色
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Palette className="w-3 h-3" />
+              预设颜色
+            </span>
+            <span className="text-xs text-muted-foreground">value 1-9</span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {colorOptions.map((color) => (
+          <div className="grid grid-cols-9 gap-1.5">
+            {presetColors.map((color) => (
               <button
                 key={color.value}
-                onClick={() => handleColorClick(color.value)}
+                onClick={() => handlePresetColorClick(color.value)}
                 disabled={!isOnline || isUpdating || isLocked}
-                className={`w-10 h-10 rounded-xl transition-all hover:scale-110 ${
-                  currentValue === color.value ? 'ring-2 ring-primary ring-offset-2' : ''
-                } ${!isOnline || isUpdating || isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
-                  color.value === 7 ? 'border border-border' : '' // 白色加边框
-                }`}
-                style={{ backgroundColor: color.hex }}
-                title={color.name}
+                className={`aspect-square rounded-lg transition-all hover:scale-110 relative ${
+                  !isOnline || isUpdating || isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                } ${color.value === 7 ? 'border border-border' : ''}`}
+                style={{ backgroundColor: color.color.hex }}
+                title={`${color.name} (value=${color.value})`}
               >
-                {currentValue === color.value && (
-                  <CheckCircle className="w-5 h-5 text-white drop-shadow-md" />
+                {currentBrightness === color.value && !isOff && (
+                  <CheckCircle className="absolute inset-0 m-auto w-5 h-5 text-white drop-shadow" />
                 )}
               </button>
             ))}
           </div>
         </div>
 
-        {/* 亮度调节 */}
+        {/* 模式二：白色亮度 (value 10-100) */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Zap className="w-3 h-3" />
               白色亮度
             </span>
-            <span className="font-medium text-primary">
-              {currentValue >= 10 ? `${currentValue}%` : '—'}
+            <span className="text-xs text-primary font-semibold">
+              {currentBrightness >= 10 && !isOff ? `${currentBrightness}%` : '—'}
             </span>
           </div>
           <Slider
-            value={[Math.max(10, currentValue)]}
+            value={[Math.max(10, currentBrightness)]}
             onValueChange={([value]) => handleBrightnessChange(value)}
             min={10}
             max={100}
@@ -759,20 +916,136 @@ function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
           </div>
         </div>
 
-        {/* RGB分量显示 */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-red-500" />
-            R: {currentColor.r}
+        {/* 模式三：自定义RGB (color命令) */}
+        <div className="space-y-2 p-3 bg-muted/20 rounded-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Palette className="w-3 h-3" />
+              自定义 RGB 颜色
+            </span>
+            <span className="text-xs text-muted-foreground">color 命令</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {/* R通道 */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  R
+                </span>
+                <span className="font-mono">{customR}</span>
+              </div>
+              <Slider
+                value={[customR]}
+                onValueChange={([v]) => setCustomR(v)}
+                min={0}
+                max={255}
+                step={1}
+                disabled={!isOnline || isUpdating || isLocked}
+                className="py-1"
+              />
+            </div>
+            {/* G通道 */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  G
+                </span>
+                <span className="font-mono">{customG}</span>
+              </div>
+              <Slider
+                value={[customG]}
+                onValueChange={([v]) => setCustomG(v)}
+                min={0}
+                max={255}
+                step={1}
+                disabled={!isOnline || isUpdating || isLocked}
+                className="py-1"
+              />
+            </div>
+            {/* B通道 */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  B
+                </span>
+                <span className="font-mono">{customB}</span>
+              </div>
+              <Slider
+                value={[customB]}
+                onValueChange={([v]) => setCustomB(v)}
+                min={0}
+                max={255}
+                step={1}
+                disabled={!isOnline || isUpdating || isLocked}
+                className="py-1"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div 
+              className="w-10 h-10 rounded-lg border border-border"
+              style={{ backgroundColor: `#${customR.toString(16).padStart(2,'0')}${customG.toString(16).padStart(2,'0')}${customB.toString(16).padStart(2,'0')}` }}
+            />
+            <Button
+              size="sm"
+              onClick={handleSendCustomRgb}
+              disabled={!isOnline || isUpdating || isLocked}
+              className="flex-1 h-8"
+            >
+              发送自定义颜色
+            </Button>
+          </div>
+        </div>
+
+        {/* 模式四：预设颜色名称 (preset命令) */}
+        <div className="space-y-2">
+          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <Star className="w-3 h-3" />
+            颜色名称快捷指令
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500" />
-            G: {currentColor.g}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-            B: {currentColor.b}
-          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(presetColorNames).map(([value, name]) => (
+              <button
+                key={value}
+                onClick={() => handleSendPresetName(name)}
+                disabled={!isOnline || isUpdating || isLocked}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-all hover:scale-105 ${
+                  !isOnline || isUpdating || isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                } ${
+                  currentBrightness === Number(value) && !isOff
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-foreground border-border hover:bg-muted'
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 当前状态信息 */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center justify-between bg-muted/30 rounded-lg p-2">
+            <span className="text-muted-foreground">状态</span>
+            <span className={currentState === 'on' ? 'text-green-600 font-medium' : 'text-gray-500'}>
+              {isOff ? 'off' : 'on'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between bg-muted/30 rounded-lg p-2">
+            <span className="text-muted-foreground">亮度</span>
+            <span className="font-mono font-medium">{currentBrightness}%</span>
+          </div>
+          <div className="flex items-center justify-between bg-muted/30 rounded-lg p-2">
+            <span className="text-muted-foreground">RGB</span>
+            <span className="font-mono text-[10px]">{currentR},{currentG},{currentB}</span>
+          </div>
+          <div className="flex items-center justify-between bg-muted/30 rounded-lg p-2">
+            <span className="text-muted-foreground">HEX</span>
+            <span className="font-mono text-[10px]">{isOff ? '#000000' : currentHex}</span>
+          </div>
         </div>
 
         {/* 指令状态提示 */}
@@ -830,6 +1103,9 @@ function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
             <span>最后更新</span>
             <span>{formatLastUpdate(actuator.last_update)}</span>
           </div>
+          
+          {/* 设备回馈信息 */}
+          <FeedbackDisplay actuator={actuator} />
         </div>
       </CardContent>
     </Card>
@@ -839,21 +1115,32 @@ function RGBControlCard({ actuator, onValueChange, commandStatus, timeout }: {
 /**
  * 执行器控制卡片组件
  * 根据执行器类型自动选择对应的控制方式
+ * 
+ * onControl 支持两种格式：
+ * 1. 标准格式: onControl(command: 'on' | 'off' | 'value', value?: number)
+ * 2. RGB格式: onControl(cmd: RGBCommand) - 用于RGB-LED设备
  */
 export function ActuatorCard({ actuator, onControl, commandStatus, timeout }: {
   actuator: Actuator
-  onControl: (command: 'on' | 'off' | 'value', value?: number) => void
+  onControl: (command: 'on' | 'off' | 'value' | RGBCommand, value?: number) => void
   commandStatus: CommandStatus
   timeout: number
 }) {
   const controlConfig = getControlConfig(actuator)
 
-  // RGB-LED特殊处理
-  if (actuator.type === 'rgb_led') {
+  // RGB-LED识别逻辑：
+  // 1. 类型是 rgb_led
+  // 2. 或者类型是 light 且 feedback 包含 color 字段（真实 RGB-LED 设备）
+  const isRgbLed = actuator.type === 'rgb_led' || 
+    (actuator.type === 'light' && actuator.feedback && 
+     (actuator.feedback.color || 
+      ('R' in actuator.feedback && 'G' in actuator.feedback && 'B' in actuator.feedback)))
+
+  if (isRgbLed) {
     return (
       <RGBControlCard
         actuator={actuator}
-        onValueChange={(value) => onControl('value', value)}
+        onControl={(cmd) => onControl(cmd)}
         commandStatus={commandStatus}
         timeout={timeout}
       />

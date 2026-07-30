@@ -523,7 +523,7 @@
 
 **接口地址**: `POST /api/actuators/[id]/commands`
 
-**功能说明**: 发送控制指令到指定执行器。
+**功能说明**: 发送控制指令到指定执行器。支持普通控制和RGB-LED扩展控制。
 
 **路径参数**:
 
@@ -531,47 +531,103 @@
 |------|------|------|------|
 | id | string | 是 | 执行器ID |
 
-**请求体**:
-```json
-{
-  "command": "value",
-  "control_type": "integer",
-  "control_value": 75,
-  "mode": "manual"
-}
-```
+**请求字段**:
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| command | string | 是 | 控制命令：on / off / value |
-| control_type | string | 是 | 控制类型：boolean / integer / angle / float / string |
-| control_value | number | 否 | 控制值（command=value时必填） |
+| control_type | string | 是 | 控制类型：boolean / integer / angle / float / string / rgb |
+| command | string | 是 | 控制命令：on / off / value / color / preset |
+| value | number | 否 | 控制值（command=value时使用） |
+| r | number | 否 | 红色通道（command=color时使用，0-255） |
+| g | number | 否 | 绿色通道（command=color时使用，0-255） |
+| b | number | 否 | 蓝色通道（command=color时使用，0-255） |
+| preset | string | 否 | 预设颜色名称（command=preset时使用） |
 | mode | string | 否 | 控制模式：auto / manual |
+
+**请求示例（布尔值控制）**:
+```json
+{
+  "control_type": "boolean",
+  "command": "on"
+}
+```
+
+**请求示例（数值控制）**:
+```json
+{
+  "control_type": "integer",
+  "command": "value",
+  "value": 75
+}
+```
+
+**请求示例（RGB预设颜色）**:
+```json
+{
+  "control_type": "rgb",
+  "command": "value",
+  "value": 1
+}
+```
+
+**请求示例（RGB自定义颜色）**:
+```json
+{
+  "control_type": "rgb",
+  "command": "color",
+  "r": 255,
+  "g": 128,
+  "b": 0
+}
+```
+
+**请求示例（RGB颜色名称）**:
+```json
+{
+  "control_type": "rgb",
+  "command": "preset",
+  "preset": "orange"
+}
+```
+
+**RGB预设颜色对照表**:
+
+| value | 名称 | RGB | 说明 |
+|-------|------|-----|------|
+| 0 | off | (0,0,0) | 关闭 |
+| 1 | red | (255,0,0) | 红色 |
+| 2 | green | (0,255,0) | 绿色 |
+| 3 | blue | (0,0,255) | 蓝色 |
+| 4 | yellow | (255,255,0) | 黄色 |
+| 5 | cyan | (0,255,255) | 青色 |
+| 6 | magenta | (255,0,255) | 品红 |
+| 7 | white | (255,255,255) | 白色 |
+| 8 | orange | (255,127,0) | 橙色 |
+| 9 | purple | (127,0,255) | 紫色 |
 
 **响应示例**:
 ```json
 {
   "success": true,
   "data": {
+    "id": 8392,
     "actuator_id": "MT-1-1001",
     "command": "value",
     "control_value": 75,
-    "control_type": "integer",
     "status": "pending",
-    "sent_via_websocket": false,
-    "timeout": 30
+    "created_at": "2026-07-30T10:30:00.000Z"
   },
-  "message": "OK"
+  "message": "指令已发送，等待硬件执行"
 }
 ```
 
 ---
 
-### 2.9 获取执行器命令历史
+### 2.9 获取执行器命令历史/状态
 
 **接口地址**: `GET /api/actuators/[id]/commands`
 
-**功能说明**: 获取执行器的控制命令历史记录。
+**功能说明**: 获取执行器的控制命令历史记录。支持前端快速查询模式。
 
 **路径参数**:
 
@@ -583,10 +639,40 @@
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| limit | number | 否 | 返回条数，默认20 |
+| frontend | boolean | 否 | 前端查询模式（不传则为硬件端模式） |
+| limit | number | 否 | 返回条数（仅硬件端模式），默认5 |
 | status | string | 否 | 按状态过滤 |
 
-**响应示例**:
+**前端查询模式** (`?frontend=true`):
+- 不执行超时清理（快速响应）
+- 只返回最新一条指令
+- 响应时间：~60ms
+- 用于前端轮询检查命令执行状态
+
+**硬件端查询模式**（不传frontend参数）:
+- 执行超时清理逻辑（清理pending/executing状态超时命令）
+- 解锁超时执行器
+- 返回最近5条指令
+- 响应时间：~140ms
+
+**响应示例（前端查询）**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 123,
+    "actuator_id": "MT-1-1001",
+    "command": "value",
+    "control_value": 75,
+    "status": "executed",
+    "created_at": "2026-07-30T10:30:00.000Z",
+    "executed_at": "2026-07-30T10:30:05.000Z"
+  },
+  "message": "OK"
+}
+```
+
+**响应示例（硬件端查询）**:
 ```json
 {
   "success": true,
@@ -597,11 +683,11 @@
       "command": "value",
       "control_value": 75,
       "status": "executed",
-      "created_at": "2026-07-26T10:30:00.000Z",
-      "executed_at": "2026-07-26T10:30:02.000Z"
+      "created_at": "2026-07-30T10:30:00.000Z",
+      "executed_at": "2026-07-30T10:30:05.000Z"
     }
   ],
-  "total": 50
+  "message": "OK"
 }
 ```
 
@@ -691,7 +777,12 @@
 
 **接口地址**: `PATCH /api/actuators/[id]/commands`
 
-**功能说明**: 硬件端确认控制指令执行结果。
+**功能说明**: 硬件端确认控制指令执行结果（HTTP方式回执）。支持幂等操作，重复回执不会报错。
+
+**幂等处理说明**:
+- 如果命令已是目标状态，直接返回成功
+- 处理WebSocket和HTTP双通道回执的竞态条件
+- 响应时间：~11ms（优化后）
 
 **路径参数**:
 
@@ -699,26 +790,46 @@
 |------|------|------|------|
 | id | string | 是 | 执行器ID |
 
-**请求体**:
-```json
-{
-  "command_id": 123,
-  "status": "executed",
-  "control_value": 75
-}
-```
+**请求字段**:
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | command_id | number | 是 | 命令ID（从查询指令接口获取） |
 | status | string | 是 | 执行状态：executed / failed |
 | control_value | number | 数值控制必填 | 实际执行的控制值 |
+| state | string | 否 | 执行器状态：on / off |
+| color | object | RGB设备必填 | 颜色信息 {r, g, b} |
+| brightness | number | RGB设备可选 | 亮度值 0-100 |
+
+**请求示例（普通执行器）**:
+```json
+{
+  "command_id": 123,
+  "status": "executed",
+  "control_value": 75,
+  "state": "on"
+}
+```
+
+**请求示例（RGB-LED）**:
+```json
+{
+  "command_id": 124,
+  "status": "executed",
+  "state": "on",
+  "color": {"r": 255, "g": 128, "b": 0},
+  "brightness": 60
+}
+```
 
 **响应示例**:
 ```json
 {
   "success": true,
-  "message": "OK"
+  "message": "OK",
+  "command_id": 123,
+  "actuator_id": "MT-1-1001",
+  "status": "executed"
 }
 ```
 

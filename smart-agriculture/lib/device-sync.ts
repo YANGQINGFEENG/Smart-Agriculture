@@ -22,7 +22,7 @@ interface SyncDeviceParams {
   area?: string             // 区域名称（同一IP地址下的设备默认属于同一区域）
   value?: number
   unit: string
-  state?: 'on' | 'off'
+  state?: 'on' | 'off' | 'error'
   mode?: 'auto' | 'manual'
   controlValue?: number     // 执行器控制值（如电机速度、舵机角度）
   controlType?: string      // 执行器控制类型（boolean/integer/angle/float/string）
@@ -36,6 +36,7 @@ interface SyncDeviceParams {
   firmware_version?: string
   signal_strength?: number | null
   battery_level?: number | null
+  feedback?: Record<string, any>  // 设备回馈数据（方向、速度、蜂鸣模式等）
 }
 
 /**
@@ -54,7 +55,7 @@ interface SyncResult {
  * 支持硬件上报的控制类型和控制范围信息
  */
 export async function syncDevice(params: SyncDeviceParams): Promise<SyncResult> {
-  const { gatewayId, farmId, nodeId, type, name, location, area, value, unit, state, mode, controlValue, controlType, controlRange, deviceClass, originalType } = params
+  const { gatewayId, farmId, nodeId, type, name, location, area, value, unit, state, mode, controlValue, controlType, controlRange, deviceClass, originalType, feedback } = params
 
   // 生成统一的设备ID
   const deviceId = generateDeviceId(type, gatewayId, nodeId)
@@ -89,6 +90,7 @@ export async function syncDevice(params: SyncDeviceParams): Promise<SyncResult> 
       controlType: controlType,
       controlRange: controlRange,
       originalType,
+      feedback,  // 传递回馈数据
     })
   } else if (deviceClass === DeviceCategory.UNASSIGNED) {
     // 未分配设备，根据实际类型同步到传感器或执行器表
@@ -122,6 +124,7 @@ export async function syncDevice(params: SyncDeviceParams): Promise<SyncResult> 
         controlType: controlType,
         controlRange: controlRange,
         originalType,
+        feedback,  // 传递回馈数据
       })
     }
   }
@@ -216,6 +219,11 @@ async function syncToSensor(params: {
 /**
  * 同步设备节点到执行器表
  * 支持硬件上报的控制类型和控制范围信息
+ * 
+ * 关键逻辑：
+ * 1. 如果执行器不存在，自动创建（包括类型和执行器记录）
+ * 2. 如果执行器已存在，只更新状态
+ * 3. 如果类型不存在，先创建类型再创建执行器
  */
 async function syncToActuator(params: {
   deviceId: string
@@ -226,7 +234,7 @@ async function syncToActuator(params: {
   name: string
   location: string
   area?: string
-  state: 'on' | 'off'
+  state: 'on' | 'off' | 'error'
   mode: 'auto' | 'manual'
   controlValue?: number
   controlType?: string
@@ -237,8 +245,11 @@ async function syncToActuator(params: {
     default: number
   }
   originalType?: string
+  feedback?: Record<string, any>  // 设备回馈数据
 }): Promise<SyncResult> {
-  const { deviceId, gatewayId, farmId, nodeId, type, name, location, area, state, mode, controlValue, controlType, controlRange, originalType } = params
+  const { deviceId, gatewayId, farmId, nodeId, type, name, location, area, state, mode, controlValue, controlType, controlRange, originalType, feedback } = params
+
+  console.log(`[syncToActuator] 开始同步: deviceId=${deviceId}, type=${type}, name=${name}`)
 
   let isNew = false
 
@@ -250,6 +261,12 @@ async function syncToActuator(params: {
 
   // 获取设备类型配置（用于默认控制类型）
   const deviceConfig = getDeviceTypeConfig(type)
+
+  // 如果配置不存在，记录警告
+  if (!deviceConfig) {
+    console.warn(`[syncToActuator] 警告: 找不到类型配置 type=${type}, 将使用默认配置`)
+  }
+
   const defaultControlType = controlType || deviceConfig?.controlType || 'boolean'
   const rawControlRange = controlRange || deviceConfig?.controlRange || { min: 0, max: 100, step: 1, default: 0 }
   // 确保所有字段都有值，避免undefined
@@ -261,6 +278,8 @@ async function syncToActuator(params: {
   }
 
   if (existingActuator.length === 0) {
+    console.log(`[syncToActuator] 执行器不存在，准备创建新执行器: ${deviceId}`)
+
     // 获取执行器类型ID
     const actuatorTypes = await db.query<any[]>(
       'SELECT id FROM actuator_types WHERE type = ?',
@@ -268,21 +287,25 @@ async function syncToActuator(params: {
     )
 
     if (actuatorTypes.length === 0) {
+      console.log(`[syncToActuator] 执行器类型不存在: type=${type}, 准备创建类型`)
+
       // 如果类型不存在，尝试从device-types字典获取配置并创建
       if (deviceConfig && isActuatorType(type)) {
         await db.execute(
           `INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)`,
           [type, deviceConfig.name, deviceConfig.description || '']
         )
+        console.log(`[syncToActuator] 已创建执行器类型: ${type} (${deviceConfig.name})`)
+
         const newTypes = await db.query<any[]>(
           'SELECT id FROM actuator_types WHERE type = ?',
           [type]
         )
         if (newTypes.length > 0) {
-          // 创建执行器（包含控制类型和控制范围）
+          // 创建执行器（包含控制类型、控制范围和回馈数据）
           await db.execute(
-            `INSERT INTO actuators (id, name, type_id, location, status, state, mode, farm_id, area, control_value, control_type, control_min, control_max, control_step, control_default)
-             VALUES (?, ?, ?, ?, 'online', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO actuators (id, name, type_id, location, status, state, mode, farm_id, area, control_value, control_type, control_min, control_max, control_step, control_default, feedback)
+             VALUES (?, ?, ?, ?, 'online', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               deviceId,
               name,
@@ -297,17 +320,23 @@ async function syncToActuator(params: {
               defaultControlRange.min,
               defaultControlRange.max,
               defaultControlRange.step,
-              defaultControlRange.default
+              defaultControlRange.default,
+              feedback ? JSON.stringify(feedback) : null
             ]
           )
           isNew = true
+          console.log(`[syncToActuator] 已创建执行器: ${deviceId}, type_id=${newTypes[0].id}`)
+        } else {
+          console.error(`[syncToActuator] 错误: 创建类型后无法获取类型ID: type=${type}`)
         }
+      } else {
+        console.error(`[syncToActuator] 错误: 无法创建执行器类型: type=${type}, deviceConfig=${!!deviceConfig}, isActuatorType=${isActuatorType(type)}`)
       }
     } else {
-      // 创建执行器（包含控制类型和控制范围）
+      // 创建执行器（包含控制类型、控制范围和回馈数据）
       await db.execute(
-        `INSERT INTO actuators (id, name, type_id, location, status, state, mode, farm_id, area, control_value, control_type, control_min, control_max, control_step, control_default)
-         VALUES (?, ?, ?, ?, 'online', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO actuators (id, name, type_id, location, status, state, mode, farm_id, area, control_value, control_type, control_min, control_max, control_step, control_default, feedback)
+         VALUES (?, ?, ?, ?, 'online', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           deviceId,
           name,
@@ -322,16 +351,20 @@ async function syncToActuator(params: {
           defaultControlRange.min,
           defaultControlRange.max,
           defaultControlRange.step,
-          defaultControlRange.default
+          defaultControlRange.default,
+          feedback ? JSON.stringify(feedback) : null
         ]
       )
       isNew = true
+      console.log(`[syncToActuator] 已创建执行器: ${deviceId}, type_id=${actuatorTypes[0].id}`)
     }
+  } else {
+    console.log(`[syncToActuator] 执行器已存在: ${deviceId}, 只更新状态`)
   }
 
-  // 更新执行器状态（包含区域信息、控制值、控制类型和控制范围）
+  // 更新执行器状态（包含区域信息、控制值、控制类型、控制范围和回馈数据）
   await db.execute(
-    'UPDATE actuators SET status = ?, state = ?, mode = ?, area = ?, control_value = ?, control_type = ?, control_min = ?, control_max = ?, control_step = ?, control_default = ?, last_update = ? WHERE id = ?',
+    'UPDATE actuators SET status = ?, state = ?, mode = ?, area = ?, control_value = ?, control_type = ?, control_min = ?, control_max = ?, control_step = ?, control_default = ?, feedback = ?, last_update = ? WHERE id = ?',
     [
       'online',
       state,
@@ -343,6 +376,7 @@ async function syncToActuator(params: {
       defaultControlRange.max,
       defaultControlRange.step,
       defaultControlRange.default,
+      feedback ? JSON.stringify(feedback) : null,
       getBeijingTimeForDB(),
       deviceId
     ]
@@ -350,6 +384,8 @@ async function syncToActuator(params: {
 
   // 更新或创建设备节点记录
   await upsertDeviceNode(gatewayId, nodeId, type, name, location, 'actuator', area)
+
+  console.log(`[syncToActuator] 同步完成: deviceId=${deviceId}, isNew=${isNew}`)
 
   return { deviceId, isNew, category: DeviceCategory.ACTUATOR }
 }

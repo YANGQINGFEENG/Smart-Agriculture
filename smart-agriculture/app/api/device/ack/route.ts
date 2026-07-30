@@ -33,23 +33,38 @@ import { getBeijingTimeForDB } from '@/lib/beijing-time'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { gateway_ip, actuator_id, command_id, status, control_value, state } = body
+    console.log(`[ACK] 收到回执请求，原始body:`, JSON.stringify(body))
+    
+    const gateway_ip = body.gateway_ip
+    const actuator_id = body.actuator_id || body.actuatorId
+    const command_id = body.command_id || body.commandId
+    const status = body.status
+    const control_value = body.control_value
+    const state = body.state
+    const color = body.color
+    const brightness = body.brightness
+
+    console.log(`[ACK] 解析参数 - actuator_id: ${actuator_id}, command_id: ${command_id} (类型: ${typeof command_id}), status: ${status}`)
 
     // 验证必要参数
     if (!actuator_id || !command_id || !status || !['executed', 'failed'].includes(status)) {
+      console.log(`[ACK] 参数验证失败 - actuator_id: ${!!actuator_id}, command_id: ${!!command_id}, status: ${status}`)
       return NextResponse.json(
-        { success: false, error: '缺少必要参数：actuator_id、command_id、status（executed/failed）' },
+        { success: false, error: '缺少必要参数：actuator_id、command_id、status（executed/failed）', 
+          received: { actuator_id, command_id, status } },
         { status: 400 }
       )
     }
 
-    console.log(`[ACK] 收到硬件回执 - 网关IP: ${gateway_ip}, 执行器: ${actuator_id}, 命令ID: ${command_id}, 状态: ${status}`)
+    // 将command_id转换为数字类型（如果是字符串的话）
+    const numericCommandId = typeof command_id === 'string' ? parseInt(command_id) : command_id
+    console.log(`[ACK] 收到硬件回执 - 网关IP: ${gateway_ip}, 执行器: ${actuator_id}, 命令ID: ${command_id} (转换后: ${numericCommandId}), 状态: ${status}`)
 
     // 验证命令是否存在且状态为待执行或执行中
     const existingCommand = await db.query<RowDataPacket[]>(
       `SELECT id, command, control_value FROM actuator_commands 
        WHERE id = ? AND actuator_id = ?`,
-      [command_id, actuator_id]
+      [numericCommandId, actuator_id]
     )
 
     if (existingCommand.length === 0) {
@@ -66,7 +81,7 @@ export async function POST(request: NextRequest) {
       `UPDATE actuator_commands 
        SET status = ?, executed_at = ? 
        WHERE id = ? AND actuator_id = ?`,
-      [status, getBeijingTimeForDB(), command_id, actuator_id]
+      [status, getBeijingTimeForDB(), numericCommandId, actuator_id]
     )
 
     // 如果指令执行成功，更新执行器状态
@@ -74,12 +89,46 @@ export async function POST(request: NextRequest) {
       const actualControlValue = control_value !== undefined ? control_value : command.control_value
       const actualState = state || (command.command === 'value' && (actualControlValue || 0) > 0 ? 'on' : (command.command === 'on' ? 'on' : 'off'))
       
+      console.log(`[ACK] 开始更新执行器 - actualState: ${actualState}, actualControlValue: ${actualControlValue}`)
+      
+      // 构建feedback数据（支持RGB扩展格式）
+      const feedbackData: any = { state: actualState }
+      
+      // 添加RGB相关字段
+      if (color) {
+        feedbackData.color = color
+      }
+      if (brightness !== undefined) {
+        feedbackData.brightness = brightness
+      } else if (control_value !== undefined) {
+        feedbackData.brightness = control_value
+      }
+      
+      console.log(`[ACK] feedbackData:`, JSON.stringify(feedbackData))
+      
+      // 序列化feedback为JSON字符串
+      const feedbackJson = JSON.stringify(feedbackData)
+      console.log(`[ACK] feedbackJson:`, feedbackJson)
+      
+      // 更新执行器状态
       await db.execute(
-        'UPDATE actuators SET state = ?, control_value = ?, last_update = ?, locked = 0 WHERE id = ?',
-        [actualState, actualControlValue || null, getBeijingTimeForDB(), actuator_id]
+        `UPDATE actuators 
+         SET state = ?, 
+             control_value = ?, 
+             last_update = ?, 
+             locked = 0,
+             feedback = ?
+         WHERE id = ?`,
+        [
+          actualState, 
+          actualControlValue !== undefined ? actualControlValue : null, 
+          getBeijingTimeForDB(), 
+          feedbackJson,
+          actuator_id
+        ]
       )
-
-      console.log(`[ACK] 执行器 ${actuator_id} 更新成功 - 状态: ${actualState}, 控制值: ${actualControlValue}`)
+      
+      console.log(`[ACK] 执行器 ${actuator_id} 更新成功`)
     } else {
       // 执行失败，解锁执行器
       await db.execute(
@@ -101,7 +150,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'OK',
-      command_id: command_id,
+      command_id: numericCommandId,
       actuator_id: actuator_id,
       status: status,
       timestamp: new Date().toISOString(),
