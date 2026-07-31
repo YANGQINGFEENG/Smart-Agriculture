@@ -363,8 +363,9 @@ async function syncToActuator(params: {
   }
 
   // 更新执行器状态（包含区域信息、控制值、控制类型、控制范围和回馈数据）
+  // 注意：feedback使用COALESCE，设备未上报feedback时保留原值，避免被重置为null
   await db.execute(
-    'UPDATE actuators SET status = ?, state = ?, mode = ?, area = ?, control_value = ?, control_type = ?, control_min = ?, control_max = ?, control_step = ?, control_default = ?, feedback = ?, last_update = ? WHERE id = ?',
+    'UPDATE actuators SET status = ?, state = ?, mode = ?, area = ?, control_value = ?, control_type = ?, control_min = ?, control_max = ?, control_step = ?, control_default = ?, feedback = COALESCE(?, feedback), last_update = ? WHERE id = ?',
     [
       'online',
       state,

@@ -121,6 +121,8 @@ export default function AreasPage() {
   const [commandStatusMap, setCommandStatusMap] = useState<Record<string, CommandStatus>>({})
   // 指令超时定时器映射
   const [timeoutTimers, setTimeoutTimers] = useState<Record<string, ReturnType<typeof setTimeout>>>({})
+  // 当前等待回执的命令ID映射：actuatorId -> commandId
+  const [pendingCommandIds, setPendingCommandIds] = useState<Record<string, number>>({})
   // 展开/折叠状态映射
   const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({})
 
@@ -309,13 +311,30 @@ export default function AreasPage() {
     control_value?: number
     state?: string | null
   }) => {
-    const { actuator_id, status, control_value, state } = data
+    const { actuator_id, command_id, status, control_value, state } = data
+
+    // 检查命令ID是否匹配当前正在等待的命令
+    const expectedCommandId = pendingCommandIds[actuator_id]
+    if (expectedCommandId !== undefined && command_id !== expectedCommandId) {
+      // 不是我们正在等待的命令，跳过
+      console.log(`[WS] 命令ID不匹配，跳过更新: 期望=${expectedCommandId}, 收到=${command_id}`)
+      return
+    }
 
     // 更新指令状态映射
     setCommandStatusMap(prev => ({
       ...prev,
       [actuator_id]: status as CommandStatus
     }))
+
+    // 清理等待的命令ID
+    if (status === 'executed' || status === 'failed' || status === 'timeout') {
+      setPendingCommandIds(prev => {
+        const next = { ...prev }
+        delete next[actuator_id]
+        return next
+      })
+    }
 
     // 如果指令执行成功，更新执行器数据
     if (status === 'executed') {
@@ -485,6 +504,13 @@ export default function AreasPage() {
         [actuatorId]: 'timeout'
       }))
 
+      // 清理等待回执的命令ID
+      setPendingCommandIds(prev => {
+        const next = { ...prev }
+        delete next[actuatorId]
+        return next
+      })
+
       toast({
         title: '控制超时',
         description: '设备未在规定时间内响应，请检查网络连接或重试',
@@ -517,12 +543,22 @@ export default function AreasPage() {
       const actuator = actuators.find(a => a.id === actuatorId)
       if (!actuator) return
 
-      // 判断是否为 RGBCommand 格式
-      const isRgbCommand = typeof command === 'object' && command !== null && 'command' in command
+      // 判断命令格式：
+      // 1. 如果已经包含 control_type 字段，说明已经是完整的 API 请求体，直接使用
+      // 2. 如果是 RGBCommand 格式（包含 command 字段但没有 control_type），需要转换
+      // 3. 否则是标准命令格式（字符串 'on'/'off'/'value'）
+      const isAlreadyFormatted = typeof command === 'object' && command !== null && 'control_type' in command
+      const isRgbCommand = typeof command === 'object' && command !== null && 'command' in command && !('control_type' in command)
+
+      // 调试日志：确认前端代码版本和命令类型
+      console.log('[sendControlCommand] actuatorId:', actuatorId, 'command:', command, 'isAlreadyFormatted:', isAlreadyFormatted, 'isRgbCommand:', isRgbCommand)
 
       let body: any
 
-      if (isRgbCommand) {
+      if (isAlreadyFormatted) {
+        // 已经是完整的 API 请求体格式，直接使用
+        body = command
+      } else if (isRgbCommand) {
         // RGB 命令格式: { command: 'value'|'color'|'preset', value?, r?, g?, b?, preset? }
         const rgbCmd = command
         body = {
@@ -580,23 +616,37 @@ export default function AreasPage() {
       const result = await response.json()
 
       if (result.success) {
-        // 设置指令状态为等待执行
+        const commandId = result.data.id
+
+        // 设置指令状态为等待执行，并保存命令ID
         setCommandStatusMap(prev => ({
           ...prev,
           [actuatorId]: 'pending'
+        }))
+        setPendingCommandIds(prev => ({
+          ...prev,
+          [actuatorId]: commandId
         }))
 
         // 设置超时定时器
         setupTimeoutTimer(actuatorId)
 
-        // 轮询检查指令执行状态
+        // 轮询检查指令执行状态（检查特定命令ID，避免状态混淆）
         const pollInterval = setInterval(async () => {
           try {
             const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
             const statusResult = await statusResponse.json()
 
             if (statusResult.success && statusResult.data) {
-              const cmdStatus = statusResult.data.status
+              const cmdData = statusResult.data
+
+              // 只检查我们刚才发送的命令，避免检测到其他命令的状态
+              if (cmdData.id !== commandId) {
+                // 不是我们的命令，跳过继续轮询
+                return
+              }
+
+              const cmdStatus = cmdData.status
               if (cmdStatus === 'executed') {
                 // 立即更新本地状态，不等待API响应
                 setCommandStatusMap(prev => ({
@@ -605,15 +655,14 @@ export default function AreasPage() {
                 }))
 
                 // 立即在本地更新执行器状态（乐观更新）
-                const executedData = statusResult.data
                 setActuators(prev => prev.map(a => {
                   if (a.id === actuatorId) {
-                    const newState = executedData.command === 'off' ? 'off' :
-                      executedData.command === 'on' ? 'on' : a.state
+                    const newState = cmdData.command === 'off' ? 'off' :
+                      cmdData.command === 'on' ? 'on' : a.state
                     return {
                       ...a,
                       state: newState as 'on' | 'off',
-                      control_value: executedData.control_value ? parseFloat(executedData.control_value) : a.control_value,
+                      control_value: cmdData.control_value ? parseFloat(cmdData.control_value) : a.control_value,
                       last_update: new Date().toISOString(),
                     }
                   }
@@ -627,6 +676,11 @@ export default function AreasPage() {
                   duration: 3000,
                 })
                 clearInterval(pollInterval)
+                setPendingCommandIds(prev => {
+                  const next = { ...prev }
+                  delete next[actuatorId]
+                  return next
+                })
                 // 异步刷新服务器数据（不阻塞UI）
                 fetchActuators()
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
@@ -642,6 +696,11 @@ export default function AreasPage() {
                   duration: 3000,
                 })
                 clearInterval(pollInterval)
+                setPendingCommandIds(prev => {
+                  const next = { ...prev }
+                  delete next[actuatorId]
+                  return next
+                })
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               } else if (cmdStatus === 'timeout') {
                 setCommandStatusMap(prev => ({
@@ -655,6 +714,11 @@ export default function AreasPage() {
                   duration: 3000,
                 })
                 clearInterval(pollInterval)
+                setPendingCommandIds(prev => {
+                  const next = { ...prev }
+                  delete next[actuatorId]
+                  return next
+                })
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               }
             }
@@ -669,7 +733,15 @@ export default function AreasPage() {
               const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
               const statusResult = await statusResponse.json()
               if (statusResult.success && statusResult.data) {
-                const cmdStatus = statusResult.data.status
+                const cmdData = statusResult.data
+
+                // 命令ID验证：确保只处理当前发送的命令，避免获取到旧命令状态
+                if (cmdData.id !== commandId) {
+                  // 不是当前命令，跳过，等待定期轮询处理
+                  return
+                }
+
+                const cmdStatus = cmdData.status
                 if (cmdStatus === 'executed') {
                   // 立即更新本地状态
                   setCommandStatusMap(prev => ({

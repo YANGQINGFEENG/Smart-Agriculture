@@ -22,6 +22,7 @@
 用户操作 → POST /api/actuators/{id}/commands → 写入数据库(pending)
     → HTTP POST http://localhost:8081/send-command → WebSocket推送命令
     → 硬件执行 → WebSocket command_ack回执 → 更新数据库(executed)
+    → 前端轮询检测 → 乐观更新UI → 异步同步
 ```
 
 ### 冗余保障
@@ -63,13 +64,18 @@
       "battery": 95,
       "value": 25.5,
       "unit": "°C",
-      "last_update": "2026-07-26T10:30:00.000Z",
-      "created_at": "2026-07-20T08:00:00.000Z"
+      "last_update": "2026-07-30 18:30:00",
+      "created_at": "2026-07-20 08:00:00"
     }
   ],
   "total": 10
 }
 ```
+
+**设备在线状态说明**：
+- 系统基于 `last_update` 字段判断设备在线状态
+- 如果最后更新时间超过5分钟，状态将显示为 `offline`
+- 计算方式：`(当前时间 - last_update时间) / 1000 / 60 <= 5`
 
 ---
 
@@ -99,7 +105,7 @@
     "area": "温室1号区域",
     "status": "online",
     "battery": 95,
-    "last_update": "2026-07-26T10:30:00.000Z"
+    "last_update": "2026-07-30 18:30:00"
   }
 }
 ```
@@ -132,7 +138,7 @@
 
 **接口地址**: `GET /api/sensors/[id]/data`
 
-**功能说明**: 获取传感器的历史数据记录。
+**功能说明**: 获取传感器的历史数据记录，支持时间范围查询和数据排序。
 
 **路径参数**:
 
@@ -144,9 +150,21 @@
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| limit | number | 否 | 返回数据条数，默认100 |
-| start_time | string | 否 | 开始时间（ISO格式） |
-| end_time | string | 否 | 结束时间（ISO格式） |
+| limit | number | 否 | 返回数据条数，默认100。**注意**：根据时间范围自动计算，长时间范围会自动增加 |
+| start_time | string | 否 | 开始时间（北京时间，格式：YYYY-MM-DD HH:MM:SS） |
+| end_time | string | 否 | 结束时间（北京时间，格式：YYYY-MM-DD HH:MM:SS） |
+| order | string | 否 | 排序方式：`desc`（降序，默认）或 `asc`（升序） |
+
+**时间范围查询说明**：
+- 支持查询任意时间范围的数据
+- 当查询范围超过12小时时，系统会自动增加limit值
+- 计算公式：`limit = max(时间范围小时数 × 120 × 1.5, 300)`
+- 确保长时间范围查询返回足够的数据点
+
+**请求示例**：
+```
+GET /api/sensors/T-1-001/data?start_time=2026-07-30 00:00:00&end_time=2026-07-30 23:59:59&order=asc
+```
 
 **响应示例**:
 ```json
@@ -157,7 +175,7 @@
       "id": 1,
       "sensor_id": "T-1-001",
       "value": 25.5,
-      "timestamp": "2026-07-26T10:30:00.000Z"
+      "timestamp": "2026-07-30 18:30:00"
     }
   ],
   "total": 1000
@@ -255,13 +273,13 @@
 
 **接口地址**: `GET /api/actuators`
 
-**功能说明**: 获取所有执行器设备列表，支持按类型过滤。
+**功能说明**: 获取所有执行器设备列表，支持按类型过滤。返回数据包含feedback字段。
 
 **请求参数**:
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| type | string | 否 | 按执行器类型过滤（如：water_pump, fan） |
+| type | string | 否 | 按执行器类型过滤（如：water_pump, fan, buzzer, rgb_led） |
 | farm_id | number | 否 | 按农场ID过滤 |
 
 **响应示例**:
@@ -288,13 +306,53 @@
       "control_step": 1,
       "control_default": 0,
       "locked": 0,
-      "last_update": "2026-07-26T10:30:00.000Z",
-      "created_at": "2026-07-20T08:00:00.000Z"
+      "feedback": {
+        "state": "on",
+        "control_value": 60,
+        "direction": "forward",
+        "speed": 0.6
+      },
+      "last_update": "2026-07-30 18:30:00",
+      "created_at": "2026-07-20 08:00:00"
+    },
+    {
+      "id": "LT-1-002",
+      "name": "RGB-LED",
+      "type_id": 5,
+      "type": "light",
+      "type_name": "补光灯",
+      "description": "用于RGB颜色控制",
+      "location": "温室中部",
+      "area": "温室1号区域",
+      "status": "online",
+      "state": "on",
+      "mode": "manual",
+      "control_value": 50,
+      "control_type": "integer",
+      "control_min": 0,
+      "control_max": 100,
+      "control_step": 1,
+      "control_default": 0,
+      "locked": 0,
+      "feedback": {
+        "state": "on",
+        "color": {"r": 255, "g": 128, "b": 0},
+        "brightness": 60,
+        "R": 255,
+        "G": 128,
+        "B": 0
+      },
+      "last_update": "2026-07-30 18:30:00",
+      "created_at": "2026-07-20 08:00:00"
     }
   ],
-  "total": 7
+  "total": 9
 }
 ```
+
+**feedback字段说明**：
+- feedback是JSON格式，存储设备特有回馈数据
+- 不同执行器类型的feedback结构不同，详见设备回馈数据说明
 
 ---
 
@@ -325,7 +383,12 @@
     "state": "on",
     "mode": "manual",
     "control_value": 60,
-    "control_type": "integer"
+    "control_type": "integer",
+    "feedback": {
+      "state": "on",
+      "direction": "forward",
+      "speed": 0.6
+    }
   }
 }
 ```
@@ -434,19 +497,46 @@
       "description": "用于RGB颜色控制，支持颜色选择和亮度调节",
       "control_type": "integer",
       "control_range": {"min": 0, "max": 100, "step": 1, "default": 0}
+    },
+    {
+      "id": 6,
+      "type": "buzzer",
+      "name": "蜂鸣器",
+      "description": "用于声音提示，支持多种蜂鸣模式",
+      "control_type": "boolean"
     }
   ],
-  "total": 14
+  "total": 15
 }
 ```
 
-#### 新增执行器类型说明
+#### 全部执行器类型列表
 
-| 类型 | 名称 | 控制类型 | 说明 |
-|------|------|----------|------|
-| relay | 继电器 | boolean | 仅支持开关控制（on/off） |
-| laser | 激光器 | boolean | 仅支持开关控制（on/off） |
-| rgb_led | RGB-LED | integer | 支持0-100数值控制，映射为颜色值 |
+| 类型 | 名称 | 控制类型 | 控制范围 | 说明 |
+|------|------|----------|----------|------|
+| water_pump | 水泵 | boolean | - | 仅支持开关控制（on/off） |
+| fan | 风扇 | integer | 0-100, step:10 | 支持速度调节 |
+| heater | 加热器 | integer | 0-100, step:5 | 支持温度调节 |
+| valve | 电磁阀 | boolean | - | 仅支持开关控制（on/off） |
+| light | 补光灯 | integer | 0-100, step:10 | 支持亮度调节 |
+| ventilator | 通风机 | boolean | - | 仅支持开关控制（on/off） |
+| fogger | 雾化器 | boolean | - | 仅支持开关控制（on/off） |
+| motor | 电机 | integer | 0-100, step:5 | 支持速度调节 |
+| servo | 舵机 | angle | 0-180, step:1 | 支持角度控制 |
+| led | LED灯 | boolean | - | 仅支持开关控制（on/off） |
+| relay | 继电器 | boolean | - | 仅支持开关控制（on/off） |
+| laser | 激光器 | boolean | - | 仅支持开关控制（on/off） |
+| buzzer | 蜂鸣器 | boolean | - | 支持开关控制，可设置蜂鸣模式 |
+| rgb_led | RGB-LED | integer | 0-100 | 支持颜色选择和亮度调节 |
+
+#### 蜂鸣模式说明
+
+| 模式 | 说明 |
+|------|------|
+| alarm | 连续长响 |
+| success | 短响3次 |
+| warning | 长短交替 |
+| click | 单次短响 |
 
 #### RGB-LED颜色值映射规则
 
@@ -523,7 +613,7 @@
 
 **接口地址**: `POST /api/actuators/[id]/commands`
 
-**功能说明**: 发送控制指令到指定执行器。支持普通控制和RGB-LED扩展控制。
+**功能说明**: 发送控制指令到指定执行器。支持普通控制和RGB-LED扩展控制。所有控制命令必须包含 `control_type` 字段。
 
 **路径参数**:
 
@@ -535,8 +625,8 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| control_type | string | 是 | 控制类型：boolean / integer / angle / float / string / rgb |
-| command | string | 是 | 控制命令：on / off / value / color / preset |
+| control_type | string | 是 | 控制类型：boolean / integer / angle / float / string / **rgb** |
+| command | string | 是 | 控制命令：on / off / **value** / **color** / **preset** |
 | value | number | 否 | 控制值（command=value时使用） |
 | r | number | 否 | 红色通道（command=color时使用，0-255） |
 | g | number | 否 | 绿色通道（command=color时使用，0-255） |
@@ -544,7 +634,12 @@
 | preset | string | 否 | 预设颜色名称（command=preset时使用） |
 | mode | string | 否 | 控制模式：auto / manual |
 
-**请求示例（布尔值控制）**:
+**⚠️ 重要提示**：
+- 所有控制命令**必须包含 `control_type` 字段**
+- RGB-LED控制命令**必须使用 `control_type: "rgb"`**
+- 如果缺少 `control_type` 字段，命令将被默认识别为 `boolean` 类型
+
+**请求示例（布尔值控制 - 继电器/水泵/风扇等）**:
 ```json
 {
   "control_type": "boolean",
@@ -552,7 +647,7 @@
 }
 ```
 
-**请求示例（数值控制）**:
+**请求示例（数值控制 - 风扇速度/电机速度等）**:
 ```json
 {
   "control_type": "integer",
@@ -561,7 +656,7 @@
 }
 ```
 
-**请求示例（RGB预设颜色）**:
+**请求示例（RGB-LED预设颜色 - 选择1-9号颜色）**:
 ```json
 {
   "control_type": "rgb",
@@ -570,7 +665,16 @@
 }
 ```
 
-**请求示例（RGB自定义颜色）**:
+**请求示例（RGB-LED白色亮度 - 10-100亮度）**:
+```json
+{
+  "control_type": "rgb",
+  "command": "value",
+  "value": 50
+}
+```
+
+**请求示例（RGB-LED自定义颜色 - RGB三通道）**:
 ```json
 {
   "control_type": "rgb",
@@ -581,7 +685,7 @@
 }
 ```
 
-**请求示例（RGB颜色名称）**:
+**请求示例（RGB-LED颜色名称 - 快捷指令）**:
 ```json
 {
   "control_type": "rgb",
@@ -615,7 +719,7 @@
     "command": "value",
     "control_value": 75,
     "status": "pending",
-    "created_at": "2026-07-30T10:30:00.000Z"
+    "created_at": "2026-07-30 18:30:00"
   },
   "message": "指令已发送，等待硬件执行"
 }
@@ -627,7 +731,7 @@
 
 **接口地址**: `GET /api/actuators/[id]/commands`
 
-**功能说明**: 获取执行器的控制命令历史记录。支持前端快速查询模式。
+**功能说明**: 获取执行器的控制命令历史记录。支持前端快速查询模式和硬件端查询模式。
 
 **路径参数**:
 
@@ -644,29 +748,34 @@
 | status | string | 否 | 按状态过滤 |
 
 **前端查询模式** (`?frontend=true`):
-- 不执行超时清理（快速响应）
-- 只返回最新一条指令
-- 响应时间：~60ms
-- 用于前端轮询检查命令执行状态
+- **用途**：前端轮询检查命令执行状态
+- **特点**：不执行超时清理，快速响应
+- **返回**：只返回最新一条指令
+- **响应时间**：~60ms
+- **命令ID验证**：前端保存上次发送的命令ID，轮询时验证命令ID是否匹配，避免状态混淆
 
 **硬件端查询模式**（不传frontend参数）:
-- 执行超时清理逻辑（清理pending/executing状态超时命令）
-- 解锁超时执行器
-- 返回最近5条指令
-- 响应时间：~140ms
+- **用途**：硬件端轮询获取待执行指令
+- **特点**：执行超时清理逻辑（清理pending/executing状态超时命令），解锁超时执行器
+- **返回**：最近5条指令
+- **响应时间**：~140ms
+
+**⚠️ 重要提示**：
+- 硬件端查询时**不要**传递 `frontend=true` 参数，否则会进入前端快速查询模式
+- 前端查询时**必须**传递 `frontend=true` 参数，否则会执行不必要的超时清理操作
 
 **响应示例（前端查询）**:
 ```json
 {
   "success": true,
   "data": {
-    "id": 123,
+    "id": 8392,
     "actuator_id": "MT-1-1001",
     "command": "value",
     "control_value": 75,
     "status": "executed",
-    "created_at": "2026-07-30T10:30:00.000Z",
-    "executed_at": "2026-07-30T10:30:05.000Z"
+    "created_at": "2026-07-30 18:30:00",
+    "executed_at": "2026-07-30 18:30:05"
   },
   "message": "OK"
 }
@@ -678,18 +787,31 @@
   "success": true,
   "data": [
     {
-      "id": 123,
+      "id": 8392,
       "actuator_id": "MT-1-1001",
       "command": "value",
       "control_value": 75,
       "status": "executed",
-      "created_at": "2026-07-30T10:30:00.000Z",
-      "executed_at": "2026-07-30T10:30:05.000Z"
+      "created_at": "2026-07-30 18:30:00",
+      "executed_at": "2026-07-30 18:30:05"
     }
   ],
   "message": "OK"
 }
 ```
+
+**命令ID跟踪机制说明**：
+
+为避免多命令并发时状态混淆，前端实现命令ID跟踪机制：
+
+1. **发送命令时保存命令ID**：服务器返回命令ID后，前端保存到 `pendingCommandIds` 状态
+   - 格式：`{[actuatorId]: commandId}`
+   
+2. **轮询检查时验证命令ID**：前端轮询获取最新命令后，检查命令ID是否与保存的ID匹配
+   - 如果不匹配，跳过该状态更新（可能是其他命令的回执）
+   - 伪代码：`if (cmdData.id !== commandId) return;`
+
+3. **状态完成后清理命令ID**：命令执行成功/失败/超时后，清除对应的pendingCommandId
 
 ---
 
@@ -699,7 +821,7 @@
 
 **接口地址**: `POST /api/device/report`
 
-**功能说明**: 硬件端上报传感器数据和执行器状态。
+**功能说明**: 硬件端上报传感器数据和执行器状态。支持feedback字段上报设备特有回馈数据。
 
 **请求体**:
 ```json
@@ -719,9 +841,9 @@
       "location": "温室中部"
     },
     {
-      "node_id": "M-1-001",
-      "name": "通风电机",
-      "type": "motor",
+      "node_id": "FN-1-001",
+      "name": "风扇",
+      "type": "fan",
       "state": "on",
       "mode": "manual",
       "control_value": 60,
@@ -732,11 +854,67 @@
         "step": 1,
         "default": 0
       },
+      "feedback": {
+        "state": "on",
+        "direction": "forward",
+        "speed": 0.6,
+        "pins": {"pwm": "PA0"},
+        "initialized": true
+      },
       "location": "温室顶部"
+    },
+    {
+      "node_id": "LT-1-002",
+      "name": "RGB-LED",
+      "type": "light",
+      "state": "on",
+      "mode": "manual",
+      "control_value": 50,
+      "control_type": "rgb",
+      "control_range": {
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 0
+      },
+      "feedback": {
+        "state": "on",
+        "color": {"r": 255, "g": 128, "b": 0},
+        "brightness": 60,
+        "R": 255,
+        "G": 128,
+        "B": 0
+      },
+      "location": "温室中部"
+    },
+    {
+      "node_id": "BZ-1-001",
+      "name": "蜂鸣器",
+      "type": "buzzer",
+      "state": "on",
+      "mode": "manual",
+      "control_value": 3,
+      "control_type": "boolean",
+      "control_range": {
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 0
+      },
+      "feedback": {
+        "state": "on",
+        "control_value": 3,
+        "pattern": "alarm",
+        "command_count": 15,
+        "pin": 12
+      },
+      "location": "控制室"
     }
   ]
 }
 ```
+
+**请求字段说明**:
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -747,11 +925,52 @@
 | area | string | 否 | 区域名称 |
 | nodes | array | 是 | 设备节点数组 |
 
+**nodes数组元素字段说明**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| node_id | string | 是 | 设备节点唯一标识 |
+| name | string | 否 | 设备名称 |
+| type | string | 是 | 设备类型（temperature/humidity/motor/servo/light/fan/buzzer等） |
+| value | number | 传感器必填 | 传感器数值 |
+| unit | string | 否 | 单位 |
+| location | string | 否 | 安装位置 |
+| area | string | 否 | 区域名称（可覆盖网关级区域） |
+| state | string | 执行器必填 | 执行器状态（on/off） |
+| mode | string | 否 | 执行器模式（auto/manual） |
+| control_value | number | 否 | 执行器当前控制值 |
+| control_type | string | 否 | 执行器控制类型 |
+| control_range | object | 否 | 执行器控制参数范围 |
+| **feedback** | **object** | **否** | **设备特有回馈数据** |
+
+**feedback字段详细说明**：
+
+feedback是执行器特有回馈数据，用于存储设备的详细状态信息。不同执行器类型的feedback结构不同：
+
+| 通用字段 | 类型 | 说明 | 适用设备 |
+|---------|------|------|----------|
+| state | string | 当前状态: on/off/error | 所有执行器 |
+| control_value | number | 控制值 | 所有执行器 |
+| direction | string | 旋转方向: forward/backward/stop | 电机、风扇 |
+| speed | number | 当前速度 0.0-1.0 | 电机、风扇 |
+| color | object | RGB颜色 {r,g,b} | RGB-LED |
+| brightness | number | 亮度值 0-100 | RGB-LED、LED |
+| pattern | string | 蜂鸣模式: alarm/success/warning/click | 蜂鸣器 |
+| command_count | number | 命令计数 | 蜂鸣器 |
+| pin | number | GPIO引脚号 | 蜂鸣器 |
+| pins | object | GPIO引脚配置 | 所有执行器 |
+| initialized | boolean | 初始化状态 | 所有执行器 |
+
+**Feedback保留机制**：
+- 设备上报时如果**不包含**feedback字段，服务器会**保留原值**（使用COALESCE函数）
+- 避免设备周期性上报时意外覆盖已存储的feedback数据
+- 仅当设备**主动上报**feedback时才会更新
+
 **响应示例**:
 ```json
 {
   "success": true,
-  "message": "数据上报成功，共处理2个设备节点",
+  "message": "数据上报成功，共处理4个设备节点",
   "gateway_id": 1,
   "area": "温室1号区域",
   "gateway_ip": "192.168.1.100",
@@ -760,14 +979,35 @@
       "node_id": "T-1-001",
       "type": "temperature",
       "success": true,
-      "device_id": "T-1-1001",
+      "device_id": "T-1-001",
       "category": "sensor"
+    },
+    {
+      "node_id": "FN-1-001",
+      "type": "fan",
+      "success": true,
+      "device_id": "FN-1-001",
+      "category": "actuator"
+    },
+    {
+      "node_id": "LT-1-002",
+      "type": "light",
+      "success": true,
+      "device_id": "LT-1-002",
+      "category": "actuator"
+    },
+    {
+      "node_id": "BZ-1-001",
+      "type": "buzzer",
+      "success": true,
+      "device_id": "BZ-1-001",
+      "category": "actuator"
     }
   ],
-  "total_nodes": 2,
-  "success_count": 2,
+  "total_nodes": 4,
+  "success_count": 4,
   "failed_count": 0,
-  "timestamp": "2026-07-26T10:30:00.000Z"
+  "timestamp": "2026-07-30 18:30:00"
 }
 ```
 
@@ -783,6 +1023,12 @@
 - 如果命令已是目标状态，直接返回成功
 - 处理WebSocket和HTTP双通道回执的竞态条件
 - 响应时间：~11ms（优化后）
+
+**双通道回执机制**：
+- 硬件端应同时通过WebSocket和HTTP两种方式发送回执
+- WebSocket通道延迟低（<50ms），作为主通道
+- HTTP PATCH通道作为备份，确保回执可靠接收
+- 两个通道的回执到达顺序不确定，幂等处理确保不会出错
 
 **路径参数**:
 
@@ -801,10 +1047,10 @@
 | color | object | RGB设备必填 | 颜色信息 {r, g, b} |
 | brightness | number | RGB设备可选 | 亮度值 0-100 |
 
-**请求示例（普通执行器）**:
+**请求示例（普通执行器 - 继电器/水泵等）**:
 ```json
 {
-  "command_id": 123,
+  "command_id": 8392,
   "status": "executed",
   "control_value": 75,
   "state": "on"
@@ -814,7 +1060,7 @@
 **请求示例（RGB-LED）**:
 ```json
 {
-  "command_id": 124,
+  "command_id": 8395,
   "status": "executed",
   "state": "on",
   "color": {"r": 255, "g": 128, "b": 0},
@@ -822,13 +1068,24 @@
 }
 ```
 
-**响应示例**:
+**响应示例（首次回执）**:
 ```json
 {
   "success": true,
   "message": "OK",
-  "command_id": 123,
+  "command_id": 8392,
   "actuator_id": "MT-1-1001",
+  "status": "executed",
+  "timestamp": "2026-07-30 18:30:05"
+}
+```
+
+**响应示例（重复回执 - 幂等）**:
+```json
+{
+  "success": true,
+  "message": "命令已是目标状态，跳过更新（幂等）",
+  "command_id": 8392,
   "status": "executed"
 }
 ```
@@ -851,19 +1108,40 @@
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| frontend | boolean | 否 | 前端查询时设为true，返回最新指令状态；硬件端不传递此参数 |
+| frontend | boolean | 否 | 前端查询时设为true，返回最新指令状态；**硬件端不传递此参数** |
 
-**响应示例（有待执行指令）**:
+**⚠️ 重要提示**：
+- 硬件端查询时**不要**传递 `frontend=true` 参数
+- 如果传递了 `frontend=true`，将进入前端快速查询模式，不会将指令状态更新为 `executing`
+
+**响应示例（有待执行指令 - 硬件端查询）**:
 ```json
 {
   "success": true,
   "data": {
-    "id": 123,
+    "id": 8392,
     "actuator_id": "MT-1-1001",
     "command": "value",
     "control_value": 75,
     "status": "executing",
-    "created_at": "2026-07-26T10:30:00.000Z"
+    "created_at": "2026-07-30 18:30:00"
+  },
+  "message": "OK"
+}
+```
+
+**响应示例（有指令 - 前端查询）**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 8392,
+    "actuator_id": "MT-1-1001",
+    "command": "value",
+    "control_value": 75,
+    "status": "executed",
+    "created_at": "2026-07-30 18:30:00",
+    "executed_at": "2026-07-30 18:30:05"
   },
   "message": "OK"
 }
@@ -909,8 +1187,8 @@
       "mac_address": "AA:BB:CC:DD:EE:FF",
       "area": "温室1号区域",
       "status": "online",
-      "last_heartbeat": "2026-07-26T10:30:00.000Z",
-      "created_at": "2026-07-20T08:00:00.000Z"
+      "last_heartbeat": "2026-07-30 18:30:00",
+      "created_at": "2026-07-20 08:00:00"
     }
   ],
   "total": 3
@@ -997,7 +1275,7 @@
       "location": "温室中部",
       "area": "温室1号区域",
       "status": "online",
-      "last_update": "2026-07-26T10:30:00.000Z"
+      "last_update": "2026-07-30 18:30:00"
     }
   ],
   "total": 20
@@ -1028,7 +1306,7 @@
       "max_value": 35,
       "severity": "warning",
       "enabled": 1,
-      "created_at": "2026-07-20T08:00:00.000Z"
+      "created_at": "2026-07-20 08:00:00"
     }
   ],
   "total": 5
@@ -1122,7 +1400,7 @@
       "message": "温度超过阈值：35.5°C",
       "value": 35.5,
       "status": "active",
-      "created_at": "2026-07-26T10:30:00.000Z"
+      "created_at": "2026-07-30 18:30:00"
     }
   ],
   "total": 100
@@ -1151,7 +1429,7 @@
       "enabled": 1,
       "trigger_condition": "temperature > 30",
       "action": "on",
-      "created_at": "2026-07-20T08:00:00.000Z"
+      "created_at": "2026-07-20 08:00:00"
     }
   ],
   "total": 3
@@ -1266,7 +1544,7 @@
       "actuator_id": "FN-001",
       "action": "on",
       "status": "success",
-      "execution_time": "2026-07-26T10:30:00.000Z"
+      "execution_time": "2026-07-30 18:30:00"
     }
   ],
   "total": 200
@@ -1296,7 +1574,7 @@
       "area": 10000,
       "farm_type": "greenhouse",
       "status": "active",
-      "created_at": "2026-07-01T00:00:00.000Z"
+      "created_at": "2026-07-01 00:00:00"
     }
   ],
   "total": 1
@@ -1423,8 +1701,8 @@
   "data": {
     "diagnosis": "可能是早疫病",
     "confidence": 0.85,
-    "causes": [...],
-    "solutions": [...]
+    "causes": [],
+    "solutions": []
   }
 }
 ```
@@ -1458,7 +1736,7 @@
         "bbox": [100, 100, 300, 300]
       }
     ],
-    "created_at": "2026-07-26T10:30:00.000Z"
+    "created_at": "2026-07-30 18:30:00"
   }
 }
 ```
@@ -1517,7 +1795,7 @@
       "category": "种植技术",
       "tags": ["番茄", "种植"],
       "status": "published",
-      "created_at": "2026-07-01T00:00:00.000Z"
+      "created_at": "2026-07-01 00:00:00"
     }
   ],
   "total": 50
@@ -1693,7 +1971,7 @@
       "description": "通用农业AI助手提示词模板",
       "status": "active",
       "version": 1,
-      "created_at": "2026-07-01T00:00:00.000Z"
+      "created_at": "2026-07-01 00:00:00"
     }
   ],
   "total": 5
@@ -1759,7 +2037,7 @@ ws://localhost:8080?actuator_id={执行器ID}
 | actuator_status | 服务器→客户端 | 执行器状态更新 |
 | command | 服务器→客户端 | 控制指令推送（实时） |
 | command_ack | 客户端→服务器 | 命令回执（硬件端执行完成后发送） |
-| command_status | 服务器→客户端 | 命令状态更新 |
+| command_status | 服务器→客户端 | 命令状态更新（通知前端） |
 | area_update | 服务器→客户端 | 区域数据更新 |
 | area_sync | 客户端→服务器 | 订阅区域数据 |
 | device_register | 客户端→服务器 | 设备注册 |
@@ -1778,16 +2056,28 @@ ws://localhost:8080?actuator_id={执行器ID}
        ←-- heartbeat_ack --
 ```
 
-#### 2. 命令推送
+#### 2. 普通命令推送（布尔值控制）
 ```
-服务器 → {"type":"command","data":{"id":8222,"actuator_id":"VL-1-001","command":"on","control_value":null}} → 硬件端
-硬件端 → {"type":"command_ack","actuator_id":"VL-1-001","command_id":8222,"status":"executed"} → 服务器
+服务器 → {"type":"command","data":{"id":8392,"actuator_id":"VL-1-001","command":"on","control_value":null,"control_type":"boolean"}} → 硬件端
+硬件端 → {"type":"command_ack","data":{"command_id":8392,"actuator_id":"VL-1-001","status":"executed","state":"on"}} → 服务器
 ```
 
-#### 3. 数值命令推送
+#### 3. 数值命令推送（风扇/电机）
 ```
-服务器 → {"type":"command","data":{"id":8223,"actuator_id":"LT-1-002","command":"value","control_value":5}} → 硬件端
-硬件端 → {"type":"command_ack","actuator_id":"LT-1-002","command_id":8223,"status":"executed","control_value":5} → 服务器
+服务器 → {"type":"command","data":{"id":8393,"actuator_id":"FN-1-001","command":"value","control_value":75,"control_type":"integer"}} → 硬件端
+硬件端 → {"type":"command_ack","data":{"command_id":8393,"actuator_id":"FN-1-001","status":"executed","control_value":75,"state":"on"}} → 服务器
+```
+
+#### 4. RGB命令推送（预设颜色）
+```
+服务器 → {"type":"command","data":{"id":8395,"actuator_id":"LT-1-002","command":"value","control_value":1,"control_type":"rgb"}} → 硬件端
+硬件端 → {"type":"command_ack","data":{"command_id":8395,"actuator_id":"LT-1-002","status":"executed","state":"on","color":{"r":255,"g":0,"b":0},"brightness":100,"control_value":1}} → 服务器
+```
+
+#### 5. RGB命令推送（自定义颜色）
+```
+服务器 → {"type":"command","data":{"id":8396,"actuator_id":"LT-1-002","command":"color","control_value":null,"control_type":"rgb","command_data":{"r":255,"g":128,"b":0}}} → 硬件端
+硬件端 → {"type":"command_ack","data":{"command_id":8396,"actuator_id":"LT-1-002","status":"executed","state":"on","color":{"r":255,"g":128,"b":0},"brightness":60,"control_value":50}} → 服务器
 ```
 
 ### 11.4 消息格式详解
@@ -1807,31 +2097,67 @@ ws://localhost:8080?actuator_id={执行器ID}
 }
 ```
 
-#### command（命令推送）
+#### command（命令推送 - 服务器→硬件端）
 **服务器发送**:
 ```json
 {
   "type": "command",
   "data": {
-    "id": 8222,
+    "id": 8392,
     "actuator_id": "VL-1-001",
     "command": "on",
     "control_value": null,
     "control_type": "boolean",
-    "created_at": "2026-07-27T18:00:00.000Z"
+    "command_data": null,
+    "created_at": "2026-07-30 18:30:00"
   }
 }
 ```
 
-#### command_ack（命令回执）
-**硬件端发送**:
+**RGB命令推送示例**:
+```json
+{
+  "type": "command",
+  "data": {
+    "id": 8395,
+    "actuator_id": "LT-1-002",
+    "command": "value",
+    "control_value": 1,
+    "control_type": "rgb",
+    "command_data": null,
+    "created_at": "2026-07-30 18:30:00"
+  }
+}
+```
+
+#### command_ack（命令回执 - 硬件端→服务器）
+**普通执行器回执**:
 ```json
 {
   "type": "command_ack",
-  "actuator_id": "VL-1-001",
-  "command_id": 8222,
-  "status": "executed",
-  "control_value": null
+  "data": {
+    "command_id": 8392,
+    "actuator_id": "VL-1-001",
+    "status": "executed",
+    "control_value": null,
+    "state": "on"
+  }
+}
+```
+
+**RGB-LED回执**:
+```json
+{
+  "type": "command_ack",
+  "data": {
+    "command_id": 8395,
+    "actuator_id": "LT-1-002",
+    "status": "executed",
+    "control_value": 1,
+    "state": "on",
+    "color": {"r": 255, "g": 0, "b": 0},
+    "brightness": 100
+  }
 }
 ```
 
@@ -1840,106 +2166,82 @@ ws://localhost:8080?actuator_id={执行器ID}
 | executed | 执行成功 |
 | failed | 执行失败 |
 
-### 11.5 HTTP转发接口（端口8081）
+---
 
-WebSocket服务器提供HTTP转发接口，允许其他服务通过HTTP请求发送命令：
+## 十二、性能与延迟说明
 
-#### 发送命令
-**接口地址**: `POST http://localhost:8081/send-command`
+### 控制指令延迟分析
 
-**请求体**:
-```json
-{
-  "actuator_id": "VL-1-001",
-  "command": {
-    "id": 8222,
-    "actuator_id": "VL-1-001",
-    "command": "on",
-    "control_value": null
-  }
-}
-```
+| 阶段 | 延迟 | 说明 |
+|------|------|------|
+| 命令创建 | ~50ms | 服务器创建指令并存储到数据库 |
+| 命令推送 | <50ms | WebSocket实时推送到硬件端（如果连接在线） |
+| 硬件执行 | 视硬件而定 | 通常<100ms |
+| 硬件回执 | <50ms | 硬件通过WebSocket或HTTP发送回执 |
+| 服务器处理回执 | ~11ms | 服务器更新数据库状态，更新执行器feedback |
+| 前端轮询检测 | ~60ms | 前端通过 `?frontend=true` 快速查询模式获取最新状态 |
+| **乐观更新显示** | **~300ms** | 用户感知到的总延迟 |
 
-**响应示例**:
-```json
-{
-  "success": true,
-  "sent": true
-}
-```
+### 查询模式对比
 
-#### 获取连接状态
-**接口地址**: `GET http://localhost:8081/status`
+| 模式 | 参数 | 用途 | 响应时间 | 说明 |
+|------|------|------|----------|------|
+| 前端快速查询 | `?frontend=true` | 前端轮询 | ~60ms | 不执行超时清理，快速返回最新状态 |
+| 硬件端查询 | 不传参数 | 硬件端轮询 | ~140ms | 执行超时清理逻辑，返回最近5条指令 |
 
-**响应示例**:
-```json
-{
-  "success": true,
-  "connections": {
-    "devices": 0,
-    "actuators": 3,
-    "gateways": 0,
-    "areas": 0
-  }
-}
-```
+### 优化措施
 
-### 11.6 订阅区域示例
+1. **分离查询模式**：前端查询跳过超时清理逻辑，大幅降低响应时间
+2. **乐观更新机制**：检测到 `executed` 状态时立即更新本地UI，无需等待服务器数据同步
+3. **命令ID跟踪**：精确验证命令ID，避免多命令并发时状态混淆
+4. **双通道回执**：WebSocket + HTTP双通道同时发送回执，确保至少一个通道能及时到达
+5. **300ms轮询间隔**：优化前端轮询间隔，在保证性能的同时快速响应状态变化
 
-**客户端发送**:
-```json
-{
-  "type": "area_sync",
-  "data": {
-    "area": "温室1号区域"
-  }
-}
-```
+### 影响及时性的因素
 
-### 11.7 降级机制
-
-当WebSocket连接断开时，系统自动切换到HTTP轮询模式：
-
-1. **WebSocket在线**: 命令通过WebSocket实时推送（延迟<500ms）
-2. **WebSocket断开**: 硬件端使用HTTP轮询获取待执行指令（默认每10秒）
-3. **自动重连**: 硬件端实现指数退避重连策略，恢复WebSocket连接后自动切换回实时推送
-
-### 11.8 超时机制
-
-- 控制指令发送后，服务器等待30秒回执
-- 超时未收到回执，标记为`timeout`并提醒用户
-- 超时后执行器自动解锁，允许重新发送指令
+- **WebSocket连接状态**：如果WebSocket断开，命令推送将使用HTTP转发，延迟会增加
+- **硬件处理速度**：硬件端的执行速度直接影响回执时间
+- **网络延迟**：服务器与硬件之间的网络延迟
+- **数据库性能**：MySQL的查询和更新性能
 
 ---
 
-## 十二、错误码说明
+## 十三、附录
 
-| 错误码 | 说明 |
-|--------|------|
-| 200 | 请求成功 |
-| 400 | 请求参数错误 |
-| 401 | 未授权 |
-| 404 | 资源不存在 |
-| 405 | 方法不允许 |
-| 500 | 服务器内部错误 |
+### 数据库表结构关键字段
 
-### 错误响应格式
+#### actuators 表（执行器设备）
 
-```json
-{
-  "success": false,
-  "error": "错误描述",
-  "details": "详细错误信息"
-}
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | VARCHAR(50) | 执行器ID（主键），格式：{PREFIX}-{gatewayId}-{nodeId} |
+| control_type | VARCHAR(20) | 控制类型：boolean/integer/angle/float/string |
+| feedback | JSON | 设备回馈数据（状态、方向、速度、颜色等） |
+| locked | TINYINT | 锁定状态（0=未锁定，1=锁定） |
+
+#### actuator_commands 表（控制指令）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT | 指令ID（主键，自增） |
+| actuator_id | VARCHAR(50) | 执行器ID |
+| command | VARCHAR(20) | 控制命令：on/off/value/color/preset |
+| control_value | DECIMAL(10,2) | 控制值 |
+| status | VARCHAR(20) | 指令状态：pending/executing/executed/failed/timeout |
+| command_data | JSON | 扩展命令数据（RGB控制参数等） |
+
+### 指令状态流转
+
+```
+pending → executing → executed
+                    → failed
+                    → timeout
 ```
 
----
-
-## 十三、注意事项
-
-1. **数据格式**: 所有请求和响应均使用JSON格式
-2. **编码格式**: 使用UTF-8编码
-3. **时间格式**: 统一使用ISO 8601格式（如：2026-07-26T10:30:00.000Z）
-4. **频率限制**: 建议API调用频率不超过60次/分钟
-5. **硬件上报**: 建议设备上报间隔不小于10秒
-6. **数据库**: 支持SQLite和MySQL两种数据库，通过`DATABASE_TYPE`环境变量切换
+| 状态 | 说明 |
+|------|------|
+| pending | 待执行（已创建，等待推送/执行） |
+| executing | 执行中（已推送到硬件，等待回执） |
+| executed | 已执行（收到硬件回执确认） |
+| failed | 执行失败（硬件返回失败） |
+| timeout | 超时（30秒未收到回执） |

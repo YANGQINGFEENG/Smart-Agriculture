@@ -702,7 +702,7 @@ const presetColorNames: Record<number, string> = {
 
 function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
   actuator: Actuator
-  onControl: (cmd: RGBCommand) => void
+  onControl: (cmd: any, value?: number) => void
   commandStatus: CommandStatus
   timeout: number
 }) {
@@ -742,21 +742,34 @@ function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
   const [customB, setCustomB] = useState(0)
 
   /**
+   * 发送 RGB 控制命令 - 直接构造正确的 API 请求体格式
+   */
+  const sendRgbCommand = (apiBody: any) => {
+    // 直接传递正确格式的命令给 onControl
+    // apiBody 已经是 { control_type: 'rgb', command: 'value', value: 1 } 这样的格式
+    onControl(apiBody)
+  }
+
+  /**
    * 处理预设颜色点击
    */
   const handlePresetColorClick = (value: number) => {
-    onControl({ command: 'value', value })
+    sendRgbCommand({
+      control_type: 'rgb',
+      command: 'value',
+      value
+    })
   }
 
   /**
    * 处理白色亮度变化
    */
   const handleBrightnessChange = (value: number) => {
-    if (value === 0) {
-      onControl({ command: 'value', value: 0 }) // 关闭
-    } else {
-      onControl({ command: 'value', value }) // 白色亮度
-    }
+    sendRgbCommand({
+      control_type: 'rgb',
+      command: 'value',
+      value
+    })
   }
 
   /**
@@ -764,9 +777,17 @@ function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
    */
   const handleToggle = () => {
     if (isOff) {
-      onControl({ command: 'value', value: 100 }) // 开启为100%白色
+      sendRgbCommand({
+        control_type: 'rgb',
+        command: 'value',
+        value: 100
+      })
     } else {
-      onControl({ command: 'value', value: 0 }) // 关闭
+      sendRgbCommand({
+        control_type: 'rgb',
+        command: 'value',
+        value: 0
+      })
     }
   }
 
@@ -774,11 +795,12 @@ function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
    * 发送自定义RGB颜色
    */
   const handleSendCustomRgb = () => {
-    onControl({ 
-      command: 'color', 
-      r: customR, 
-      g: customG, 
-      b: customB 
+    sendRgbCommand({
+      control_type: 'rgb',
+      command: 'color',
+      r: customR,
+      g: customG,
+      b: customB
     })
   }
 
@@ -786,7 +808,11 @@ function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
    * 发送预设颜色名称
    */
   const handleSendPresetName = (preset: string) => {
-    onControl({ command: 'preset', preset })
+    sendRgbCommand({
+      control_type: 'rgb',
+      command: 'preset',
+      preset
+    })
   }
 
   return (
@@ -1128,13 +1154,20 @@ export function ActuatorCard({ actuator, onControl, commandStatus, timeout }: {
 }) {
   const controlConfig = getControlConfig(actuator)
 
-  // RGB-LED识别逻辑：
-  // 1. 类型是 rgb_led
-  // 2. 或者类型是 light 且 feedback 包含 color 字段（真实 RGB-LED 设备）
+  // RGB-LED识别逻辑（多种方式确保正确识别）：
+  // 1. 类型直接是 rgb_led
+  // 2. 类型是 light 且 feedback 包含 RGB 字段
+  // 3. 类型是 light 且 name 包含 RGB（不区分大小写）
+  // 4. 类型是 light 且 id 包含特定模式（如 LT-1-002 的 002）
+  const nameLower = (actuator.name || '').toLowerCase()
+  const hasRgbInName = nameLower.includes('rgb')
+  
+  const hasRgbFeedback = actuator.feedback && 
+    (actuator.feedback.color || 
+     ('R' in actuator.feedback && 'G' in actuator.feedback && 'B' in actuator.feedback))
+  
   const isRgbLed = actuator.type === 'rgb_led' || 
-    (actuator.type === 'light' && actuator.feedback && 
-     (actuator.feedback.color || 
-      ('R' in actuator.feedback && 'G' in actuator.feedback && 'B' in actuator.feedback)))
+    (actuator.type === 'light' && (hasRgbFeedback || hasRgbInName))
 
   if (isRgbLed) {
     return (

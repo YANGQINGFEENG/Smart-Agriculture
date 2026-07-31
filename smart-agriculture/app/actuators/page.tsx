@@ -44,6 +44,8 @@ export default function ActuatorsPage() {
   const [commandStatusMap, setCommandStatusMap] = useState<Record<string, CommandStatus>>({})
   // 指令超时定时器映射：actuatorId -> timerId
   const [timeoutTimers, setTimeoutTimers] = useState<Record<string, ReturnType<typeof setTimeout>>>({})
+  // 当前等待回执的命令ID映射：actuatorId -> commandId
+  const [pendingCommandIds, setPendingCommandIds] = useState<Record<string, number>>({})
 
   /**
    * 更新当前时间
@@ -149,36 +151,74 @@ export default function ActuatorsPage() {
 
   /**
    * 发送控制指令
+   * 支持三种命令格式：
+   * 1. 已格式化的API请求体（包含control_type字段，RGBControlCard直接构造）
+   * 2. RGB命令格式（包含command字段但没有control_type）
+   * 3. 标准命令格式（字符串 'on'/'off'/'value'）
    */
-  const sendControlCommand = async (actuatorId: string, command: 'on' | 'off' | 'value', value?: number) => {
+  const sendControlCommand = async (actuatorId: string, command: any, value?: number) => {
     // 设置指令状态为发送中
     setCommandStatusMap(prev => ({
       ...prev,
       [actuatorId]: 'sending'
     }))
-    
+
     try {
       const actuator = actuators.find(a => a.id === actuatorId)
       if (!actuator) return
-      
-      const config = getDeviceTypeConfig(actuator.type)
-      const controlType = config?.controlType || ControlType.BOOLEAN
-      
-      const body: any = {
-        control_type: controlType,
-        command: command === 'value' ? 'value' : command,
+
+      // 判断命令格式
+      const isAlreadyFormatted = typeof command === 'object' && command !== null && 'control_type' in command
+      const isRgbCommand = typeof command === 'object' && command !== null && 'command' in command && !('control_type' in command)
+
+      let body: any
+
+      if (isAlreadyFormatted) {
+        // 已经是完整的 API 请求体格式（RGBControlCard直接构造），直接使用
+        body = command
+      } else if (isRgbCommand) {
+        // RGB 命令格式转换
+        const rgbCmd = command
+        body = {
+          control_type: 'rgb',
+          command: rgbCmd.command,
+        }
+        if (rgbCmd.command === 'value' && rgbCmd.value !== undefined) {
+          body.value = rgbCmd.value
+        } else if (rgbCmd.command === 'color') {
+          body.r = rgbCmd.r || 0
+          body.g = rgbCmd.g || 0
+          body.b = rgbCmd.b || 0
+        } else if (rgbCmd.command === 'preset') {
+          body.preset = rgbCmd.preset
+        }
+      } else {
+        // 标准命令格式: ('on' | 'off' | 'value', value?)
+        const strCommand = command as 'on' | 'off' | 'value'
+        const config = getDeviceTypeConfig(actuator.type)
+        const controlType = actuator.control_type || config?.controlType || ControlType.BOOLEAN
+
+        // 对于布尔控制类型，确保command只能是on或off
+        let finalCommand = strCommand
+        if ((controlType === 'boolean' || controlType === ControlType.BOOLEAN) && strCommand === 'value') {
+          finalCommand = value && value > 0 ? 'on' : 'off'
+        }
+
+        body = {
+          control_type: typeof controlType === 'string' ? controlType : 'boolean',
+          command: finalCommand,
+        }
+
+        if (value !== undefined && (controlType === 'integer' || controlType === 'angle' || controlType === 'float')) {
+          body.value = typeof value === 'number' ? value : parseFloat(value)
+        }
+
+        if (config?.controlRange) {
+          body.min = config.controlRange.min
+          body.max = config.controlRange.max
+        }
       }
-      
-      if (value !== undefined) {
-        body.value = value
-      }
-      
-      // 如果有控制范围配置，添加到请求中
-      if (config?.controlRange) {
-        body.min = config.controlRange.min
-        body.max = config.controlRange.max
-      }
-      
+
       const response = await fetch(`/api/actuators/${actuatorId}/commands`, {
         method: 'POST',
         headers: {
@@ -186,34 +226,69 @@ export default function ActuatorsPage() {
         },
         body: JSON.stringify(body),
       })
-      
+
       const result = await response.json()
-      
+
       if (result.success) {
-        // 设置指令状态为等待执行
+        const commandId = result.data.id
+
+        // 设置指令状态为等待执行，并保存命令ID
         setCommandStatusMap(prev => ({
           ...prev,
           [actuatorId]: 'pending'
         }))
-        
+        setPendingCommandIds(prev => ({
+          ...prev,
+          [actuatorId]: commandId
+        }))
+
         // 设置超时定时器
         setupTimeoutTimer(actuatorId)
-        
-        // 轮询检查指令执行状态
+
+        // 轮询检查指令执行状态（检查特定命令ID，避免状态混淆）
         const pollInterval = setInterval(async () => {
           try {
-            const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands`)
+            const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
             const statusResult = await statusResponse.json()
-            
+
             if (statusResult.success && statusResult.data) {
-              const cmdStatus = statusResult.data.status
+              const cmdData = statusResult.data
+
+              // 只检查当前发送的命令，避免检测到其他命令的状态
+              if (cmdData.id !== commandId) {
+                return
+              }
+
+              const cmdStatus = cmdData.status
               if (cmdStatus === 'executed') {
                 setCommandStatusMap(prev => ({
                   ...prev,
                   [actuatorId]: 'executed'
                 }))
+
+                // 乐观更新：立即更新本地执行器状态
+                setActuators(prev => prev.map(a => {
+                  if (a.id === actuatorId) {
+                    const newState = cmdData.command === 'off' ? 'off' :
+                      cmdData.command === 'on' ? 'on' : a.state
+                    return {
+                      ...a,
+                      state: newState as 'on' | 'off',
+                      control_value: cmdData.control_value ? parseFloat(cmdData.control_value) : a.control_value,
+                      last_update: new Date().toISOString(),
+                    }
+                  }
+                  return a
+                }))
+
                 clearInterval(pollInterval)
-                await fetchActuators()
+                setPendingCommandIds(prev => {
+                  const next = { ...prev }
+                  delete next[actuatorId]
+                  return next
+                })
+                // 异步刷新服务器数据
+                fetchActuators()
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               } else if (cmdStatus === 'failed') {
                 setCommandStatusMap(prev => ({
@@ -221,6 +296,11 @@ export default function ActuatorsPage() {
                   [actuatorId]: 'failed'
                 }))
                 clearInterval(pollInterval)
+                setPendingCommandIds(prev => {
+                  const next = { ...prev }
+                  delete next[actuatorId]
+                  return next
+                })
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               } else if (cmdStatus === 'timeout') {
                 setCommandStatusMap(prev => ({
@@ -228,20 +308,62 @@ export default function ActuatorsPage() {
                   [actuatorId]: 'timeout'
                 }))
                 clearInterval(pollInterval)
+                setPendingCommandIds(prev => {
+                  const next = { ...prev }
+                  delete next[actuatorId]
+                  return next
+                })
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               }
             }
           } catch (error) {
             console.error('轮询指令状态失败:', error)
-            clearInterval(pollInterval)
           }
-        }, 2000)
-        
+        }, 300)
+
+        // 立即执行第一次轮询（带命令ID验证）
+        ;(async () => {
+          try {
+            const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
+            const statusResult = await statusResponse.json()
+            if (statusResult.success && statusResult.data) {
+              const cmdData = statusResult.data
+              // 命令ID验证
+              if (cmdData.id !== commandId) return
+              const cmdStatus = cmdData.status
+              if (cmdStatus === 'executed') {
+                setCommandStatusMap(prev => ({ ...prev, [actuatorId]: 'executed' }))
+                setActuators(prev => prev.map(a => {
+                  if (a.id === actuatorId) {
+                    const newState = cmdData.command === 'off' ? 'off' :
+                      cmdData.command === 'on' ? 'on' : a.state
+                    return { ...a, state: newState as 'on' | 'off',
+                      control_value: cmdData.control_value ? parseFloat(cmdData.control_value) : a.control_value,
+                      last_update: new Date().toISOString() }
+                  }
+                  return a
+                }))
+                clearInterval(pollInterval)
+                setPendingCommandIds(prev => { const next = { ...prev }; delete next[actuatorId]; return next })
+                fetchActuators()
+                setTimeout(() => clearCommandStatus(actuatorId), 3000)
+              } else if (cmdStatus === 'failed') {
+                setCommandStatusMap(prev => ({ ...prev, [actuatorId]: 'failed' }))
+                clearInterval(pollInterval)
+                setPendingCommandIds(prev => { const next = { ...prev }; delete next[actuatorId]; return next })
+                setTimeout(() => clearCommandStatus(actuatorId), 3000)
+              }
+            }
+          } catch (error) {
+            // 忽略错误，等待定期轮询
+          }
+        })()
+
         // 设置轮询超时
         setTimeout(() => {
           clearInterval(pollInterval)
         }, COMMAND_TIMEOUT_SECONDS * 1000 + 2000)
-        
+
       } else {
         setCommandStatusMap(prev => ({
           ...prev,
