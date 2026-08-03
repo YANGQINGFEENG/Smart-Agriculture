@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, RowDataPacket } from '@/lib/db'
-import mysql from 'mysql2/promise'
-
-const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'smart_agriculture'
-}
+import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { OLLAMA_HOST, AI_DIAGNOSIS_MODEL, AI_DIAGNOSIS_TIMEOUT } from '@/lib/ai-config'
 
 interface SensorData extends RowDataPacket {
   sensor_id: string
@@ -62,12 +55,10 @@ async function getLatestSensorData(): Promise<SensorData[]> {
  */
 async function getLatestDetectionResults(): Promise<DetectionResult[]> {
   try {
-    const connection = await mysql.createConnection(dbConfig)
-    const [rows] = await connection.execute(
-      'SELECT * FROM image_recognition_history ORDER BY timestamp DESC LIMIT 5'
+    const rows = await db.query<DetectionResult[]>(
+      'SELECT id, image_url, result, confidence, timestamp FROM image_recognition_history ORDER BY timestamp DESC LIMIT 5'
     )
-    await connection.end()
-    return rows as DetectionResult[]
+    return rows
   } catch (error) {
     console.error('获取图片识别结果失败:', error)
     return []
@@ -145,7 +136,7 @@ ${detectionText || '暂无图片识别数据'}
 
 请进行综合诊断分析。`
 
-    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
+    const ollamaHost = OLLAMA_HOST
     const apiUrl = `${ollamaHost}/api/chat`
 
     let response: Response
@@ -156,14 +147,14 @@ ${detectionText || '暂无图片识别数据'}
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'qwen3:1.7b-q4_K_M',
+          model: AI_DIAGNOSIS_MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
           ],
           stream: false
         }),
-        signal: AbortSignal.timeout(120000) // 2分钟超时
+        signal: AbortSignal.timeout(AI_DIAGNOSIS_TIMEOUT) // 可配置超时
       })
     } catch (fetchError: any) {
       if (fetchError.name === 'TimeoutError' || fetchError.cause?.code === 'UND_ERR_HEADERS_TIMEOUT') {
@@ -278,6 +269,27 @@ ${detectionText || '暂无图片识别数据'}
     console.log(`  摘要长度: ${d.summary.length} 字符`)
     console.log('===========================================')
 
+    // 保存诊断历史
+    try {
+      await db.execute(
+        `INSERT INTO ai_diagnosis_logs (summary, sensor_analysis, issues, suggestions, actions, sensor_count, detection_count, model)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          d.summary,
+          JSON.stringify(d.sensorAnalysis || []),
+          JSON.stringify(d.issues || []),
+          JSON.stringify(d.suggestions || []),
+          JSON.stringify(d.actions || []),
+          sensorData.length,
+          detectionResults.length,
+          result.model || AI_DIAGNOSIS_MODEL,
+        ]
+      )
+    } catch (dbErr) {
+      // 诊断历史保存失败不影响主流程
+      console.warn('[Diagnosis] 诊断历史保存失败（表可能不存在）:', dbErr instanceof Error ? dbErr.message : dbErr)
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -301,6 +313,52 @@ ${detectionText || '暂无图片识别数据'}
         error: 'AI诊断失败',
         details: error instanceof Error ? error.message : '未知错误'
       },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * GET /api/ai/diagnosis
+ * 获取诊断历史记录
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50)
+
+    const rows = await db.query<RowDataPacket[]>(
+      'SELECT id, summary, sensor_analysis, issues, suggestions, actions, sensor_count, detection_count, model, created_at FROM ai_diagnosis_logs ORDER BY created_at DESC LIMIT ?',
+      [limit]
+    )
+
+    const history = rows.map((row) => {
+      let sensorAnalysis: any[] = []
+      let issues: string[] = []
+      let suggestions: string[] = []
+      let actions: string[] = []
+      try { sensorAnalysis = JSON.parse(row.sensor_analysis as string || '[]') } catch { /* ignore */ }
+      try { issues = JSON.parse(row.issues as string || '[]') } catch { /* ignore */ }
+      try { suggestions = JSON.parse(row.suggestions as string || '[]') } catch { /* ignore */ }
+      try { actions = JSON.parse(row.actions as string || '[]') } catch { /* ignore */ }
+      return {
+        id: row.id,
+        summary: row.summary,
+        sensor_analysis: sensorAnalysis,
+        issues,
+        suggestions,
+        actions,
+        sensor_count: row.sensor_count,
+        detection_count: row.detection_count,
+        model: row.model,
+        created_at: row.created_at,
+      }
+    })
+
+    return NextResponse.json({ success: true, data: { history, total: history.length } })
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: '获取诊断历史失败' },
       { status: 500 }
     )
   }

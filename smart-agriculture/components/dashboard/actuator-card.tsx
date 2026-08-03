@@ -30,8 +30,10 @@ import {
   Palette,
   Volume2,
   Star,
+  Camera,
 } from "lucide-react"
 import { ControlType, getDeviceTypeConfig } from "@/lib/device-types"
+import { CameraControlCard, CameraCommand } from "./camera-card"
 
 /**
  * 执行器数据接口
@@ -82,6 +84,7 @@ const actuatorIcons: Record<string, typeof Power> = {
   laser: Crosshair,
   buzzer: Volume2,
   rgb_led: Palette,
+  camera: Camera,
 }
 
 /**
@@ -1141,18 +1144,33 @@ function RGBControlCard({ actuator, onControl, commandStatus, timeout }: {
 /**
  * 执行器控制卡片组件
  * 根据执行器类型自动选择对应的控制方式
- * 
- * onControl 支持两种格式：
+ *
+ * onControl 支持三种格式：
  * 1. 标准格式: onControl(command: 'on' | 'off' | 'value', value?: number)
  * 2. RGB格式: onControl(cmd: RGBCommand) - 用于RGB-LED设备
+ * 3. 摄像头格式: onControl(cmd: CameraCommand) - 用于摄像头设备
  */
 export function ActuatorCard({ actuator, onControl, commandStatus, timeout }: {
   actuator: Actuator
-  onControl: (command: 'on' | 'off' | 'value' | RGBCommand, value?: number) => void
+  onControl: (command: 'on' | 'off' | 'value' | RGBCommand | CameraCommand, value?: number) => void
   commandStatus: CommandStatus
   timeout: number
 }) {
   const controlConfig = getControlConfig(actuator)
+
+  // 摄像头识别逻辑：类型为 camera 时使用摄像头控制卡片
+  const isCamera = actuator.type === 'camera'
+
+  if (isCamera) {
+    return (
+      <CameraControlCard
+        actuator={actuator}
+        onControl={(cmd) => onControl(cmd)}
+        commandStatus={commandStatus}
+        timeout={timeout}
+      />
+    )
+  }
 
   // RGB-LED识别逻辑（多种方式确保正确识别）：
   // 1. 类型直接是 rgb_led
@@ -1161,12 +1179,12 @@ export function ActuatorCard({ actuator, onControl, commandStatus, timeout }: {
   // 4. 类型是 light 且 id 包含特定模式（如 LT-1-002 的 002）
   const nameLower = (actuator.name || '').toLowerCase()
   const hasRgbInName = nameLower.includes('rgb')
-  
-  const hasRgbFeedback = actuator.feedback && 
-    (actuator.feedback.color || 
+
+  const hasRgbFeedback = actuator.feedback &&
+    (actuator.feedback.color ||
      ('R' in actuator.feedback && 'G' in actuator.feedback && 'B' in actuator.feedback))
-  
-  const isRgbLed = actuator.type === 'rgb_led' || 
+
+  const isRgbLed = actuator.type === 'rgb_led' ||
     (actuator.type === 'light' && (hasRgbFeedback || hasRgbInName))
 
   if (isRgbLed) {

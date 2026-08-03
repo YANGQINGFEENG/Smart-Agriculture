@@ -106,8 +106,8 @@ export function AIVideoDetection() {
       const result = await response.json()
       
       if (result.success && result.data) {
-        // 处理检测结果
-        const detectionResults = result.data.detectionResult
+        // 处理检测结果（新API返回 detections，旧API返回 detectionResult）
+        const detectionResults = result.data.detections || result.data.detectionResult || []
         if (detectionResults && detectionResults.length > 0) {
           // 保存所有检测结果
           setDetectionResults(detectionResults)
@@ -384,8 +384,8 @@ export function AIVideoDetection() {
         const result = await response.json()
 
         if (result.success && result.data) {
-          // 处理检测结果
-          const detectionResults = result.data.detectionResult
+          // 处理检测结果（新API返回 detections，旧API返回 detectionResult）
+          const detectionResults = result.data.detections || result.data.detectionResult || []
           if (detectionResults && detectionResults.length > 0) {
             // 保存所有检测结果
             setDetectionResults(detectionResults)

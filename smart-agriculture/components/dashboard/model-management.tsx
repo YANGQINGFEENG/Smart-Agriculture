@@ -58,10 +58,10 @@ export function ModelManagement() {
       const result = await response.json()
       if (result.success) {
         setStatus({
-          serviceRunning: true,
-          loadedModels: result.data.loadedModels || []
+          serviceRunning: result.service?.running ?? true,
+          loadedModels: result.data?.loadedModels?.map((m: any) => m.name) || []
         })
-        setModels(result.data.models || [])
+        setModels(result.data?.models || [])
       } else {
         setStatus(prev => ({ ...prev, serviceRunning: false }))
       }
@@ -79,10 +79,10 @@ export function ModelManagement() {
       const response = await fetch('/api/ai/models')
       const result = await response.json()
       if (result.success) {
-        setModels(result.data.models || [])
+        setModels(result.data?.models || [])
         setStatus({
-          serviceRunning: true,
-          loadedModels: result.data.loadedModels || []
+          serviceRunning: result.service?.running ?? true,
+          loadedModels: result.data?.loadedModels?.map((m: any) => m.name) || []
         })
       } else {
         setStatus(prev => ({ ...prev, serviceRunning: false }))
@@ -105,7 +105,7 @@ export function ModelManagement() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model_name: modelName })
+        body: JSON.stringify({ action: 'load', model_name: modelName })
       })
 
       const result = await response.json()
@@ -125,15 +125,38 @@ export function ModelManagement() {
   }
 
   /**
+   * 卸载模型
+   */
+  const unloadModel = async (modelName: string) => {
+    try {
+      const response = await fetch('/api/ai/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unload', model_name: modelName })
+      })
+      const result = await response.json()
+      if (result.success) {
+        setMessage({ type: 'success', text: result.message || `${modelName} 已卸载` })
+        await refreshModels()
+      } else {
+        setMessage({ type: 'error', text: result.error || '卸载失败' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '卸载失败' })
+    }
+    setTimeout(() => setMessage(null), 3000)
+  }
+
+  /**
    * 启动Ollama服务
    */
   const startOllamaService = async () => {
     try {
       const response = await fetch('/api/ai/models')
       const result = await response.json()
-      if (result.success) {
+      if (result.success && result.service?.running) {
         setStatus(prev => ({ ...prev, serviceRunning: true }))
-        setModels(result.data.models || [])
+        setModels(result.data?.models || [])
         setMessage({ type: 'success', text: 'Ollama服务已启动' })
       } else {
         setMessage({ type: 'error', text: '无法启动Ollama服务，请手动启动' })
@@ -242,16 +265,16 @@ export function ModelManagement() {
                       <div>
                         <p className="text-sm font-medium">{model.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {model.details.family} | {model.details.parameter_size} | {model.details.quantization_level}
+                          {model.family} | {model.parameter_size} | {model.quantization_level}
                         </p>
                       </div>
                     </div>
                     <Badge className={`${
-                      status.loadedModels.includes(model.name)
+                      model.loaded
                         ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {status.loadedModels.includes(model.name) ? (
+                      {model.loaded ? (
                         <span className="flex items-center gap-1">
                           <Zap className="w-3 h-3" />
                           已加载
@@ -266,23 +289,27 @@ export function ModelManagement() {
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <HardDrive className="w-3 h-3" />
-                        {model.size}
+                        {model.size_formatted || model.size}
                       </span>
                       <span>修改时间: {new Date(model.modified_at).toLocaleDateString('zh-CN')}</span>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => loadModel(model.name)}
-                      disabled={loadingModel === model.name || status.loadedModels.includes(model.name)}
-                    >
-                      {loadingModel === model.name ? (
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4 mr-2" />
-                      )}
-                      {loadingModel === model.name ? '加载中...' : status.loadedModels.includes(model.name) ? '已加载' : '加载模型'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => model.loaded ? unloadModel(model.name) : loadModel(model.name)}
+                        disabled={loadingModel === model.name}
+                      >
+                        {loadingModel === model.name ? (
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        ) : model.loaded ? (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        {loadingModel === model.name ? '加载中...' : model.loaded ? '卸载' : '加载模型'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -295,8 +322,8 @@ export function ModelManagement() {
           <ul className="text-xs text-muted-foreground space-y-1">
             <li>• 点击"加载模型"将模型加载到内存中，加速推理响应</li>
             <li>• 模型首次加载可能需要一些时间，请耐心等待</li>
-            <li>• 已加载的模型会显示"已加载"状态</li>
-            <li>• 推荐使用 qwen3:1.7b-q4_K_M 模型进行AI命令解析</li>
+            <li>• 已加载的模型会显示"已加载"状态，可点击"卸载"释放内存</li>
+            <li>• 推荐使用 qwen2.5:3b 模型进行AI命令解析和诊断分析</li>
           </ul>
         </div>
       </CardContent>

@@ -296,6 +296,15 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
     controlType: ControlType.INTEGER,
     controlRange: { min: 0, max: 100, step: 1, default: 0 },
   },
+  {
+    type: 'camera',
+    name: '摄像头',
+    category: DeviceCategory.ACTUATOR,
+    description: '云台摄像头，支持视频流、云台控制和颜色追踪',
+    icon: 'Camera',
+    color: 'indigo',
+    controlType: ControlType.STRING,
+  },
   // ========== 未分配设备类型（默认） ==========
   {
     type: 'unknown_sensor',
@@ -421,6 +430,7 @@ export function getDeviceTypePrefix(type: string): string {
         relay: 'RL',
         laser: 'LS',
         rgb_led: 'RGB',
+        camera: 'CAM',
       }
       return actuatorPrefixMap[type] || 'A'
     default:

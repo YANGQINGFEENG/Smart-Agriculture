@@ -505,6 +505,7 @@ async function insertInitialData() {
     { type: 'laser', name: '激光器', description: '用于激光控制，支持开关控制' },
     { type: 'buzzer', name: '蜂鸣器', description: '用于声音提示，支持多种蜂鸣模式' },
     { type: 'rgb_led', name: 'RGB-LED', description: '用于RGB颜色控制，支持颜色值调节' },
+    { type: 'camera', name: '摄像头', description: '云台摄像头，支持视频流、云台控制和颜色追踪' },
   ];
   
   let missingTypes = 0;

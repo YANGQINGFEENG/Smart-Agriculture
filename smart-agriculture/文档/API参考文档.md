@@ -279,7 +279,7 @@ GET /api/sensors/T-1-001/data?start_time=2026-07-30 00:00:00&end_time=2026-07-30
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| type | string | 否 | 按执行器类型过滤（如：water_pump, fan, buzzer, rgb_led） |
+| type | string | 否 | 按执行器类型过滤（如：water_pump, fan, buzzer, rgb_led, camera） |
 | farm_id | number | 否 | 按农场ID过滤 |
 
 **响应示例**:
@@ -528,6 +528,7 @@ GET /api/sensors/T-1-001/data?start_time=2026-07-30 00:00:00&end_time=2026-07-30
 | laser | 激光器 | boolean | - | 仅支持开关控制（on/off） |
 | buzzer | 蜂鸣器 | boolean | - | 支持开关控制，可设置蜂鸣模式 |
 | rgb_led | RGB-LED | integer | 0-100 | 支持颜色选择和亮度调节 |
+| camera | 摄像头 | string | - | 云台摄像头，支持角度控制、颜色追踪、视频流 |
 
 #### 蜂鸣模式说明
 
@@ -2206,7 +2207,315 @@ ws://localhost:8080?actuator_id={执行器ID}
 
 ---
 
-## 十三、附录
+## 十三、摄像头模块API
+
+### 13.1 摄像头帧上传
+
+**接口地址**: `POST /api/device/upload-image`
+
+**功能说明**: 硬件端（树莓派）上传摄像头抓拍的图像帧，用于AI检测和历史记录。采用 multipart/form-data 格式上传。
+
+**请求体**: multipart/form-data
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| node_id | string | 是 | 摄像头节点ID（如：CAM-1-001） |
+| gateway_ip | string | 是 | 网关IP地址 |
+| farm_id | number | 是 | 农场ID |
+| area | string | 否 | 区域名称 |
+| timestamp | string | 否 | 拍摄时间（北京时间，格式：YYYY-MM-DD HH:MM:SS） |
+| detection | string | 否 | AI检测结果（JSON字符串） |
+| image | file | 是 | 图像文件（JPG/PNG，建议<2MB） |
+
+**请求示例（curl）**:
+```bash
+curl -X POST http://localhost:3000/api/device/upload-image \
+  -F "node_id=CAM-1-001" \
+  -F "gateway_ip=192.168.1.100" \
+  -F "farm_id=1" \
+  -F "area=温室1号区域" \
+  -F "timestamp=2026-08-03 10:30:00" \
+  -F "detection={\"found\":true,\"target\":\"red\",\"bbox\":[100,100,200,200]}" \
+  -F "image=@frame.jpg"
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "图像上传成功",
+  "data": {
+    "image_id": 123,
+    "node_id": "CAM-1-001",
+    "image_url": "/uploads/camera/CAM-1-001/20260803_103000.jpg",
+    "detection": {
+      "found": true,
+      "target": "red",
+      "bbox": [100, 100, 200, 200]
+    },
+    "timestamp": "2026-08-03 10:30:00"
+  }
+}
+```
+
+**说明**:
+- 图像保存路径：`public/uploads/camera/{node_id}/{YYYYMMDD_HHMMSS}.jpg`
+- 上传频率由硬件端 settings.yaml 的 `frame_upload.interval` 控制（默认5秒）
+- detection 字段为可选的 JSON 字符串，包含颜色追踪结果
+- 文件大小限制：单张图像 <10MB
+
+---
+
+### 13.2 摄像头节点上报
+
+**接口地址**: `POST /api/device/report`
+
+**功能说明**: 摄像头作为特殊传感器节点通过设备上报接口上报状态。type=camera，节点ID格式为 CAM-{gatewayId}-{nodeId}。
+
+**请求示例**:
+```json
+{
+  "gateway_ip": "192.168.1.100",
+  "gateway_type": "wifi_sensor",
+  "farm_id": 1,
+  "area": "温室1号区域",
+  "nodes": [
+    {
+      "node_id": "CAM-1-001",
+      "name": "云台摄像头",
+      "type": "camera",
+      "state": "on",
+      "mode": "manual",
+      "control_type": "string",
+      "feedback": {
+        "power": "on",
+        "found": true,
+        "resolution": "640x480",
+        "tracking_enabled": true,
+        "is_running": true,
+        "color_preset": "red",
+        "available_colors": ["blue", "red", "green", "yellow", "orange"],
+        "pan_angle": 90,
+        "tilt_angle": 45,
+        "stream_url": "http://192.168.1.100:8081/stream",
+        "snapshot_url": "http://192.168.1.100:8081/snapshot",
+        "target_x": 320,
+        "target_y": 240,
+        "target_area": 5000,
+        "error_pan": 0.5,
+        "error_tilt": -0.3
+      },
+      "location": "温室入口"
+    }
+  ]
+}
+```
+
+**摄像头 feedback 字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| power | string | 电源状态：on/off |
+| found | boolean | 是否检测到目标颜色 |
+| resolution | string | 图像分辨率（如：640x480） |
+| tracking_enabled | boolean | 是否启用颜色追踪 |
+| is_running | boolean | 视频流服务是否运行 |
+| color_preset | string | 当前颜色预设：blue/red/green/yellow/orange |
+| available_colors | array | 支持的颜色列表 |
+| pan_angle | number | 水平角度（0-180） |
+| tilt_angle | number | 垂直角度（0-180） |
+| stream_url | string | MJPEG 视频流地址（树莓派8081端口） |
+| snapshot_url | string | 快照地址 |
+| target_x | number | 目标中心X坐标 |
+| target_y | number | 目标中心Y坐标 |
+| target_area | number | 目标面积（像素） |
+| error_pan | number | 水平误差（用于PID控制） |
+| error_tilt | number | 垂直误差（用于PID控制） |
+
+---
+
+### 13.3 摄像头命令控制
+
+**接口地址**: `POST /api/actuators/CAM-1-001/commands`
+
+**功能说明**: 发送控制指令到摄像头（云台、追踪、颜色切换等）。摄像头作为执行器（type=camera, control_type=string）进行控制。
+
+**路径参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 摄像头执行器ID（如：CAM-1-001） |
+
+**支持的命令**:
+
+| 命令 | control_type | 说明 | 附加参数 |
+|------|--------------|------|----------|
+| on | string | 开启摄像头电源 | - |
+| off | string | 关闭摄像头电源 | - |
+| value | string | 设置云台角度 | pan/tilt（绝对角度）或 pan_delta/tilt_delta（相对角度） |
+| track | string | 开关颜色追踪 | value: on/off |
+| color | string | 切换颜色预设 | value: blue/red/green/yellow/orange |
+| reset | string | 重置云台到默认位置 | - |
+
+**请求示例（开启摄像头）**:
+```json
+{
+  "control_type": "string",
+  "command": "on"
+}
+```
+
+**请求示例（绝对角度控制）**:
+```json
+{
+  "control_type": "string",
+  "command": "value",
+  "pan": 90,
+  "tilt": 45
+}
+```
+
+**请求示例（相对角度控制）**:
+```json
+{
+  "control_type": "string",
+  "command": "value",
+  "pan_delta": 10,
+  "tilt_delta": -5
+}
+```
+
+**请求示例（开启颜色追踪）**:
+```json
+{
+  "control_type": "string",
+  "command": "track",
+  "value": "on"
+}
+```
+
+**请求示例（切换颜色预设）**:
+```json
+{
+  "control_type": "string",
+  "command": "color",
+  "value": "red"
+}
+```
+
+**请求示例（重置云台）**:
+```json
+{
+  "control_type": "string",
+  "command": "reset"
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 8500,
+    "actuator_id": "CAM-1-001",
+    "command": "color",
+    "control_value": null,
+    "status": "pending",
+    "created_at": "2026-08-03 10:30:00"
+  },
+  "message": "指令已发送，等待硬件执行"
+}
+```
+
+**摄像头命令扩展字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| pan | number | 水平绝对角度（0-180） |
+| tilt | number | 垂直绝对角度（0-180） |
+| pan_delta | number | 水平相对角度（-90~90） |
+| tilt_delta | number | 垂直相对角度（-90~90） |
+| color | string | 颜色预设名称 |
+| camera_command | string | 摄像头子命令（track/color/reset等） |
+
+---
+
+### 13.4 摄像头命令回执
+
+**接口地址**: `PATCH /api/actuators/CAM-1-001/commands`
+
+**功能说明**: 硬件端确认摄像头命令执行结果。
+
+**请求示例**:
+```json
+{
+  "command_id": 8500,
+  "status": "executed",
+  "state": "on",
+  "feedback": {
+    "power": "on",
+    "color_preset": "red",
+    "pan_angle": 90,
+    "tilt_angle": 45,
+    "tracking_enabled": true
+  }
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "OK",
+  "command_id": 8500,
+  "actuator_id": "CAM-1-001",
+  "status": "executed",
+  "timestamp": "2026-08-03 10:30:05"
+}
+```
+
+---
+
+### 13.5 视频流接口（树莓派直连）
+
+**重要说明**: 摄像头的视频流由树莓派本机直接提供，不经过服务端转发，浏览器直接连接树莓派的 8081 端口。
+
+**基础URL**: `http://{树莓派IP}:8081`
+
+| 接口 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| MJPEG 视频流 | GET | /stream | 返回 multipart/x-mixed-replace MJPEG 流，可直接用于 `<img>` 标签 |
+| 快照 | GET | /snapshot | 返回当前帧 JPEG 图像 |
+| 状态查询 | GET | /status | 返回摄像头状态 JSON |
+
+**视频流使用示例（HTML）**:
+```html
+<img src="http://192.168.1.100:8081/stream" alt="摄像头视频流" />
+```
+
+**状态查询响应示例**:
+```json
+{
+  "is_running": true,
+  "resolution": "640x480",
+  "fps": 20,
+  "tracking_enabled": true,
+  "color_preset": "red",
+  "found": true,
+  "pan_angle": 90,
+  "tilt_angle": 45
+}
+```
+
+**说明**:
+- 视频流地址从摄像头节点上报的 feedback.stream_url 字段获取
+- 浏览器直连树莓派，不经过服务端，减轻服务器负载
+- 若树莓派与浏览器不在同一网段，需保证 8081 端口可达
+- 视频流服务由硬件端 services/video_stream_service.py 提供
+
+---
+
+## 十四、附录
 
 ### 数据库表结构关键字段
 
