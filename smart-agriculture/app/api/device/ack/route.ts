@@ -86,49 +86,66 @@ export async function POST(request: NextRequest) {
 
     // 如果指令执行成功，更新执行器状态
     if (status === 'executed') {
-      const actualControlValue = control_value !== undefined ? control_value : command.control_value
-      const actualState = state || (command.command === 'value' && (actualControlValue || 0) > 0 ? 'on' : (command.command === 'on' ? 'on' : 'off'))
-      
-      console.log(`[ACK] 开始更新执行器 - actualState: ${actualState}, actualControlValue: ${actualControlValue}`)
-      
-      // 构建feedback数据（支持RGB扩展格式）
-      const feedbackData: any = { state: actualState }
-      
-      // 添加RGB相关字段
-      if (color) {
-        feedbackData.color = color
+      // 摄像头子命令（track/gyro/color/reset）不改变执行器 state 和 feedback，
+      // 仅解锁并更新时间戳。这些命令的状态变化通过硬件定期上报的 feedback 字段反映。
+      const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
+      const shouldUpdateState = !noStateChangeCommands.includes(command.command)
+
+      console.log(`[ACK] 命令类型: ${command.command}, shouldUpdateState: ${shouldUpdateState}`)
+
+      if (shouldUpdateState) {
+        const actualControlValue = control_value !== undefined ? control_value : command.control_value
+        const actualState = state || (command.command === 'value' && (actualControlValue || 0) > 0 ? 'on' : (command.command === 'on' ? 'on' : 'off'))
+
+        console.log(`[ACK] 开始更新执行器 - actualState: ${actualState}, actualControlValue: ${actualControlValue}`)
+
+        // 构建feedback数据（支持RGB扩展格式）
+        const feedbackData: any = { state: actualState }
+
+        // 添加RGB相关字段
+        if (color) {
+          feedbackData.color = color
+        }
+        if (brightness !== undefined) {
+          feedbackData.brightness = brightness
+        } else if (control_value !== undefined) {
+          feedbackData.brightness = control_value
+        }
+
+        console.log(`[ACK] feedbackData:`, JSON.stringify(feedbackData))
+
+        // 序列化feedback为JSON字符串
+        const feedbackJson = JSON.stringify(feedbackData)
+        console.log(`[ACK] feedbackJson:`, feedbackJson)
+
+        // 更新执行器状态
+        await db.execute(
+          `UPDATE actuators 
+           SET state = ?, 
+               control_value = ?, 
+               last_update = ?, 
+               locked = 0,
+               feedback = ?
+           WHERE id = ?`,
+          [
+            actualState,
+            actualControlValue !== undefined ? actualControlValue : null,
+            getBeijingTimeForDB(),
+            feedbackJson,
+            actuator_id
+          ]
+        )
+
+        console.log(`[ACK] 执行器 ${actuator_id} 更新成功`)
+      } else {
+        // track/gyro/color/reset 命令：仅解锁并更新时间戳，不改变 state 和 feedback
+        await db.execute(
+          `UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?`,
+          [getBeijingTimeForDB(), actuator_id]
+        )
+
+        console.log(`[ACK] 执行器 ${actuator_id} 已解锁（${command.command} 命令不改变 state）`)
       }
-      if (brightness !== undefined) {
-        feedbackData.brightness = brightness
-      } else if (control_value !== undefined) {
-        feedbackData.brightness = control_value
-      }
-      
-      console.log(`[ACK] feedbackData:`, JSON.stringify(feedbackData))
-      
-      // 序列化feedback为JSON字符串
-      const feedbackJson = JSON.stringify(feedbackData)
-      console.log(`[ACK] feedbackJson:`, feedbackJson)
-      
-      // 更新执行器状态
-      await db.execute(
-        `UPDATE actuators 
-         SET state = ?, 
-             control_value = ?, 
-             last_update = ?, 
-             locked = 0,
-             feedback = ?
-         WHERE id = ?`,
-        [
-          actualState, 
-          actualControlValue !== undefined ? actualControlValue : null, 
-          getBeijingTimeForDB(), 
-          feedbackJson,
-          actuator_id
-        ]
-      )
-      
-      console.log(`[ACK] 执行器 ${actuator_id} 更新成功`)
     } else {
       // 执行失败，解锁执行器
       await db.execute(

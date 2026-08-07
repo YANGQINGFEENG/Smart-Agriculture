@@ -234,9 +234,9 @@ async function handleWebSocketMessage(ws, message, deviceId, actuatorId, gateway
         break;
       case WebSocketMessageType.COMMAND_ACK:
         if (actuatorId && data.command_id) {
-          await handleCommandAck(actuatorId, data.command_id, data.status, data.control_value);
+          await handleCommandAck(actuatorId, data.command_id, data.status, data.control_value, data.state);
         } else if (gatewayIp && data.command_id) {
-          await handleCommandAck(data.actuator_id || '', data.command_id, data.status, data.control_value);
+          await handleCommandAck(data.actuator_id || '', data.command_id, data.status, data.control_value, data.state);
         }
         break;
       case WebSocketMessageType.AREA_SYNC:
@@ -526,11 +526,21 @@ async function handleDataReport(gatewayIp, reportData) {
             );
           }
           
-          await db.execute(
-            'UPDATE actuators SET status = ?, state = ?, mode = ?, last_update = ?, area = ? WHERE id = ?',
-            ['online', node.state || 'off', node.mode || 'auto', 
-             new Date().toISOString().replace('T', ' ').slice(0, 19), deviceArea, deviceId]
-          );
+          // 更新执行器状态和 feedback（feedback 包含 tracking_enabled、gesture_control_enabled 等运行时状态）
+          const feedbackJson = node.feedback ? JSON.stringify(node.feedback) : null;
+          if (feedbackJson) {
+            await db.execute(
+              'UPDATE actuators SET status = ?, state = ?, mode = ?, last_update = ?, area = ?, feedback = ? WHERE id = ?',
+              ['online', node.state || 'off', node.mode || 'auto', 
+               new Date().toISOString().replace('T', ' ').slice(0, 19), deviceArea, feedbackJson, deviceId]
+            );
+          } else {
+            await db.execute(
+              'UPDATE actuators SET status = ?, state = ?, mode = ?, last_update = ?, area = ? WHERE id = ?',
+              ['online', node.state || 'off', node.mode || 'auto', 
+               new Date().toISOString().replace('T', ' ').slice(0, 19), deviceArea, deviceId]
+            );
+          }
         }
       }
     }
@@ -541,10 +551,14 @@ async function handleDataReport(gatewayIp, reportData) {
 
 /**
  * 处理命令确认
+ * 
+ * 对于 track/gyro/color/reset 等摄像头子命令，不改变执行器 state，
+ * 仅解锁并更新时间戳（与 PATCH /api/actuators/[id]/commands 逻辑一致）。
+ * 这些命令的状态变化通过硬件定期上报的 feedback 字段反映。
  */
-async function handleCommandAck(actuatorId, commandId, status, controlValue) {
+async function handleCommandAck(actuatorId, commandId, status, controlValue, state) {
   try {
-    console.log(`[WS] Command ack - Actuator: ${actuatorId}, Command ID: ${commandId}, Status: ${status}`);
+    console.log(`[WS] Command ack - Actuator: ${actuatorId}, Command ID: ${commandId}, Status: ${status}, State: ${state}`);
     
     if (!db || !actuatorId) return;
     
@@ -570,15 +584,37 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue) {
     
     // 如果指令执行成功，更新执行器状态
     if (status === 'executed') {
-      const newState = command.command === 'value' && (command.control_value || controlValue) > 0 ? 'on' : (command.command === 'on' ? 'on' : 'off');
+      // 摄像头子命令（track/gyro/color/reset）不改变执行器 state，
+      // 仅解锁并更新时间戳，状态变化由硬件 feedback 上报反映
+      const noStateChangeCommands = ['track', 'color', 'reset', 'gyro'];
+      const shouldUpdateState = !noStateChangeCommands.includes(command.command);
       
-      await db.execute(
-        'UPDATE actuators SET state = ?, control_value = ?, last_update = ?, locked = 0 WHERE id = ?',
-        [newState, controlValue || command.control_value || null, 
-         new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
-      );
-      
-      console.log(`[WS] Actuator ${actuatorId} updated - state: ${newState}`);
+      if (shouldUpdateState) {
+        // 优先使用硬件回传的 state，其次根据命令类型推断
+        let newState = state;
+        if (!newState) {
+          if (command.command === 'on') newState = 'on';
+          else if (command.command === 'off') newState = 'off';
+          else if (command.command === 'value' && (command.control_value || controlValue) > 0) newState = 'on';
+          else newState = 'off';
+        }
+        
+        await db.execute(
+          'UPDATE actuators SET state = ?, control_value = ?, last_update = ?, locked = 0 WHERE id = ?',
+          [newState, controlValue || command.control_value || null, 
+           new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
+        );
+        
+        console.log(`[WS] Actuator ${actuatorId} updated - state: ${newState}`);
+      } else {
+        // 仅解锁，不改变 state 和 control_value
+        await db.execute(
+          'UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?',
+          [new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
+        );
+        
+        console.log(`[WS] Actuator ${actuatorId} unlocked (no state change for ${command.command} command)`);
+      }
     } else {
       await db.execute('UPDATE actuators SET locked = 0 WHERE id = ?', [actuatorId]);
     }
