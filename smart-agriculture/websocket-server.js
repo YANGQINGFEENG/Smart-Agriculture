@@ -215,7 +215,8 @@ async function handleWebSocketMessage(ws, message, deviceId, actuatorId, gateway
         await handleDeviceRegister(data);
         break;
       case WebSocketMessageType.GATEWAY_REGISTER:
-        await handleGatewayRegister(data);
+        // 如果硬件端未传 gateway_ip，使用连接上下文中的 IP 作为回退
+        await handleGatewayRegister(data, gatewayIp);
         break;
       case WebSocketMessageType.SENSOR_DATA:
         if (gatewayIp) {
@@ -291,9 +292,11 @@ async function handleDeviceRegister(data) {
 /**
  * 处理网关注册
  */
-async function handleGatewayRegister(data) {
+async function handleGatewayRegister(data, connectionGatewayIp) {
   try {
-    const { gateway_ip, gateway_type, mac, farm_id, area } = data;
+    // 优先使用消息中的 gateway_ip，回退到连接上下文中的 IP
+    const { gateway_type, mac, farm_id, area } = data;
+    const gateway_ip = data.gateway_ip || connectionGatewayIp || 'unknown';
     console.log(`[WS] Gateway registered: ${gateway_ip}`);
     
     if (!db) return;
@@ -563,7 +566,7 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
     if (!db || !actuatorId) return;
     
     const [existingCommands] = await db.query(
-      'SELECT id, command, control_value FROM actuator_commands WHERE id = ? AND actuator_id = ?',
+      'SELECT id, command, control_value, command_data FROM actuator_commands WHERE id = ? AND actuator_id = ?',
       [commandId, actuatorId]
     );
     
@@ -584,8 +587,8 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
     
     // 如果指令执行成功，更新执行器状态
     if (status === 'executed') {
-      // 摄像头子命令（track/gyro/color/reset）不改变执行器 state，
-      // 仅解锁并更新时间戳，状态变化由硬件 feedback 上报反映
+      // track/gyro/color/reset 命令不改变执行器 state，
+      // 但必须同步更新 feedback 中的对应字段，避免前端等待数据上报周期（~30s）
       const noStateChangeCommands = ['track', 'color', 'reset', 'gyro'];
       const shouldUpdateState = !noStateChangeCommands.includes(command.command);
       
@@ -607,66 +610,125 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
         
         console.log(`[WS] Actuator ${actuatorId} updated - state: ${newState}`);
       } else {
-        // 仅解锁，不改变 state 和 control_value
-        await db.execute(
-          'UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?',
-          [new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
+        // gyro/track/color 命令：合并 feedback 字段后立即写入，不等数据上报
+        // 关键：如果 feedback 为空（尚无数据上报），不写入避免丢失 stream_url 等字段
+        const [fbRows] = await db.query(
+          `SELECT feedback FROM actuators WHERE id = ?`, [actuatorId]
         );
+        const existingFeedback = (fbRows.length > 0 && fbRows[0].feedback)
+          ? (typeof fbRows[0].feedback === 'string' ? JSON.parse(fbRows[0].feedback) : fbRows[0].feedback)
+          : {};
         
-        console.log(`[WS] Actuator ${actuatorId} unlocked (no state change for ${command.command} command)`);
+        const hasExistingData = Object.keys(existingFeedback).length > 0;
+        
+        if (hasExistingData) {
+          let cmdData = command.command_data;
+          if (cmdData && typeof cmdData === 'string') {
+            try { cmdData = JSON.parse(cmdData); } catch {}
+          }
+          
+          if (command.command === 'gyro') {
+            const gyroValue = (cmdData && cmdData.value) || command.control_value;
+            existingFeedback.gesture_control_enabled = (gyroValue === 'on' || gyroValue === true || gyroValue === 1);
+          } else if (command.command === 'track') {
+            const trackValue = (cmdData && cmdData.value) || command.control_value;
+            existingFeedback.tracking_enabled = (trackValue === 'on' || trackValue === true || trackValue === 1);
+          } else if (command.command === 'color') {
+            existingFeedback.color_preset = (cmdData && cmdData.color) || existingFeedback.color_preset;
+          }
+          
+          await db.execute(
+            'UPDATE actuators SET last_update = ?, locked = 0, feedback = ? WHERE id = ?',
+            [new Date().toISOString().replace('T', ' ').slice(0, 19), JSON.stringify(existingFeedback), actuatorId]
+          );
+          
+          console.log(`[WS] Actuator ${actuatorId} unlocked (${command.command} command, feedback synced)`);
+        } else {
+          // feedback 为空，仅解锁，等待数据上报补充完整 feedback
+          await db.execute(
+            'UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?',
+            [new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
+          );
+          console.log(`[WS] Actuator ${actuatorId} unlocked (${command.command} command, feedback empty - skipped write)`);
+        }
       }
     } else {
       await db.execute('UPDATE actuators SET locked = 0 WHERE id = ?', [actuatorId]);
     }
     
-    // 通知前端命令状态
-    notifyCommandStatus(actuatorId, commandId, status, controlValue);
+    // 通知前端命令状态（含 feedback 数据，确保手势控制/追踪等状态同步）
+    await notifyCommandStatus(actuatorId, commandId, status, controlValue, command.command);
   } catch (error) {
     console.error('[WS] Command ack handling error:', error);
   }
 }
 
 /**
- * 通知前端命令状态
+ * 通知前端命令状态更新
+ * 查询执行器的完整 feedback 数据，确保前端能同步手势控制/追踪等状态
+ * command 参数用于前端判断是否需要更新 state（gyro/track 等命令不改变 state）
  */
-function notifyCommandStatus(actuatorId, commandId, status, controlValue) {
-  const statusMessage = {
-    type: WebSocketMessageType.COMMAND_STATUS,
-    data: {
-      actuator_id: actuatorId,
-      command_id: commandId,
-      status: status,
-      control_value: controlValue,
-      timestamp: Date.now(),
-    },
-  };
-  
-  // 通过执行器连接发送
-  const actuatorWs = actuatorConnections.get(actuatorId);
-  if (actuatorWs && actuatorWs.readyState === WebSocket.OPEN) {
-    actuatorWs.send(JSON.stringify(statusMessage));
-    console.log(`[WS] Command status sent to actuator client: ${actuatorId}`);
-  }
-  
-  // 通过区域连接广播
-  if (db) {
-    db.query('SELECT area FROM actuators WHERE id = ?', [actuatorId])
-      .then(([results]) => {
-        if (results.length > 0 && results[0].area) {
-          const areaWsSet = areaConnections.get(results[0].area);
-          if (areaWsSet && areaWsSet.size > 0) {
-            areaWsSet.forEach((conn) => {
-              if (conn.readyState === WebSocket.OPEN) {
-                conn.send(JSON.stringify(statusMessage));
-              }
-            });
-            console.log(`[WS] Command status broadcast to area: ${results[0].area}`);
+async function notifyCommandStatus(actuatorId, commandId, status, controlValue, command) {
+  try {
+    // 查询执行器的完整信息（含 feedback）并广播给前端
+    let feedback = null;
+    let state = null;
+    let area = null;
+    
+    if (db) {
+      const [rows] = await db.query(
+        'SELECT feedback, state, area FROM actuators WHERE id = ?', [actuatorId]
+      );
+      if (rows.length > 0) {
+        feedback = rows[0].feedback;
+        state = rows[0].state;
+        area = rows[0].area;
+      }
+    }
+    
+    // 解析 feedback（可能是 JSON 字符串）
+    let feedbackObj = {};
+    if (feedback) {
+      try {
+        feedbackObj = typeof feedback === 'string' ? JSON.parse(feedback) : feedback;
+      } catch {}
+    }
+    
+    const statusMessage = {
+      type: WebSocketMessageType.COMMAND_STATUS,
+      data: {
+        actuator_id: actuatorId,
+        command_id: commandId,
+        command: command || '',           // 命令类型，前端用于判断是否更新 state
+        status: status,
+        control_value: controlValue,
+        state: state,
+        feedback: feedbackObj,            // 包含手势控制/追踪等实时状态
+        timestamp: Date.now(),
+      },
+    };
+    
+    // 通过执行器连接发送
+    const actuatorWs = actuatorConnections.get(actuatorId);
+    if (actuatorWs && actuatorWs.readyState === WebSocket.OPEN) {
+      actuatorWs.send(JSON.stringify(statusMessage));
+      console.log(`[WS] Command status sent to actuator client: ${actuatorId}`);
+    }
+    
+    // 通过区域连接广播
+    if (area) {
+      const areaWsSet = areaConnections.get(area);
+      if (areaWsSet && areaWsSet.size > 0) {
+        areaWsSet.forEach((conn) => {
+          if (conn.readyState === WebSocket.OPEN) {
+            conn.send(JSON.stringify(statusMessage));
           }
-        }
-      })
-      .catch((error) => {
-        console.error('[WS] Error querying actuator area:', error);
-      });
+        });
+        console.log(`[WS] Command status broadcast to area: ${area} (含feedback)`);
+      }
+    }
+  } catch (error) {
+    console.error('[WS] Error in notifyCommandStatus:', error);
   }
 }
 

@@ -41,7 +41,7 @@ interface ActuatorRow extends RowDataPacket {
 }
 
 /** 支持的摄像头命令子类型 */
-const CAMERA_COMMANDS = ['on', 'off', 'value', 'track', 'color', 'reset'] as const
+const CAMERA_COMMANDS = ['on', 'off', 'value', 'track', 'color', 'reset', 'gyro'] as const
 /** 支持的追踪颜色预设 */
 const CAMERA_COLORS = ['red', 'blue', 'green', 'yellow', 'orange']
 /** 支持的 RGB 命令子类型 */
@@ -171,6 +171,22 @@ function buildCameraCommand(
       return {
         controlValue: null,
         commandData: { type: 'color', color: String(color) },
+        wsPayload,
+      }
+    }
+
+    case 'gyro': {
+      // 陀螺仪手势控制开关：value 为 'on'/'off'/true/false/1/0
+      const v = body.value
+      let gyroOn: boolean
+      if (v === 'on' || v === true || v === 1) gyroOn = true
+      else if (v === 'off' || v === false || v === 0) gyroOn = false
+      else throw new Error("gyro 命令的 value 必须是 on/off/true/false/1/0")
+
+      wsPayload.value = gyroOn ? 'on' : 'off'
+      return {
+        controlValue: gyroOn ? 1 : 0,
+        commandData: { type: 'gyro', value: gyroOn ? 'on' : 'off' },
         wsPayload,
       }
     }
@@ -568,8 +584,10 @@ export async function PATCH(
         else actualState = 'off'
       }
 
-      // 摄像头的 track/color/reset 命令不改变 state（由 feedback 上报反映）
-      const shouldUpdateState = !['track', 'color', 'reset'].includes(cmd.command)
+      // track/color/reset/gyro 命令不改变 state（由 feedback 上报反映），
+      // 但必须同步更新 feedback 中的对应字段，避免前端等待数据上报周期（~30s）
+      const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
+      const shouldUpdateState = !noStateChangeCommands.includes(cmd.command)
 
       if (shouldUpdateState) {
         await db.execute(
@@ -577,11 +595,54 @@ export async function PATCH(
           [actualState, actualControlValue !== undefined ? actualControlValue : null, getBeijingTimeForDB(), id]
         )
       } else {
-        // 仅解锁，不改变 state
-        await db.execute(
-          `UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?`,
-          [getBeijingTimeForDB(), id]
+        // 对 gyro/track/color 命令，合并 feedback 字段后立即写入，不等数据上报
+        // 关键：只有当 feedback 已有数据时才合并写入，避免空对象覆盖 stream_url 等字段
+        const [rows] = await db.query<any[]>(
+          `SELECT feedback FROM actuators WHERE id = ?`, [id]
         )
+        const existingFeedback = (rows.length > 0 && rows[0].feedback) 
+          ? (typeof rows[0].feedback === 'string' ? JSON.parse(rows[0].feedback) : rows[0].feedback) 
+          : {}
+        
+        const hasExistingData = Object.keys(existingFeedback).length > 0
+        
+        if (hasExistingData) {
+          if (cmd.command === 'gyro') {
+            // 从 command_data 或 control_value 中提取 gyro 值
+            let cmdData = cmd.command_data
+            if (cmdData && typeof cmdData === 'string') {
+              try { cmdData = JSON.parse(cmdData) } catch {}
+            }
+            const gyroValue = (cmdData && cmdData.value) || cmd.control_value
+            existingFeedback.gesture_control_enabled = (gyroValue === 'on' || gyroValue === true || gyroValue === 1)
+          } else if (cmd.command === 'track') {
+            let cmdData = cmd.command_data
+            if (cmdData && typeof cmdData === 'string') {
+              try { cmdData = JSON.parse(cmdData) } catch {}
+            }
+            const trackValue = (cmdData && cmdData.value) || cmd.control_value
+            existingFeedback.tracking_enabled = (trackValue === 'on' || trackValue === true || trackValue === 1)
+          } else if (cmd.command === 'color') {
+            let cmdData = cmd.command_data
+            if (cmdData && typeof cmdData === 'string') {
+              try { cmdData = JSON.parse(cmdData) } catch {}
+            }
+            existingFeedback.color_preset = (cmdData && cmdData.color) || existingFeedback.color_preset
+          }
+          
+          await db.execute(
+            `UPDATE actuators SET last_update = ?, locked = 0, feedback = ? WHERE id = ?`,
+            [getBeijingTimeForDB(), JSON.stringify(existingFeedback), id]
+          )
+          console.log(`[Commands] 回执成功(no-state-change) - 命令ID: ${commandId}, cmd: ${cmd.command}, feedback已同步`)
+        } else {
+          // feedback 为空（尚无数据上报），仅解锁，等待数据上报补充完整 feedback
+          await db.execute(
+            'UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?',
+            [getBeijingTimeForDB(), id]
+          )
+          console.log(`[Commands] 回执成功(no-state-change) - 命令ID: ${commandId}, cmd: ${cmd.command}, feedback为空跳过写入`)
+        }
       }
       console.log(`[Commands] 回执成功 - 命令ID: ${commandId}, 状态: ${actualState}`)
     } else {

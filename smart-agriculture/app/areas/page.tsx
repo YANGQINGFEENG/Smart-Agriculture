@@ -303,20 +303,29 @@ export default function AreasPage() {
   /**
    * 处理命令状态更新
    * 当收到硬件回执或命令超时通知时更新页面状态
+   * 包含 feedback 数据，确保手势控制/追踪等状态实时同步
+   * 
+   * 重要：gyro/track/color/reset 等命令不改变 actuator.state，
+   * 前端仅更新 feedback，避免错误覆盖 state 导致视频流消失等问题
    */
   const handleCommandStatusUpdate = (data: {
     actuator_id: string
     command_id: number
+    command?: string                 // 命令类型，用于判断是否更新 state
     status: string
     control_value?: number
     state?: string | null
+    feedback?: Record<string, any>  // 硬件上报的实时状态（手势控制/追踪等）
   }) => {
-    const { actuator_id, command_id, status, control_value, state } = data
+    const { actuator_id, command_id, command, status, control_value, state, feedback } = data
+
+    // 不改变 state 的命令列表（摄像头子命令等）
+    const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
+    const shouldUpdateState = command ? !noStateChangeCommands.includes(command) : true
 
     // 检查命令ID是否匹配当前正在等待的命令
     const expectedCommandId = pendingCommandIds[actuator_id]
     if (expectedCommandId !== undefined && command_id !== expectedCommandId) {
-      // 不是我们正在等待的命令，跳过
       console.log(`[WS] 命令ID不匹配，跳过更新: 期望=${expectedCommandId}, 收到=${command_id}`)
       return
     }
@@ -336,16 +345,24 @@ export default function AreasPage() {
       })
     }
 
-    // 如果指令执行成功，更新执行器数据
+    // 如果指令执行成功，更新执行器数据（含 feedback 同步）
     if (status === 'executed') {
       setActuators(prev => prev.map(actuator => {
         if (actuator.id === actuator_id) {
-          const newState = (state as 'on' | 'off') || actuator.state
+          // gyro/track 等命令：只更新 feedback，不改变 state
+          const newState = shouldUpdateState
+            ? ((state as 'on' | 'off') || actuator.state)
+            : actuator.state
+          // 合并 feedback 数据，确保手势控制/追踪等状态立即同步到 UI
+          const mergedFeedback = feedback
+            ? { ...actuator.feedback, ...feedback }
+            : actuator.feedback
           return {
             ...actuator,
             state: newState,
             control_value: control_value ?? actuator.control_value,
             last_update: new Date().toISOString(),
+            feedback: mergedFeedback,
           }
         }
         return actuator
@@ -357,6 +374,12 @@ export default function AreasPage() {
         variant: 'default',
         duration: 3000,
       })
+
+      // 延迟刷新完整数据，避免与当前 feedback 合并产生竞态
+      // gyro/track 等命令仅需 feedback 同步，不需要全量刷新
+      if (shouldUpdateState) {
+        setTimeout(() => fetchActuators(), 2000)
+      }
 
       // 3秒后清除指令状态
       setTimeout(() => {
@@ -654,20 +677,27 @@ export default function AreasPage() {
                   [actuatorId]: 'executed'
                 }))
 
-                // 立即在本地更新执行器状态（乐观更新）
-                setActuators(prev => prev.map(a => {
-                  if (a.id === actuatorId) {
-                    const newState = cmdData.command === 'off' ? 'off' :
-                      cmdData.command === 'on' ? 'on' : a.state
-                    return {
-                      ...a,
-                      state: newState as 'on' | 'off',
-                      control_value: cmdData.control_value ? parseFloat(cmdData.control_value) : a.control_value,
-                      last_update: new Date().toISOString(),
+                // 不改变 state 的命令列表（摄像头子命令等）
+                // 这些命令只影响 feedback，不改变 actuator.state，轮询路径也不应触发全量刷新
+                const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
+                const shouldUpdateState = !noStateChangeCommands.includes(cmdData.command)
+
+                // gyro/track 等命令：跳过 setActuators，避免创建新对象引用导致 MJPEG 重连
+                if (shouldUpdateState) {
+                  setActuators(prev => prev.map(a => {
+                    if (a.id === actuatorId) {
+                      const newState = cmdData.command === 'off' ? 'off' :
+                        cmdData.command === 'on' ? 'on' : a.state
+                      return {
+                        ...a,
+                        state: newState as 'on' | 'off',
+                        control_value: cmdData.control_value ? parseFloat(cmdData.control_value) : a.control_value,
+                        last_update: new Date().toISOString(),
+                      }
                     }
-                  }
-                  return a
-                }))
+                    return a
+                  }))
+                }
 
                 toast({
                   title: '执行成功',
@@ -681,8 +711,10 @@ export default function AreasPage() {
                   delete next[actuatorId]
                   return next
                 })
-                // 异步刷新服务器数据（不阻塞UI）
-                fetchActuators()
+                // 异步刷新服务器数据：gyro/track 等命令仅需 feedback 同步，跳过全量刷新避免竞态
+                if (shouldUpdateState) {
+                  setTimeout(() => fetchActuators(), 2000)
+                }
                 setTimeout(() => clearCommandStatus(actuatorId), 3000)
               } else if (cmdStatus === 'failed') {
                 setCommandStatusMap(prev => ({
@@ -728,7 +760,7 @@ export default function AreasPage() {
         }, 300)  // 优化：300ms轮询间隔，快速响应状态更新
 
           // 立即执行第一次轮询，减少初始延时
-          (async () => {
+          ;(async () => {
             try {
               const statusResponse = await fetch(`/api/actuators/${actuatorId}/commands?frontend=true`)
               const statusResult = await statusResponse.json()
@@ -749,21 +781,27 @@ export default function AreasPage() {
                     [actuatorId]: 'executed'
                   }))
 
+                  // 不改变 state 的命令列表（摄像头子命令等）
+                  const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
+                  const shouldUpdateState = !noStateChangeCommands.includes(cmdData.command)
+
                   // 乐观更新执行器状态
                   const executedData = statusResult.data
-                  setActuators(prev => prev.map(a => {
-                    if (a.id === actuatorId) {
-                      const newState = executedData.command === 'off' ? 'off' :
-                        executedData.command === 'on' ? 'on' : a.state
-                      return {
-                        ...a,
-                        state: newState as 'on' | 'off',
-                        control_value: executedData.control_value ? parseFloat(executedData.control_value) : a.control_value,
-                        last_update: new Date().toISOString(),
+                  if (shouldUpdateState) {
+                    setActuators(prev => prev.map(a => {
+                      if (a.id === actuatorId) {
+                        const newState = executedData.command === 'off' ? 'off' :
+                          executedData.command === 'on' ? 'on' : a.state
+                        return {
+                          ...a,
+                          state: newState as 'on' | 'off',
+                          control_value: executedData.control_value ? parseFloat(executedData.control_value) : a.control_value,
+                          last_update: new Date().toISOString(),
+                        }
                       }
-                    }
-                    return a
-                  }))
+                      return a
+                    }))
+                  }
 
                   toast({
                     title: '执行成功',
@@ -772,8 +810,10 @@ export default function AreasPage() {
                     duration: 3000,
                   })
                   clearInterval(pollInterval)
-                  // 异步刷新，不阻塞
-                  fetchActuators()
+                  // gyro/track 等命令：跳过全量刷新，避免不必要的重渲染导致 MJPEG 连接中断
+                  if (shouldUpdateState) {
+                    fetchActuators()
+                  }
                   setTimeout(() => clearCommandStatus(actuatorId), 3000)
                 } else if (cmdStatus === 'failed') {
                   setCommandStatusMap(prev => ({

@@ -1031,6 +1031,12 @@ feedback是执行器特有回馈数据，用于存储设备的详细状态信息
 - HTTP PATCH通道作为备份，确保回执可靠接收
 - 两个通道的回执到达顺序不确定，幂等处理确保不会出错
 
+**摄像头 feedback 保留机制（v2.2.1 新增）**：
+- PATCH 回执处理时，先检查数据库中已有 feedback 是否有数据（`hasExistingData` 检查）
+- 若已有 feedback 包含数据（如 `stream_url`、`pan_angle` 等），则只更新回执携带的字段，不覆盖已有字段
+- 若已有 feedback 为空，则跳过 feedback 写入，等待数据上报补充完整
+- 此机制确保摄像头回执处理不会意外清空 `stream_url` 等关键字段，避免视频流链接丢失
+
 **路径参数**:
 
 | 参数 | 类型 | 必填 | 说明 |
@@ -2042,7 +2048,7 @@ ws://localhost:8080?actuator_id={执行器ID}
 | area_update | 服务器→客户端 | 区域数据更新 |
 | area_sync | 客户端→服务器 | 订阅区域数据 |
 | device_register | 客户端→服务器 | 设备注册 |
-| gateway_register | 客户端→服务器 | 网关注册 |
+| gateway_register | 客户端→服务器 | 网关注册（gateway_ip 缺失时自动回退到连接上下文 IP） |
 | data_report | 客户端→服务器 | 数据上报 |
 | status_update | 客户端→服务器 | 状态更新 |
 | error | 服务器→客户端 | 错误信息 |

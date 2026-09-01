@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,13 +35,15 @@ import { Actuator, CommandStatus } from "./actuator-card"
  * 3. 颜色追踪开关
  * 4. 追踪颜色切换
  * 5. 摄像头开启/关闭
+ * 6. 陀螺仪手势控制开关（gyro 命令）
  *
  * 命令格式：
  * - on/off：开启/关闭摄像头
  * - value：设置云台角度 {pan, tilt} 或增量 {pan_delta, tilt_delta}
  * - track：跟踪开关 on/off
  * - color：切换追踪颜色 red/blue/green/yellow/orange
- * - reset：云台复位到 90,90
+ * - reset：云台复位到 90,90（含陀螺仪归零）
+ * - gyro：陀螺仪手势控制开关 on/off
  */
 
 /** 支持的追踪颜色列表 */
@@ -56,7 +58,7 @@ const TRACK_COLORS = [
 /** 摄像头命令接口 */
 export interface CameraCommand {
   control_type: 'camera'
-  command: 'on' | 'off' | 'value' | 'track' | 'color' | 'reset'
+  command: 'on' | 'off' | 'value' | 'track' | 'color' | 'reset' | 'gyro'
   pan?: number
   tilt?: number
   pan_delta?: number
@@ -83,11 +85,44 @@ export function CameraControlCard({
   const feedback = actuator.feedback || {}
   const streamUrl = feedback.stream_url || ''
   const snapshotUrl = feedback.snapshot_url || ''
-  const trackingEnabled = feedback.tracking_enabled === true
   const found = feedback.found === true
   const currentColor = feedback.color_preset || ''
   const currentPan = feedback.pan_angle ?? 90
   const currentTilt = feedback.tilt_angle ?? 90
+  // 陀螺仪/手势控制状态
+  // gyro_available 为 false 时表示硬件明确报告陀螺仪不可用；
+  // 为 undefined 时表示硬件未上报该字段（旧版本固件），不阻止用户操作
+  const gyroAvailable = feedback.gyro_available !== false
+  const gyroExplicitlyUnavailable = feedback.gyro_available === false
+  const feedbackGestureControl = feedback.gesture_control_enabled === true
+  const feedbackTracking = feedback.tracking_enabled === true
+
+  // 乐观更新：本地状态立即反映用户操作，feedback 作为最终权威来源
+  const [localGestureControl, setLocalGestureControl] = useState(feedbackGestureControl)
+  const [localTracking, setLocalTracking] = useState(feedbackTracking)
+  // 跟踪上次 ACK 确认的值，避免 feedback 覆盖未确认的乐观更新
+  const [pendingGestureValue, setPendingGestureValue] = useState<boolean | null>(null)
+  const [pendingTrackingValue, setPendingTrackingValue] = useState<boolean | null>(null)
+
+  // 当 feedback 变化时，如果与本地期望值一致（ACK 已确认），则同步本地状态
+  useEffect(() => {
+    if (pendingGestureValue === null) {
+      setLocalGestureControl(feedbackGestureControl)
+    } else if (feedbackGestureControl === pendingGestureValue) {
+      // ACK 已确认，清除 pending 状态
+      setPendingGestureValue(null)
+      setLocalGestureControl(feedbackGestureControl)
+    }
+  }, [feedbackGestureControl, pendingGestureValue])
+
+  useEffect(() => {
+    if (pendingTrackingValue === null) {
+      setLocalTracking(feedbackTracking)
+    } else if (feedbackTracking === pendingTrackingValue) {
+      setPendingTrackingValue(null)
+      setLocalTracking(feedbackTracking)
+    }
+  }, [feedbackTracking, pendingTrackingValue])
 
   // 本地状态：云台角度滑块
   const [panValue, setPanValue] = useState(currentPan)
@@ -96,8 +131,41 @@ export function CameraControlCard({
   const [streamLoading, setStreamLoading] = useState(true)
   // 本地状态：视频流是否出错
   const [streamError, setStreamError] = useState(false)
-  // 视频流重载计数器（用于强制刷新）
-  const [reloadKey, setReloadKey] = useState(0)
+
+  /**
+   * MJPEG 视频流 <img> 元素引用
+   * 核心策略：绕过 React reconciliation，通过 DOM API 直接管理 src 属性。
+   * MJPEG 是基于 HTTP 长连接的流协议（multipart/x-mixed-replace），
+   * React 重渲染时即使 src 值相同，也会触碰 DOM 属性导致浏览器重置连接。
+   * 使用 ref + useEffect 确保仅在 streamUrl 实际变化时才更新 src，
+   * 其他状态变更（如 gesture_control_enabled）不会触发视频流重连。
+   */
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  /**
+   * 仅在 streamUrl 实际变化时，通过 DOM API 更新 <img> 的 src 属性
+   * 完全绕过 React 的 JSX 属性绑定，避免重渲染时触碰 MJPEG 长连接
+   */
+  useEffect(() => {
+    if (imgRef.current && streamUrl) {
+      imgRef.current.src = streamUrl
+      setStreamLoading(true)
+      setStreamError(false)
+    }
+  }, [streamUrl])
+
+  /**
+   * 稳定的视频流事件回调（避免每次渲染创建新函数导致 React 重新绑定事件）
+   */
+  const handleStreamLoad = useCallback(() => {
+    setStreamLoading(false)
+    setStreamError(false)
+  }, [])
+
+  const handleStreamError = useCallback(() => {
+    setStreamLoading(false)
+    setStreamError(true)
+  }, [])
 
   const isUpdating = commandStatus === 'sending' || commandStatus === 'pending'
   const isLocked = actuator.locked === 1
@@ -148,13 +216,30 @@ export function CameraControlCard({
   }
 
   /**
-   * 切换追踪开关
+   * 切换追踪开关（乐观更新）
    */
   const handleToggleTracking = () => {
+    const newValue = !localTracking
+    setLocalTracking(newValue)
+    setPendingTrackingValue(newValue)
     onControl({
       control_type: 'camera',
       command: 'track',
-      value: trackingEnabled ? 'off' : 'on',
+      value: newValue ? 'on' : 'off',
+    })
+  }
+
+  /**
+   * 切换陀螺仪手势控制开关（乐观更新）
+   */
+  const handleToggleGyro = () => {
+    const newValue = !localGestureControl
+    setLocalGestureControl(newValue)
+    setPendingGestureValue(newValue)
+    onControl({
+      control_type: 'camera',
+      command: 'gyro',
+      value: newValue ? 'on' : 'off',
     })
   }
 
@@ -182,12 +267,21 @@ export function CameraControlCard({
   }
 
   /**
-   * 重新加载视频流
+   * 重新加载视频流（通过 DOM API 强制重置 MJPEG 连接）
    */
   const handleReloadStream = () => {
-    setStreamLoading(true)
-    setStreamError(false)
-    setReloadKey(k => k + 1)
+    if (imgRef.current && streamUrl) {
+      setStreamLoading(true)
+      setStreamError(false)
+      // 先清空 src 断开旧连接，再重新设置触发新连接
+      imgRef.current.src = ''
+      // 使用 requestAnimationFrame 确保浏览器处理了 src 清空
+      requestAnimationFrame(() => {
+        if (imgRef.current) {
+          imgRef.current.src = streamUrl
+        }
+      })
+    }
   }
 
   return (
@@ -232,15 +326,12 @@ export function CameraControlCard({
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                key={reloadKey}
-                src={streamUrl}
+                ref={imgRef}
+                key={streamUrl}
                 alt="摄像头实时画面"
                 className="w-full h-full object-contain"
-                onLoad={() => setStreamLoading(false)}
-                onError={() => {
-                  setStreamLoading(false)
-                  setStreamError(true)
-                }}
+                onLoad={handleStreamLoad}
+                onError={handleStreamError}
               />
               {/* 加载中遮罩 */}
               {streamLoading && (
@@ -297,8 +388,8 @@ export function CameraControlCard({
           )}
         </div>
 
-        {/* 摄像头开关和追踪开关 */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* 摄像头开关、追踪开关、陀螺仪开关 */}
+        <div className="grid grid-cols-3 gap-3">
           {/* 摄像头电源开关 */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
             <div className="flex items-center gap-2">
@@ -312,37 +403,39 @@ export function CameraControlCard({
                 disabled={isDisabled}
                 className="data-[state=checked]:bg-primary"
               />
-              <Button
-                size="sm"
-                variant={actuator.state === 'on' ? 'destructive' : 'default'}
-                onClick={handleTogglePower}
-                disabled={isDisabled}
-                className="h-8 px-3"
-              >
-                {isUpdating ? (
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                ) : actuator.state === 'on' ? (
-                  <><PowerOff className="w-3 h-3 mr-1" />关闭</>
-                ) : (
-                  <><Power className="w-3 h-3 mr-1" />开启</>
-                )}
-              </Button>
             </div>
           </div>
 
           {/* 颜色追踪开关 */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
             <div className="flex items-center gap-2">
-              <Eye className={`w-4 h-4 ${trackingEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
+              <Eye className={`w-4 h-4 ${localTracking ? 'text-primary' : 'text-muted-foreground'}`} />
               <span className="text-sm font-medium">颜色追踪</span>
-              {found && trackingEnabled && (
+              {found && localTracking && (
                 <Badge className="bg-green-100 text-green-700 text-xs px-1.5 py-0">命中</Badge>
               )}
             </div>
             <Switch
-              checked={trackingEnabled}
+              checked={localTracking}
               onCheckedChange={handleToggleTracking}
               disabled={isDisabled || actuator.state !== 'on'}
+              className="data-[state=checked]:bg-primary"
+            />
+          </div>
+
+          {/* 陀螺仪手势控制开关 */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Activity className={`w-4 h-4 ${localGestureControl ? 'text-primary' : 'text-muted-foreground'}`} />
+              <span className="text-sm font-medium">手势控制</span>
+              {gyroExplicitlyUnavailable && (
+                <Badge className="bg-orange-100 text-orange-700 text-xs px-1.5 py-0">未连接</Badge>
+              )}
+            </div>
+            <Switch
+              checked={localGestureControl}
+              onCheckedChange={handleToggleGyro}
+              disabled={isDisabled || !gyroAvailable}
               className="data-[state=checked]:bg-primary"
             />
           </div>
@@ -495,11 +588,11 @@ export function CameraControlCard({
               <button
                 key={c.name}
                 onClick={() => handleColorChange(c.name)}
-                disabled={isDisabled || !trackingEnabled}
+                disabled={isDisabled || !localTracking}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-all ${currentColor === c.name
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background text-foreground border-border hover:bg-muted'
-                  } ${isDisabled || !trackingEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
+                  } ${isDisabled || !localTracking ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
               >
                 <span
                   className="w-3 h-3 rounded-full border border-black/10"

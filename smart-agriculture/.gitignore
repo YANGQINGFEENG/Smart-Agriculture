@@ -14,3 +14,12 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+
+# 相机抓拍图片（体积大，不入库）
+public/uploads/camera/
+public/uploads/ai/
+
+# 模型权重文件
+*.pt
+*.pt.*.partial
+*.partial

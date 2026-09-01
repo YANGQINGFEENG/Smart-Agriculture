@@ -331,19 +331,24 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
     // 当同一类型名同时存在于传感器和执行器中时（如light），
     // 根据上报数据特征判断：有state字段=执行器，有value字段=传感器
     if (sensorConfig && actuatorConfig) {
-      // 类型冲突，根据数据特征判断
+      // 类型冲突（如 light 同时存在于传感器和执行器），根据数据特征判断
       if (state !== undefined) {
         deviceClass = DeviceCategory.ACTUATOR
-        actualType = correctedType
+        actualType = correctedType  // 保持 'light' 作为执行器类型
         console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据state字段判断为执行器`)
       } else if (value !== undefined) {
         deviceClass = DeviceCategory.SENSOR
-        actualType = correctedType
-        console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据value字段判断为传感器`)
+        // 将传感器 light 映射为 light_sensor，与执行器 light 彻底分离
+        actualType = correctedType === 'light' ? 'light_sensor' : correctedType
+        if (correctedType === 'light') {
+          console.log(`[Report] 设备 ${node_id} 类型 light 传感器已映射为 light_sensor，与执行器 light 分离`)
+        } else {
+          console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据value字段判断为传感器`)
+        }
       } else {
         // 默认为传感器
         deviceClass = DeviceCategory.SENSOR
-        actualType = correctedType
+        actualType = correctedType === 'light' ? 'light_sensor' : correctedType
       }
     } else if (actuatorConfig) {
       // 仅执行器

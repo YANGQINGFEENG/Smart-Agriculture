@@ -97,6 +97,7 @@ export function ActuatorControl() {
 
   /**
    * 切换执行器开关状态（发送控制指令）
+   * 发送后立即刷新数据，确保 UI 与硬件状态同步
    */
   const toggleState = async (actuatorId: string, currentState: 'on' | 'off') => {
     const newState = currentState === 'on' ? 'off' : 'on'
@@ -118,6 +119,8 @@ export function ActuatorControl() {
       
       if (result.success) {
         console.log('控制指令已发送:', result.data)
+        // 等待短暂时间后刷新，确保硬件已处理并回执
+        await new Promise(resolve => setTimeout(resolve, 500))
         await fetchActuators()
         alert(`已发送${newState === 'on' ? '开启' : '关闭'}指令，等待硬件执行...`)
       } else {

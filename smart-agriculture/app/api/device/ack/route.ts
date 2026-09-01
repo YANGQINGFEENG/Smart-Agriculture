@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     // 验证命令是否存在且状态为待执行或执行中
     const existingCommand = await db.query<RowDataPacket[]>(
-      `SELECT id, command, control_value FROM actuator_commands 
+      `SELECT id, command, control_value, command_data FROM actuator_commands 
        WHERE id = ? AND actuator_id = ?`,
       [numericCommandId, actuator_id]
     )
@@ -86,8 +86,8 @@ export async function POST(request: NextRequest) {
 
     // 如果指令执行成功，更新执行器状态
     if (status === 'executed') {
-      // 摄像头子命令（track/gyro/color/reset）不改变执行器 state 和 feedback，
-      // 仅解锁并更新时间戳。这些命令的状态变化通过硬件定期上报的 feedback 字段反映。
+      // track/gyro/color/reset 命令不改变执行器 state，
+      // 但必须同步更新 feedback 中的对应字段，避免前端等待数据上报周期（~30s）
       const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
       const shouldUpdateState = !noStateChangeCommands.includes(command.command)
 
@@ -138,13 +138,47 @@ export async function POST(request: NextRequest) {
 
         console.log(`[ACK] 执行器 ${actuator_id} 更新成功`)
       } else {
-        // track/gyro/color/reset 命令：仅解锁并更新时间戳，不改变 state 和 feedback
-        await db.execute(
-          `UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?`,
-          [getBeijingTimeForDB(), actuator_id]
+        // gyro/track/color 命令：合并 feedback 字段后立即写入，不等数据上报
+        // 关键：如果 feedback 为空（尚无数据上报），不写入避免丢失 stream_url 等字段
+        const [fbRows] = await db.query<RowDataPacket[]>(
+          `SELECT feedback FROM actuators WHERE id = ?`, [actuator_id]
         )
+        const existingFeedback = (fbRows.length > 0 && fbRows[0].feedback)
+          ? (typeof fbRows[0].feedback === 'string' ? JSON.parse(fbRows[0].feedback) : fbRows[0].feedback)
+          : {}
+        
+        const hasExistingData = Object.keys(existingFeedback).length > 0
+        
+        if (hasExistingData) {
+          let cmdData = command.command_data
+          if (cmdData && typeof cmdData === 'string') {
+            try { cmdData = JSON.parse(cmdData) } catch {}
+          }
+          
+          if (command.command === 'gyro') {
+            const gyroValue = (cmdData && cmdData.value) || command.control_value
+            existingFeedback.gesture_control_enabled = (gyroValue === 'on' || gyroValue === true || gyroValue === 1)
+          } else if (command.command === 'track') {
+            const trackValue = (cmdData && cmdData.value) || command.control_value
+            existingFeedback.tracking_enabled = (trackValue === 'on' || trackValue === true || trackValue === 1)
+          } else if (command.command === 'color') {
+            existingFeedback.color_preset = (cmdData && cmdData.color) || existingFeedback.color_preset
+          }
+          
+          await db.execute(
+            `UPDATE actuators SET last_update = ?, locked = 0, feedback = ? WHERE id = ?`,
+            [getBeijingTimeForDB(), JSON.stringify(existingFeedback), actuator_id]
+          )
 
-        console.log(`[ACK] 执行器 ${actuator_id} 已解锁（${command.command} 命令不改变 state）`)
+          console.log(`[ACK] 执行器 ${actuator_id} 已解锁（${command.command} 命令，feedback 已同步）`)
+        } else {
+          // feedback 为空，仅解锁，等待数据上报补充完整 feedback
+          await db.execute(
+            'UPDATE actuators SET locked = 0 WHERE id = ?',
+            [actuator_id]
+          )
+          console.log(`[ACK] 执行器 ${actuator_id} 已解锁（${command.command} 命令，feedback 为空，跳过写入）`)
+        }
       }
     } else {
       // 执行失败，解锁执行器

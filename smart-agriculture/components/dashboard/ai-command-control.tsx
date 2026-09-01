@@ -17,6 +17,9 @@ import {
   Clock,
   History,
   Settings,
+  Zap,
+  Check,
+  X,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 
@@ -51,8 +54,13 @@ export function AICommandControl() {
   const [command, setCommand] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [aiResponse, setAiResponse] = useState<string | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
   const [actuators, setActuators] = useState<Actuator[]>([])
   const [commandHistory, setCommandHistory] = useState<CommandHistory[]>([])
+  /** 当前命令信息（含自动化方案） */
+  const [commandInfo, setCommandInfo] = useState<any>(null)
+  /** 执行结果（含组合动作多设备结果） */
+  const [executionResult, setExecutionResult] = useState<any>(null)
 
   /**
    * 获取执行器列表
@@ -81,6 +89,8 @@ export function AICommandControl() {
     if (!command.trim()) return
 
     setIsProcessing(true)
+    setAiError(null)
+    setAiResponse(null)
 
     try {
       // 调用 AI 聊天 API
@@ -98,20 +108,41 @@ export function AICommandControl() {
       const result = await response.json()
 
       if (!result.success) {
-        throw new Error(result.error || 'API 调用失败')
+        // API 返回失败，显示错误信息
+        const errorMsg = result.error || 'AI 服务调用失败'
+        setAiError(errorMsg)
+        
+        const newHistoryItem: CommandHistory = {
+          id: Date.now().toString(),
+          timestamp: new Date().toLocaleString("zh-CN"),
+          command: command.trim(),
+          actuator: "系统",
+          status: "失败",
+          response: errorMsg,
+        }
+        setCommandHistory(prev => [newHistoryItem, ...prev])
+        return
       }
 
       // 解析 AI 响应
       let aiMessage = result.data.response
-      let commandInfo = result.data.commandInfo
-      let executionResult = result.data.executionResult
+      let cmdInfo = result.data.commandInfo
+      let execResult = result.data.executionResult
+
+      // 保存到状态（供自动化方案卡片使用）
+      setCommandInfo(cmdInfo)
+      setExecutionResult(execResult)
 
       // 判断是否为无效命令或问候语
-      const isInvalidAction = commandInfo?.action === 'none' || !commandInfo?.actuatorId || commandInfo?.actuatorId === 'unknown'
+      const isInvalidAction = cmdInfo?.action === 'none' || (!cmdInfo?.actuatorId && cmdInfo?.action !== 'automation')
+      const isAutomation = cmdInfo?.action === 'automation'
 
       // 如果是问候语或无效命令，显示AI的友好回复
       if (isInvalidAction) {
-        aiMessage = commandInfo?.reply || '抱歉，我无法识别您的命令。'
+        aiMessage = cmdInfo?.reply || '抱歉，我无法识别您的命令。'
+      } else if (isAutomation) {
+        // 自动化方案推荐：显示方案卡片，不自动执行
+        aiMessage = cmdInfo?.reply || '检测到匹配的自动化方案'
       } else if (aiMessage.includes('```json')) {
         aiMessage = '命令已解析，正在执行操作...'
       }
@@ -119,20 +150,20 @@ export function AICommandControl() {
       // 设置 AI 响应
       setAiResponse(aiMessage)
 
-      // 如果不是无效命令，模拟命令执行
-      if (!isInvalidAction) {
+      // 如果不是无效命令且不是自动化方案，模拟命令执行
+      if (!isInvalidAction && !isAutomation) {
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
 
       // 添加到历史记录
-      const actuator = actuators.find(a => a.id === commandInfo?.actuatorId)
+      const actuator = actuators.find(a => a.id === cmdInfo?.actuatorId)
       const newHistoryItem: CommandHistory = {
         id: Date.now().toString(),
         timestamp: new Date().toLocaleString("zh-CN"),
         command: command.trim(),
-        actuator: isInvalidAction ? "无设备操作" : (actuator?.name || commandInfo?.actuatorId || "未知设备"),
-        status: isInvalidAction ? "未执行" : (executionResult?.success ? "成功" : "失败"),
-        response: isInvalidAction ? (commandInfo?.reply || "未执行设备操作") : (executionResult?.message || "命令执行成功"),
+        actuator: isInvalidAction ? "无设备操作" : (isAutomation ? "自动化方案推荐" : (actuator?.name || cmdInfo?.actuatorId || "未知设备")),
+        status: isInvalidAction ? "未执行" : (isAutomation ? "待确认" : (execResult?.success ? "成功" : "失败")),
+        response: isInvalidAction ? (cmdInfo?.reply || "未执行设备操作") : (execResult?.message || "命令执行成功"),
       }
       
       setCommandHistory(prev => [newHistoryItem, ...prev])
@@ -140,23 +171,78 @@ export function AICommandControl() {
       // 清空输入
       setCommand("")
     } catch (error) {
-      console.error('命令执行失败:', error)
+      // 网络错误等前端异常
+      const errorMsg = error instanceof Error ? error.message : '网络连接异常，请检查网络后重试'
+      console.error('[AI Chat] 前端请求异常:', errorMsg)
+      setAiError(errorMsg)
       
-      // 添加失败记录
       const newHistoryItem: CommandHistory = {
         id: Date.now().toString(),
         timestamp: new Date().toLocaleString("zh-CN"),
         command: command.trim(),
-        actuator: "未知设备",
+        actuator: "系统",
         status: "失败",
-        response: "命令执行失败",
+        response: errorMsg,
       }
       
       setCommandHistory(prev => [newHistoryItem, ...prev])
     } finally {
       setIsProcessing(false)
-      // 3秒后清除响应
-      setTimeout(() => setAiResponse(null), 3000)
+      // 5秒后清除提示（自动化方案卡片不自动清除）
+      setTimeout(() => {
+        setAiResponse(null)
+        setAiError(null)
+      }, 5000)
+    }
+  }
+
+  /**
+   * 执行自动化方案（用户点击"执行方案"后）
+   */
+  const handleExecuteAutomation = async (automationId: number) => {
+    setIsProcessing(true)
+    setAiError(null)
+    setAiResponse(null)
+
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `执行自动化方案 ${automationId}`,
+          action: 'execute_automation',
+          automationId,
+        }),
+      })
+
+      const result = await response.json()
+      if (!result.success) {
+        setAiError(result.error || '方案执行失败')
+        return
+      }
+
+      const cmdInfo = result.data.commandInfo
+      const execResult = result.data.executionResult
+
+      setCommandInfo(cmdInfo)
+      setExecutionResult(execResult)
+      setAiResponse(cmdInfo?.reply || '方案执行完成')
+
+      // 添加到历史记录
+      const newHistoryItem: CommandHistory = {
+        id: Date.now().toString(),
+        timestamp: new Date().toLocaleString("zh-CN"),
+        command: `执行自动化方案 #${automationId}`,
+        actuator: "自动化方案",
+        status: execResult?.success ? "成功" : "失败",
+        response: execResult?.message || "命令执行完成",
+      }
+      setCommandHistory(prev => [newHistoryItem, ...prev])
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : '网络连接异常'
+      setAiError(errorMsg)
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -220,10 +306,85 @@ export function AICommandControl() {
               )}
             </Button>
 
+            {aiError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">请求失败</p>
+                  <p className="text-xs text-red-600 mt-1">{aiError}</p>
+                </div>
+              </div>
+            )}
+
             {aiResponse && (
               <div className="p-4 bg-muted/50 border border-border rounded-lg flex items-start gap-3">
                 <Bot className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                 <p className="text-sm">{aiResponse}</p>
+              </div>
+            )}
+
+            {/* 自动化方案推荐卡片 */}
+            {commandInfo?.action === 'automation' && commandInfo?.automationScheme && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="h-5 w-5 text-blue-600" />
+                  <span className="font-semibold text-blue-800">
+                    {commandInfo.automationScheme.name}
+                  </span>
+                  <Badge className="bg-blue-100 text-blue-700 text-xs">
+                    推荐方案
+                  </Badge>
+                </div>
+                <p className="text-sm text-blue-700 mb-3">
+                  {commandInfo.automationScheme.action_desc}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleExecuteAutomation(commandInfo.automationScheme.id)}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? (
+                      <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 mr-1" />
+                    )}
+                    执行方案
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setCommandInfo(null)
+                      setExecutionResult(null)
+                    }}
+                  >
+                    忽略
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* 执行结果展示（组合动作多设备） */}
+            {executionResult?.results && executionResult.results.length > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-green-800 mb-2">
+                  {executionResult.success ? '全部执行成功' : '部分执行失败'}
+                </p>
+                <div className="space-y-1">
+                  {executionResult.results.map((r: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      {r.success ? (
+                        <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                      )}
+                      <span className={r.success ? 'text-green-700' : 'text-red-700'}>
+                        {r.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

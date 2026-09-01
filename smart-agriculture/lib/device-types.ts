@@ -68,8 +68,16 @@ export const DEVICE_TYPES: DeviceTypeConfig[] = [
     color: 'blue',
   },
   {
-    type: 'light',
+    type: 'light_sensor',
     name: '光照强度',
+    category: DeviceCategory.SENSOR,
+    unit: 'lux',
+    icon: 'Sun',
+    color: 'yellow',
+  },
+  {
+    type: 'light',  // 保留兼容旧数据，但推荐使用 light_sensor
+    name: '光照强度(旧)',
     category: DeviceCategory.SENSOR,
     unit: 'lux',
     icon: 'Sun',
@@ -400,7 +408,8 @@ export function getDeviceTypePrefix(type: string): string {
       const sensorPrefixMap: Record<string, string> = {
         temperature: 'T',
         humidity: 'H',
-        light: 'L',
+        light: 'L',           // 兼容旧数据
+        light_sensor: 'LS',   // 新光照传感器前缀
         soil_moisture: 'SM',
         soil_temperature: 'ST',
         ph: 'P',
