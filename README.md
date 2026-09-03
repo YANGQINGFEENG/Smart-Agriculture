@@ -1,121 +1,65 @@
-# 🌱 智慧农业物联网平台 (Smart Agriculture IoT Platform)
+# 智慧农业物联网平台
 
-> 一个覆盖 **STM32 硬件采集 → 树莓派边缘网关 → 云端服务 → Web 前端 → AI 智能代理** 全链路的智慧农业物联网平台，实现环境感知、执行器联动、AI 视觉识别与智能诊断的一体化解决方案。
-
----
-
-## 📋 目录
-
-- [📖 项目简介](#-项目简介)
-- [🏗️ 系统架构](#️-系统架构)
-- [📦 子项目说明](#-子项目说明)
-- [🚀 快速开始](#-快速开始)
-- [💻 环境要求](#-环境要求)
-- [☁️ 部署指南](#️-部署指南)
-- [📁 项目结构](#-项目结构)
-- [🔧 技术栈](#-技术栈)
-- [📝 贡献指南](#-贡献指南)
-- [📄 许可证](#-许可证)
+基于 STM32 + 树莓派 + 阿里云 ECS 的温室大棚监控系统，包含硬件采集、边缘网关、云端服务三层，支持环境数据采集、设备远程控制、YOLO 作物识别和 AI 诊断，多设备通过 WebSocket 实时通信。
 
 ---
 
-## 📖 项目简介
+## 目录
 
-**天工慧眼 · 智慧农业物联网平台** 是一个面向现代农业场景的全栈物联网系统，通过"端-边-云"三层架构实现农业环境的实时监测与智能控制：
+- [项目简介](#项目简介)
+- [系统架构](#系统架构)
+- [子项目说明](#子项目说明)
+- [快速开始](#快速开始)
+- [环境要求](#环境要求)
+- [部署指南](#部署指南)
+- [项目结构](#项目结构)
+- [技术栈](#技术栈)
+- [贡献指南](#贡献指南)
+- [许可证](#许可证)
 
-- **端**：STM32F103 单片机采集温湿度、光照、土壤等环境数据，通过 RS485/TTL 总线与网关通信；驱动 PWM 舵机、继电器等执行器。
-- **边**：树莓派 4B 作为边缘网关，运行 YOLO 目标检测模型进行作物识别，采集传感器数据并通过 WebSocket 实时上报云端，同时接收云端控制指令联动本地执行器。
-- **云**：Next.js 全栈应用提供 REST API 与 WebSocket 服务，MySQL 持久化存储，PM2 进程管理，部署于阿里云 ECS。
-- **智**：AI 智能代理基于 DeepSeek 大语言模型，提供设备诊断、异常告警分析与智能问答能力。
+---
 
-### ✨ 核心功能
+## 项目简介
+
+本项目基于 STM32 + 树莓派 + 阿里云 ECS 搭建，通过 STM32 采集传感器数据、树莓派做边缘中转和 YOLO 视觉识别、云端跑 Next.js Web 应用和 WebSocket 服务，实现环境监控、设备控制、作物识别和 AI 诊断功能。
+
+### 核心功能
 
 | 功能模块 | 说明 |
 |---------|------|
-| 🌡️ 环境监测 | 温湿度、光照、CO₂、土壤湿度等多维度实时采集与可视化 |
-| 🎯 AI 视觉识别 | 基于 YOLOv5/YOLO11 的作物病害检测与生长状态识别 |
-| ⚙️ 执行器控制 | 蜂鸣器、风扇、激光、RGB-LED、继电器、摄像头云台联动 |
-| 📊 数据看板 | 实时数据流、历史趋势图表、设备状态总览 |
-| 🤖 智能诊断 | LLM 驱动的设备故障诊断与运维建议 |
-| 📡 设备通信 | WebSocket 双向实时通信，支持多设备并发接入 |
-| 🔔 告警系统 | 阈值告警、异常事件推送、告警记录查询 |
+| 环境监测 | 温湿度、光照、CO2、土壤湿度等实时采集与图表展示 |
+| AI 视觉识别 | 基于 YOLOv5/YOLO11 的作物病害检测与生长状态识别 |
+| 执行器控制 | 蜂鸣器、风扇、激光、RGB-LED、继电器、摄像头云台控制 |
+| 数据看板 | 实时数据流、历史趋势图表、设备状态总览 |
+| 智能诊断 | LLM 驱动的设备故障诊断与运维建议 |
+| 设备通信 | WebSocket 双向实时通信，支持多设备同时接入 |
+| 告警系统 | 阈值告警、异常事件推送、告警记录查询 |
 
 ---
 
-## 🏗️ 系统架构
+## 系统架构
 
-```mermaid
-graph TB
-    subgraph 感知层
-        A[STM32F103 单片机]
-        A1[DHT11 温湿度]
-        A2[光照传感器]
-        A3[土壤湿度]
-        A4[RS485 总线设备]
-        A --> A1
-        A --> A2
-        A --> A3
-        A --> A4
-    end
+### 硬件采集层
 
-    subgraph 边缘层
-        B[树莓派 4B 网关]
-        B1[YOLO 目标检测]
-        B2[传感器数据采集]
-        B3[执行器驱动]
-        B4[摄像头云台]
-        B --> B1
-        B --> B2
-        B --> B3
-        B --> B4
-    end
+STM32F103 接了 DHT11 读空气温湿度，接 ADC 读光照强度，还通过 RS485 连了土壤传感器，读含水率、温度、电导率和 pH。土壤传感器走 Modbus-RTU 协议，4800 波特率，8N1 帧格式，CRC16 校验。执行器方面，继电器控制风扇和水泵，还有 PWM 舵机。采集到的数据通过 ATK-MB026 WiFi 模块以 TCP 透传发给树莓派，格式是 JSON，每个传感器有自己的 ID，比如 T-001 是空气温度、S-001 是土壤湿度。
 
-    subgraph 云端层
-        C[阿里云 ECS]
-        C1[Next.js Web 应用]
-        C2[WebSocket 服务]
-        C3[MySQL 数据库]
-        C4[Flask 推理服务]
-        C5[AI 智能代理]
-        C --> C1
-        C --> C2
-        C --> C3
-        C --> C4
-        C --> C5
-    end
+### 边缘网关层
 
-    subgraph 用户层
-        D[浏览器]
-        E[移动端]
-    end
+树莓派 4B 负责中转和边缘处理，跑 Raspberry Pi OS 64-bit，Python 3.9+。它通过串口收 STM32 的数据，然后用 WebSocket 客户端连到云端服务器（端口 8080）把数据推上去，同时本地通过摄像头跑 YOLO 做作物识别。执行器控制方面，树莓派通过 PCA9685（I2C 地址 0x40，50Hz PWM）驱动舵机，也控制继电器和蜂鸣器。云端下发的控制指令走 WebSocket 到树莓派，树莓派执行后回传回执。
 
-    A -->|RS485 / TTL| B
-    B -->|WebSocket| C2
-    B1 -->|HTTP| C4
-    C2 --> C1
-    C1 --> C3
-    C5 --> C3
-    C1 --> D
-    C1 --> E
-```
+### 云端服务层
+
+云端跑在阿里云 ECS 上（Ubuntu 22.04），主要是 Next.js Web 应用（端口 3000）和一个独立的 WebSocket 服务（端口 8080/8081）。WebSocket 服务负责维护所有设备和网关的连接，处理传感器数据上报、控制指令下发、心跳保活、模型切换等消息，数据存 MySQL。Web 应用提供数据看板、设备管理、执行器控制、告警查看等页面，用户通过浏览器操作，数据实时刷新。另外还有一个 Flask 推理服务跑 YOLO 模型，以及一个基于 DeepSeek 的 AI 诊断代理。
 
 ### 数据流向
 
-```
-传感器 → STM32 → RS485 → 树莓派网关 → WebSocket → 云端服务器 → 数据库
-                                                          ↓
-摄像头 → YOLO推理 → 检测结果 → WebSocket上报 → 云端存储 → Web前端展示
-                                                          ↓
-Web前端 ← REST API ← 云端服务器 ← 控制指令 ← 用户操作
-                                                          ↓
-执行器 ← 树莓派网关 ← WebSocket ← 云端服务器 ← 控制指令
-```
+上行数据：传感器 -> STM32 -> WiFi TCP -> 树莓派 -> WebSocket -> 云端服务器 -> MySQL 存储 -> Web 前端展示。视觉检测：摄像头 -> YOLO 推理 -> 检测结果通过 WebSocket 上报云端存储。下行控制：用户操作 -> Web 前端 -> REST API -> 云端服务器 -> WebSocket -> 树莓派 -> 执行器动作。
 
 ---
 
-## 📦 子项目说明
+## 子项目说明
 
-### 1. 🖥️ smart-agriculture — 云端 Web 应用
+### 1. smart-agriculture — 云端 Web 应用
 
 | 属性 | 说明 |
 |------|------|
@@ -128,20 +72,20 @@ Web前端 ← REST API ← 云端服务器 ← 控制指令 ← 用户操作
 
 ---
 
-### 2. 🍓 基于树莓派yolo的传感器检测与上传 — 边缘网关
+### 2. 基于树莓派yolo的传感器检测与上传 — 边缘网关
 
 | 属性 | 说明 |
 |------|------|
 | **路径** | `基于树莓派yolo的传感器检测与上传/` |
 | **技术栈** | Python 3.9+ + YOLOv5/YOLO11 + WebSocket |
 | **硬件** | 树莓派 4B + Raspberry Pi OS |
-| **说明** | 运行在树莓派上的边缘计算网关，负责传感器数据采集、YOLO 目标检测、执行器控制与云端通信 |
+| **说明** | 树莓派上运行的网关程序，负责采集传感器数据、跑 YOLO 检测、控制执行器、跟云端通信 |
 
 **主要功能**：传感器采集、YOLO 推理、WebSocket 上报、执行器驱动（蜂鸣器/风扇/激光/RGB-LED/继电器）、摄像头云台控制、OTA 升级
 
 ---
 
-### 3. 🔌 硬件端 — STM32 嵌入式固件
+### 3. 硬件端 — STM32 嵌入式固件
 
 | 属性 | 说明 |
 |------|------|
@@ -157,19 +101,19 @@ Web前端 ← REST API ← 云端服务器 ← 控制指令 ← 用户操作
 
 ---
 
-### 4. 🤖 bonsai_agent — AI 智能代理
+### 4. bonsai_agent — AI 智能代理
 
 | 属性 | 说明 |
 |------|------|
 | **路径** | `bonsai_agent/` |
 | **技术栈** | Python + DeepSeek API + Web 界面 |
-| **说明** | 基于大语言模型的 AI 智能代理，提供设备诊断、日志分析、智能问答等能力 |
+| **说明** | 基于 DeepSeek 的 AI 代理，可以诊断设备故障、分析日志、回答运维问题 |
 
 **主要功能**：设备故障诊断、传感器数据分析、LLM 工具调用、Web 交互界面
 
 ---
 
-### 5. 🎮 device-simulator — 设备模拟器
+### 5. device-simulator — 设备模拟器
 
 | 属性 | 说明 |
 |------|------|
@@ -181,7 +125,7 @@ Web前端 ← REST API ← 云端服务器 ← 控制指令 ← 用户操作
 
 ---
 
-### 6. ☁️ 云端部署 — 部署脚本与配置
+### 6. 云端部署 — 部署脚本与配置
 
 | 属性 | 说明 |
 |------|------|
@@ -199,7 +143,7 @@ Web前端 ← REST API ← 云端服务器 ← 控制指令 ← 用户操作
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 本地开发
 
@@ -313,7 +257,7 @@ python main.py
 
 ---
 
-## 💻 环境要求
+## 环境要求
 
 | 组件 | 要求 | 说明 |
 |------|------|------|
@@ -331,7 +275,7 @@ python main.py
 
 ---
 
-## ☁️ 部署指南
+## 部署指南
 
 ### 生产环境架构
 
@@ -381,11 +325,11 @@ pm2 install pm2-logrotate
 
 ---
 
-## 📁 项目结构
+## 项目结构
 
 ```
 tghy/
-├── smart-agriculture/              # 🖥️ 云端 Web 应用（Next.js 全栈）
+├── smart-agriculture/              # 云端 Web 应用（Next.js 全栈）
 │   ├── app/                        #   Next.js App Router 页面与 API
 │   ├── components/                 #   React UI 组件
 │   ├── lib/                        #   核心业务库（数据库、WebSocket、AI）
@@ -402,7 +346,7 @@ tghy/
 │   ├── docker-compose.yml          #   Docker 编排
 │   └── Dockerfile                  #   Docker 构建
 │
-├── 基于树莓派yolo的传感器检测与上传/  # 🍓 树莓派边缘网关
+├── 基于树莓派yolo的传感器检测与上传/  # 树莓派边缘网关
 │   ├── main.py                     #   网关主程序入口
 │   ├── agent/                      #   网关 Agent 逻辑
 │   ├── core/                       #   核心采集与控制模块
@@ -416,13 +360,13 @@ tghy/
 │   ├── tests/                      #   测试
 │   └── requirements.txt            #   Python 依赖
 │
-├── 硬件端/                          # 🔌 STM32 嵌入式固件
+├── 硬件端/                          # STM32 嵌入式固件
 │   ├── stm32-main/                 #   主固件（Keil MDK 项目）
 │   ├── stm32-makefile/             #   Makefile 构建版本
 │   ├── stm32-wifi/                 #   WiFi 通信扩展
 │   └── stm32-v3/                   #   V3 版本
 │
-├── bonsai_agent/                   # 🤖 AI 智能代理
+├── bonsai_agent/                   # AI 智能代理
 │   ├── main.py                     #   Agent 主程序
 │   ├── tools/                      #   LLM 工具集
 │   ├── prompts/                    #   提示词模板
@@ -431,12 +375,12 @@ tghy/
 │   ├── web/                        #   Web 界面
 │   └── requirements.txt            #   Python 依赖
 │
-├── device-simulator/               # 🎮 设备模拟器
+├── device-simulator/               # 设备模拟器
 │   ├── simulator.py                #   模拟器主程序
 │   ├── requirements.txt            #   Python 依赖
 │   └── DeviceSimulator.spec        #   PyInstaller 打包配置
 │
-├── 云端部署/                        # ☁️ 部署脚本与配置
+├── 云端部署/                        # 部署脚本与配置
 │   ├── ecosystem.config.js         #   PM2 进程配置
 │   ├── server-init.sh              #   服务器初始化
 │   ├── deploy-app.sh               #   应用部署
@@ -444,126 +388,39 @@ tghy/
 │   ├── env.production.template     #   生产环境变量模板
 │   └── *.sh                        #   各类运维脚本
 │
-├── database/                       # 🗄️ 数据库文件
+├── database/                       # 数据库文件
 │   └── agriculture_iot.db          #   SQLite 数据库
 │
-├── 参考文件夹/                      # 📚 参考资料
+├── 参考文件夹/                      # 参考资料
 │   ├── RS485通信测试程序/            #   RS485 通信示例
 │   └── ATK-D4X TTL通讯/            #   D4X TTL 通讯资料
 │
-└── README.md                       # 📖 本文件
+└── README.md                       # 本文件
 ```
 
 ---
 
-## 🔧 技术栈
+## 技术栈
 
-### 前端
+**Web 端**：Next.js 16、React 19、TypeScript 5.7、TailwindCSS 4、shadcn/ui、Recharts、Radix UI
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Next.js | 16.2.0 | React 全栈框架 |
-| React | 19 | UI 库 |
-| TypeScript | 5.7 | 类型安全 |
-| TailwindCSS | 4.x | 原子化 CSS |
-| shadcn/ui | latest | UI 组件库 |
-| Recharts | 2.15 | 数据可视化图表 |
-| Radix UI | latest | 无障碍基础组件 |
+**服务端**：Next.js API Routes、WebSocket (ws 8.x)、MySQL 8.0、SQLite、Flask
 
-### 后端
+**AI & 推理**：YOLOv5、YOLO11、DeepSeek API、Ollama、FAISS + BGE
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Next.js API Routes | 16.2.0 | RESTful API |
-| WebSocket (ws) | 8.x | 实时双向通信 |
-| MySQL | 8.0 | 生产数据库 |
-| SQLite | 5.x | 开发数据库 |
-| Flask | latest | Python 推理服务 |
+**嵌入式**：STM32F103、Keil MDK 5.x、RS485、DHT11、PCA9685、Raspberry Pi 4B
 
-### AI & 推理
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| YOLOv5 | latest | 目标检测推理 |
-| YOLO11 | latest | 新一代目标检测 |
-| DeepSeek API | latest | LLM 智能代理 |
-| Ollama | latest | 本地 LLM 推理 |
-| FAISS + BGE | latest | RAG 知识检索 |
-
-### 物联网 & 嵌入式
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| STM32F103 | - | 主控单片机 |
-| Keil MDK | 5.x | 嵌入式开发 IDE |
-| RS485 | - | 工业总线通信 |
-| DHT11 | - | 温湿度传感器 |
-| PCA9685 | - | PWM 舵机驱动 |
-| Raspberry Pi 4B | - | 边缘网关 |
-| Python | 3.9+ | 网关程序 |
-
-### 运维 & 部署
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| 阿里云 ECS | - | 云服务器 |
-| Ubuntu | 22.04 LTS | 服务器 OS |
-| PM2 | latest | Node.js 进程管理 |
-| PM2-logrotate | latest | 日志轮转 |
-| Docker | latest | 容器化部署（可选） |
-| Nginx | latest | 反向代理 |
+**部署**：阿里云 ECS (Ubuntu 22.04)、PM2、Nginx、Docker（可选）
 
 ---
 
-## 📝 贡献指南
+## 贡献指南
 
-欢迎贡献代码！请遵循以下流程：
-
-### 1. Fork 项目
-
-在 GitHub 上 Fork 本仓库到你的账号下。
-
-### 2. 创建特性分支
-
-```bash
-git checkout -b feature/amazing-feature
-```
-
-### 3. 提交更改
-
-```bash
-git commit -m "feat: add amazing feature"
-```
-
-**Commit 规范**：
-- `feat:` 新功能
-- `fix:` 修复 Bug
-- `docs:` 文档更新
-- `style:` 代码格式（不影响逻辑）
-- `refactor:` 重构
-- `test:` 测试相关
-- `chore:` 构建/工具链相关
-
-### 4. 推送分支
-
-```bash
-git push origin feature/amazing-feature
-```
-
-### 5. 创建 Pull Request
-
-在 GitHub 上创建 PR，描述你的更改内容和动机。
-
-### 开发注意事项
-
-- 🌿 **分支策略**：`main` 为稳定分支，开发请在 `feature/*` 或 `dev/*` 分支进行
-- 🔒 **敏感信息**：请勿在代码或配置中硬编码服务器 IP、密码、API Key 等敏感信息，使用 `.env` 文件管理
-- 📝 **代码风格**：前端遵循 ESLint 配置，Python 遵循 PEP 8
-- 🧪 **测试**：提交前确保本地测试通过
+欢迎提 Issue 或 PR。开发请在 `feature/*` 或 `dev/*` 分支进行，不要硬编码敏感信息（服务器 IP、密码、API Key 等），统一用 `.env` 文件管理。
 
 ---
 
-## 📄 许可证
+## 许可证
 
 本项目基于 [MIT License](LICENSE) 开源发布。
 
@@ -593,12 +450,3 @@ SOFTWARE.
 
 ---
 
-## 🙏 致谢
-
-感谢所有为智慧农业物联网做出贡献的开发者们！
-
----
-
-<p align="center">
-  <strong>天工慧眼 · 让农业更智慧 🌾</strong>
-</p>
