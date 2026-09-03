@@ -33,6 +33,9 @@ const tabTitles: Record<string, string> = {
   compare: "数据对比",
   "ai-video": "AI视频检测",
   "ai-command": "AI文字控制",
+  "agent-diagnosis": "智能诊疗记录",
+  "yolo-models": "识别模型切换",
+  "model-management": "模型管理",
 }
 
 export function Header({ activeTab }: HeaderProps) {

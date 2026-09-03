@@ -1,0 +1,55 @@
+# ===================================================================
+# 智慧农业硬件系统 - Python 依赖
+# ===================================================================
+# 安装：pip install -r requirements.txt
+# 注意：树莓派上部分依赖需要先安装系统库（apt-get install）
+# ===================================================================
+
+# ------------------------- 1. 核心依赖 -------------------------
+pyyaml>=6.0                  # 配置文件解析（settings.yaml/sensors.yaml/actuators.yaml）
+requests>=2.28                # HTTP 客户端（上传数据、OTA 下载）
+websocket-client>=1.5        # WebSocket 客户端（实时指令接收）
+
+# ------------------------- 2. 树莓派硬件库 -------------------------
+# GPIO/I2C/SPI/1-Wire 操作（仅树莓派可用，Windows 开发时会自动降级为测试模式）
+gpiozero>=2.0                 # 高级 GPIO 抽象（继电器/激光/振动/RGB-LED）
+RPi.GPIO>=0.7.1               # 底层 GPIO 操作（gpiozero 依赖）
+smbus2>=0.4.1                 # I2C 通信（BMP280/LCD1602 备选）
+libgpiod2                     # libgpiod Python 绑定（gpiozero 依赖）
+
+# Adafruit CircuitPython 传感器库
+adafruit-circuitpython-bmp280>=3.2  # BMP280 气压温度传感器
+adafruit-circuitpython-dht>=4.0     # DHT11/DHT22 温湿度传感器
+adafruit-circuitpython-mcp3008>=1.0 # MCP3008 ADC 模数转换器
+Adafruit-Blinka>=8.20                # Adafruit CircuitPython 兼容层
+
+# 1-Wire 设备（DS18B20 温度传感器等，使用内核模块，无需额外 Python 包）
+
+# ------------------------- 3. 网络通信 -------------------------
+paho-mqtt>=1.6                # MQTT 客户端（可选，用于实时指令）
+psutil>=5.9                   # 系统状态监控（CPU/内存/温度）
+
+# ------------------------- 4. UI 桌面端 -------------------------
+# Tkinter 是 Python 标准库（无需 pip 安装），但需要系统 Tk 库
+# 树莓派：sudo apt-get install python3-tk
+Pillow>=9.5                    # 图像处理（UI 中的图标和图片，可选）
+pyobjc>=9.0 ; sys_platform == 'darwin'  # macOS 上的系统集成（开发用）
+
+# ------------------------- 5. OTA 升级 -------------------------
+# Git 升级模式使用系统 git 命令，无需 Python 包
+# HTTP 升级模式使用 requests（已在核心依赖中）
+GitPython>=3.1                 # 可选，Python 操作 Git 仓库（替代 subprocess 调用 git）
+
+# ------------------------- 6. 数据处理 -------------------------
+python-dateutil>=2.8           # 日期时间处理（解析 ISO 时间戳）
+
+# ------------------------- 6a. 智能养护 Agent -------------------------
+pandas>=2.0                    # 专家数据库 Excel 读取（agent/knowledge_tool）
+python-calamine>=0.2           # Excel 高性能解析引擎（agent/knowledge_tool）
+ollama>=0.3                    # Ollama 客户端（agent/llm_tool，DeepSeek 辅助诊疗）
+
+# ------------------------- 7. 测试与开发 -------------------------
+pytest>=7.4                   # 单元测试框架
+pytest-cov>=4.1               # 测试覆盖率
+flake8>=6.0                   # 代码风格检查
+black>=23.0                   # 代码格式化

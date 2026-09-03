@@ -35,6 +35,8 @@ const WebSocketMessageType = {
   AREA_UPDATE: 'area_update',
   ERROR: 'error',
   AREA_SYNC: 'area_sync',
+  MODEL_SWITCH: 'model_switch',
+  MODEL_STATUS: 'model_status',
 };
 
 // 创建数据库连接池
@@ -244,6 +246,10 @@ async function handleWebSocketMessage(ws, message, deviceId, actuatorId, gateway
         if (area) {
           await handleAreaSync(ws, area);
         }
+        break;
+      case WebSocketMessageType.MODEL_STATUS:
+        // 树莓派上报识别模型状态/切换回执
+        await handleModelStatus(gatewayIp, data.data || {});
         break;
       default:
         console.log('[WS] Unknown message type:', data.type);
@@ -837,6 +843,95 @@ function sendCommandToActuator(actuatorId, command) {
 }
 
 /**
+ * 发送任意消息到指定网关（供 Next.js 通过 HTTP 中继调用）
+ */
+function sendMessageToGateway(gatewayIp, message) {
+  const ws = gatewayConnections.get(gatewayIp);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+    console.log(`[WS] Message sent to gateway ${gatewayIp}: ${message.type}`);
+    return true;
+  }
+  console.log(`[WS] No active gateway connection: ${gatewayIp}`);
+  return false;
+}
+
+/**
+ * 处理树莓派上报的识别模型状态（type=model_status）
+ * data: { gateway_ip, request_id, filename, success, message, current_model, ... }
+ */
+async function handleModelStatus(connGatewayIp, data) {
+  const gatewayIp = data.gateway_ip || connGatewayIp;
+  if (!gatewayIp || !db) return;
+
+  const requestId = data.request_id || null;
+  const filename = data.filename || data.current_model || null;
+  const success = Boolean(data.success);
+  const message = String(data.message || '').slice(0, 500);
+
+  try {
+    if (requestId) {
+      // 回填切换请求回执（已成功的记录不覆盖）
+      const [logs] = await db.query(
+        'SELECT id, filename, status FROM yolo_model_switch_logs WHERE id = ? LIMIT 1',
+        [requestId]
+      );
+      if (logs.length > 0 && logs[0].status !== 'success') {
+        const targetFile = filename || logs[0].filename;
+        await db.execute(
+          `UPDATE yolo_model_switch_logs
+           SET status = ?, message = ?, acked_at = NOW()
+           WHERE id = ?`,
+          [success ? 'success' : 'failed', message, requestId]
+        );
+        await db.execute(
+          `UPDATE yolo_models SET last_message = ?, status = ?
+           WHERE gateway_ip = ? AND filename = ?`,
+          [message, success ? 'active' : 'failed', gatewayIp, targetFile]
+        );
+
+        if (success && targetFile) {
+          // 切换成功：期望模型与硬件实际加载模型对齐
+          await db.execute('UPDATE yolo_models SET is_active = 0 WHERE gateway_ip = ?', [gatewayIp]);
+          await db.execute(
+            'UPDATE yolo_models SET is_active = 1 WHERE gateway_ip = ? AND filename = ?',
+            [gatewayIp, targetFile]
+          );
+          await db.execute(
+            `INSERT INTO yolo_model_status (gateway_ip, current_model, loaded, reported_at)
+             VALUES (?, ?, 1, NOW())
+             ON DUPLICATE KEY UPDATE
+               current_model = VALUES(current_model),
+               loaded = 1,
+               switching = 0,
+               last_error = NULL,
+               reported_at = VALUES(reported_at)`,
+            [gatewayIp, targetFile]
+          );
+        }
+        console.log(
+          `[WS] Model switch ack #${requestId} from ${gatewayIp}: ${success ? 'success' : 'failed'} ${message}`
+        );
+      }
+    } else if (filename) {
+      // 无请求ID的状态播报：仅刷新当前模型
+      await db.execute(
+        `INSERT INTO yolo_model_status (gateway_ip, current_model, loaded, reported_at)
+         VALUES (?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+           current_model = VALUES(current_model),
+           loaded = VALUES(loaded),
+           switching = 0,
+           reported_at = VALUES(reported_at)`,
+        [gatewayIp, filename, data.loaded === false ? 0 : 1]
+      );
+    }
+  } catch (error) {
+    console.error('[WS] handleModelStatus error:', error.message);
+  }
+}
+
+/**
  * 主函数
  */
 async function main() {
@@ -877,6 +972,29 @@ async function main() {
           } else {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Missing actuator_id or command' }));
+          }
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: error.message }));
+        }
+      });
+    } else if (req.method === 'POST' && req.url === '/send-gateway-message') {
+      // 通用网关消息中继：{ gateway_ip, message }
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const { gateway_ip, message } = data;
+          if (gateway_ip && message && message.type) {
+            const sent = sendMessageToGateway(gateway_ip, message);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, sent }));
+          } else {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Missing gateway_ip or message.type' }));
           }
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });

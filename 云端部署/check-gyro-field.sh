@@ -1,0 +1,2 @@
+#!/bin/bash
+mysql -uroot -pCloudMysql@2026 smart_agriculture -N -e 'SELECT JSON_UNQUOTE(JSON_EXTRACT(feedback, "$.gyro_available")) AS gyro, JSON_UNQUOTE(JSON_EXTRACT(feedback, "$.gesture_control_enabled")) AS gesture, JSON_UNQUOTE(JSON_EXTRACT(feedback, "$.pan_angle")) AS pan, JSON_UNQUOTE(JSON_EXTRACT(feedback, "$.tilt_angle")) AS tilt, JSON_UNQUOTE(JSON_EXTRACT(feedback, "$.stream_url")) AS stream FROM actuators WHERE id="CAM-1-001";' 2>/dev/null

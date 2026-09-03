@@ -1,0 +1,12 @@
+[Unit]
+Description=I2C Bus Watchdog for smart-farm (auto-recover stuck SDA)
+After=multi-user.target smart-farm.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/i2c-watchdog.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

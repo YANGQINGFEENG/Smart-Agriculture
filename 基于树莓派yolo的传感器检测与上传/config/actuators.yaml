@@ -1,0 +1,42 @@
+# 执行器配置
+actuators:
+  - id: "relay"
+    type: "relay"
+    name: "继电器"
+    enabled: true
+    config:
+      pin: 16
+
+  - id: "laser"
+    type: "laser"
+    name: "激光"
+    enabled: true
+    config:
+      pin: 13
+
+  - id: "rgb_led"
+    type: "rgb_led"
+    name: "RGB-LED"
+    enabled: true
+    config:
+      red: 19
+      green: 17
+      blue: 27
+
+  # 风扇 (L293D 电机驱动)
+  - id: "fan"
+    type: "fan"
+    name: "风扇"
+    enabled: true
+    config:
+      enable_pin: 20
+      forward_pin: 21
+      backward_pin: 22
+
+  # 蜂鸣器 (无源)
+  - id: "buzzer"
+    type: "buzzer"
+    name: "蜂鸣器"
+    enabled: true
+    config:
+      pin: 18

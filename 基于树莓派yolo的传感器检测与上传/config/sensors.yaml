@@ -1,0 +1,34 @@
+# 传感器配置
+sensors:
+  - id: "dht11"
+    type: "dht"
+    name: "温湿度传感器"
+    enabled: true
+    config:
+      pin: 6
+      sensor_type: "DHT11"
+
+  - id: "bmp280"
+    type: "bmp280"
+    name: "气压传感器"
+    enabled: true                     # BMP280 已连接，I2C 地址 0x76
+    config:
+      address: 0x76
+      sea_level_pressure: 1013.25
+
+  - id: "vibration"
+    type: "vibration"
+    name: "振动传感器"
+    enabled: true
+    config:
+      pin: 12
+
+  # 光照传感器 (LM393 + MCP3008 ADC)
+  - id: "light"
+    type: "light"
+    name: "光照传感器"
+    enabled: true
+    config:
+      adc_channel: 0
+      bright_threshold: 70
+      dark_threshold: 30

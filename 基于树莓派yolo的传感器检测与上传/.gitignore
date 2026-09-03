@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MIMoCode
+.mimocode/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Project specific
+logs/
+results/
+models/*.pt
+*.onnx
+*.tflite
+
+# Data
+data/*.db
+data/*.sqlite
+
+# OTA
+.backup/
+.downloads/
+
+# Deploy
+deploy/*.zip
+deploy/*.tar.gz
+
+# Tests
+tests/__pycache__/
+
+# UI screenshots
+*.png
+*.jpg
+*.jpeg

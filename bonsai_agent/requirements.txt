@@ -1,0 +1,10 @@
+# 天工慧眼 - Python 依赖
+# 当前版本适用于现阶段的软件框架：
+# 模拟 YOLO / 模拟传感器 / 模拟设备执行
+# 后续接入真实 YOLO best.pt 后，再加入 ultralytics 等视觉依赖。
+
+fastapi[standard]
+pandas
+python-calamine
+ollama
+requests

@@ -37,6 +37,8 @@ import {
   Settings,
   Cpu,
   Brain,
+  Bug,
+  ScanEye,
 } from "lucide-react"
 
 interface SidebarNavProps {
@@ -91,6 +93,8 @@ const navGroups: NavGroup[] = [
       { id: "ai-video", label: "AI视频检测", icon: Camera, href: "/ai-video" },
       { id: "ai-command", label: "AI文字控制", icon: MessageSquare, href: "/ai-command" },
       { id: "ai-monitor", label: "AI实时监测", icon: Activity, href: "/ai-monitor" },
+      { id: "agent-diagnosis", label: "智能诊疗记录", icon: Bug, href: "/agent-diagnosis" },
+      { id: "yolo-models", label: "识别模型切换", icon: ScanEye, href: "/yolo-models" },
       { id: "model-management", label: "模型管理", icon: Layers, href: "/model-management" },
     ],
   },

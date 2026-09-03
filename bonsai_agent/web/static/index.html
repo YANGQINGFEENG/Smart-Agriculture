@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>天工慧眼 · 智能养护平台</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+
+            margin: 0;
+
+            font-family:
+                "Microsoft YaHei",
+                Arial,
+                sans-serif;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #07151f,
+                    #0d2330,
+                    #102d37
+                );
+
+            color: white;
+
+            min-height: 100vh;
+        }
+
+
+        .container {
+
+            width: 92%;
+
+            max-width: 1500px;
+
+            margin: auto;
+
+            padding: 28px 0 50px;
+        }
+
+
+        /* =========================
+           顶部
+        ========================= */
+
+        .header {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            align-items: center;
+
+            margin-bottom: 28px;
+        }
+
+
+        .title {
+
+            font-size: 30px;
+
+            font-weight: bold;
+
+            letter-spacing: 3px;
+        }
+
+
+        .subtitle {
+
+            margin-top: 7px;
+
+            color: #9db7c1;
+
+            font-size: 14px;
+        }
+
+
+        .online {
+
+            padding:
+                8px 16px;
+
+            border-radius: 20px;
+
+            color: #68e3ad;
+
+            border:
+                1px solid
+                rgba(
+                    104,
+                    227,
+                    173,
+                    0.35
+                );
+
+            background:
+                rgba(
+                    104,
+                    227,
+                    173,
+                    0.08
+                );
+        }
+
+
+        /* =========================
+           公共卡片
+        ========================= */
+
+        .card {
+
+            background:
+                rgba(
+                    255,
+                    255,
+                    255,
+                    0.055
+                );
+
+            border:
+                1px solid
+                rgba(
+                    255,
+                    255,
+                    255,
+                    0.1
+                );
+
+            border-radius: 15px;
+
+            padding: 22px;
+
+            backdrop-filter:
+                blur(10px);
+        }
+
+
+        .section-title {
+
+            font-size: 18px;
+
+            font-weight: bold;
+
+            margin-bottom: 20px;
+        }
+
+
+        /* =========================
+           传感器
+        ========================= */
+
+        .sensor-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(
+                    4,
+                    1fr
+                );
+
+            gap: 18px;
+
+            margin-bottom: 20px;
+        }
+
+
+        .sensor-name {
+
+            color: #9db5bf;
+
+            font-size: 14px;
+
+            margin-bottom: 12px;
+        }
+
+
+        .sensor-value {
+
+            font-size: 31px;
+
+            font-weight: bold;
+        }
+
+
+        .unit {
+
+            color: #9db5bf;
+
+            margin-left: 4px;
+        }
+
+
+        /* =========================
+           中部
+        ========================= */
+
+        .middle-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap: 20px;
+
+            margin-bottom: 20px;
+        }
+
+
+        /* =========================
+           YOLO
+        ========================= */
+
+        .pest-name {
+
+            font-size: 27px;
+
+            font-weight: bold;
+
+            margin:
+                10px 0
+                22px;
+        }
+
+
+        .small-label {
+
+            color: #95adb7;
+
+            font-size: 13px;
+        }
+
+
+        .confidence-row {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            margin-bottom: 8px;
+
+            color: #abc0c8;
+        }
+
+
+        .progress {
+
+            height: 11px;
+
+            background:
+                rgba(
+                    255,
+                    255,
+                    255,
+                    0.1
+                );
+
+            border-radius: 20px;
+
+            overflow: hidden;
+        }
+
+
+        .progress-bar {
+
+            height: 100%;
+
+            width: 0;
+
+            background:
+                linear-gradient(
+                    90deg,
+                    #579cff,
+                    #57ddb5
+                );
+
+            transition:
+                width 0.4s;
+        }
+
+
+        /* =========================
+           诊疗
+        ========================= */
+
+        .diagnosis-title {
+
+            font-size: 22px;
+
+            font-weight: bold;
+
+            margin-bottom: 8px;
+        }
+
+
+        .risk {
+
+            display: inline-block;
+
+            padding:
+                4px 10px;
+
+            border-radius: 12px;
+
+            background:
+                rgba(
+                    255,
+                    191,
+                    71,
+                    0.15
+                );
+
+            color: #ffd070;
+
+            margin:
+                8px 0
+                15px;
+        }
+
+
+        .diagnosis-text {
+
+            line-height: 1.8;
+
+            color: #d4e0e5;
+
+            margin-bottom: 13px;
+        }
+
+
+        .advice {
+
+            padding: 14px;
+
+            border-radius: 10px;
+
+            background:
+                rgba(
+                    82,
+                    157,
+                    255,
+                    0.08
+                );
+
+            color: #c6d9e1;
+
+            line-height: 1.7;
+        }
+
+
+        /* =========================
+           下部
+        ========================= */
+
+        .bottom-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap: 20px;
+        }
+
+
+        /* =========================
+           设备
+        ========================= */
+
+        .device-main {
+
+            font-size: 26px;
+
+            font-weight: bold;
+
+            margin-bottom: 18px;
+        }
+
+
+        .device-row {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            padding:
+                11px 0;
+
+            border-bottom:
+                1px solid
+                rgba(
+                    255,
+                    255,
+                    255,
+                    0.07
+                );
+        }
+
+
+        .device-row:last-child {
+
+            border-bottom: none;
+        }
+
+
+        .green {
+
+            color: #65dfa9;
+        }
+
+
+        /* =========================
+           系统状态
+        ========================= */
+
+        .status-row {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            padding:
+                12px 0;
+
+            border-bottom:
+                1px solid
+                rgba(
+                    255,
+                    255,
+                    255,
+                    0.07
+                );
+        }
+
+
+        .status-row:last-child {
+
+            border-bottom: none;
+        }
+
+
+        .footer {
+
+            margin-top: 18px;
+
+            text-align: right;
+
+            color: #78939e;
+
+            font-size: 12px;
+        }
+
+
+        /* =========================
+           手机适配
+        ========================= */
+
+        @media (
+            max-width: 900px
+        ) {
+
+            .sensor-grid {
+
+                grid-template-columns:
+                    repeat(
+                        2,
+                        1fr
+                    );
+            }
+
+
+            .middle-grid,
+            .bottom-grid {
+
+                grid-template-columns:
+                    1fr;
+            }
+
+        }
+
+
+        @media (
+            max-width: 520px
+        ) {
+
+            .sensor-grid {
+
+                grid-template-columns:
+                    1fr;
+            }
+
+
+            .header {
+
+                flex-direction:
+                    column;
+
+                align-items:
+                    flex-start;
+
+                gap: 15px;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+    <!-- ==================================================
+         顶部
+    =================================================== -->
+
+    <div class="header">
+
+        <div>
+
+            <div class="title">
+                天工慧眼
+            </div>
+
+            <div class="subtitle">
+                川派盆景智能监测与自主养护平台
+            </div>
+
+        </div>
+
+
+        <div class="online">
+            ● 系统在线
+        </div>
+
+    </div>
+
+
+
+    <!-- ==================================================
+         环境监测
+    =================================================== -->
+
+    <div class="sensor-grid">
+
+
+        <div class="card">
+
+            <div class="sensor-name">
+                环境温度
+            </div>
+
+            <span
+                class="sensor-value"
+                id="temperature"
+            >
+                --
+            </span>
+
+            <span class="unit">
+                ℃
+            </span>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="sensor-name">
+                空气湿度
+            </div>
+
+            <span
+                class="sensor-value"
+                id="humidity"
+            >
+                --
+            </span>
+
+            <span class="unit">
+                %
+            </span>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="sensor-name">
+                土壤湿度
+            </div>
+
+            <span
+                class="sensor-value"
+                id="soilMoisture"
+            >
+                --
+            </span>
+
+            <span class="unit">
+                %
+            </span>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="sensor-name">
+                光照强度
+            </div>
+
+            <span
+                class="sensor-value"
+                id="light"
+            >
+                --
+            </span>
+
+            <span class="unit">
+                lux
+            </span>
+
+        </div>
+
+
+    </div>
+
+
+
+    <!-- ==================================================
+         YOLO + Agent
+    =================================================== -->
+
+    <div class="middle-grid">
+
+
+        <!-- YOLO -->
+
+        <div class="card">
+
+            <div class="section-title">
+                AI视觉病虫害监测
+            </div>
+
+
+            <div class="small-label">
+                YOLO 当前检测结果
+            </div>
+
+
+            <div
+                class="pest-name"
+                id="pestName"
+            >
+                暂无检测
+            </div>
+
+
+            <div class="confidence-row">
+
+                <span>
+                    YOLO置信度
+                </span>
+
+                <span id="confidenceText">
+                    0%
+                </span>
+
+            </div>
+
+
+            <div class="progress">
+
+                <div
+                    class="progress-bar"
+                    id="confidenceBar"
+                >
+                </div>
+
+            </div>
+
+
+            <div
+                class="small-label"
+                id="detectionTime"
+                style="margin-top:18px;"
+            >
+                检测时间：--
+            </div>
+
+        </div>
+
+
+
+        <!-- Agent诊疗 -->
+
+        <div class="card">
+
+            <div class="section-title">
+                智能诊疗中心
+            </div>
+
+
+            <div
+                class="diagnosis-title"
+                id="diagnosisPest"
+            >
+                暂无诊疗结果
+            </div>
+
+
+            <div
+                class="risk"
+                id="riskLevel"
+            >
+                风险等级：--
+            </div>
+
+
+            <div
+                class="diagnosis-text"
+                id="diagnosisText"
+            >
+                等待诊疗数据……
+            </div>
+
+
+            <div class="small-label">
+                处置建议
+            </div>
+
+
+            <div
+                class="advice"
+                id="adviceText"
+            >
+                暂无建议
+            </div>
+
+
+            <div
+                class="small-label"
+                style="margin-top:15px;"
+                id="knowledgeSource"
+            >
+                知识来源：--
+            </div>
+
+
+            <div
+                class="small-label"
+                style="margin-top:6px;"
+                id="expertId"
+            >
+                专家条目：--
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+
+    <!-- ==================================================
+         设备 + 状态
+    =================================================== -->
+
+    <div class="bottom-grid">
+
+
+        <!-- 最近设备动作 -->
+
+        <div class="card">
+
+            <div class="section-title">
+                自动养护执行
+            </div>
+
+
+            <div
+                class="device-main"
+                id="deviceName"
+            >
+                暂无设备动作
+            </div>
+
+
+            <div class="device-row">
+
+                <span>
+                    当前动作
+                </span>
+
+                <span
+                    class="green"
+                    id="deviceAction"
+                >
+                    --
+                </span>
+
+            </div>
+
+
+            <div class="device-row">
+
+                <span>
+                    执行时长
+                </span>
+
+                <span id="deviceDuration">
+                    --
+                </span>
+
+            </div>
+
+
+            <div class="device-row">
+
+                <span>
+                    触发原因
+                </span>
+
+                <span id="deviceReason">
+                    --
+                </span>
+
+            </div>
+
+
+            <div class="device-row">
+
+                <span>
+                    执行时间
+                </span>
+
+                <span id="deviceTime">
+                    --
+                </span>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- 系统状态 -->
+
+        <div class="card">
+
+            <div class="section-title">
+                系统运行状态
+            </div>
+
+
+            <div class="status-row">
+
+                <span>
+                    FastAPI服务
+                </span>
+
+                <span class="green">
+                    在线
+                </span>
+
+            </div>
+
+
+            <div class="status-row">
+
+                <span>
+                    SQLite数据库
+                </span>
+
+                <span class="green">
+                    正常
+                </span>
+
+            </div>
+
+
+            <div class="status-row">
+
+                <span>
+                    YOLO视觉识别
+                </span>
+
+                <span class="green">
+                    已接入
+                </span>
+
+            </div>
+
+
+            <div class="status-row">
+
+                <span>
+                    DeepSeek Agent
+                </span>
+
+                <span class="green">
+                    已接入
+                </span>
+
+            </div>
+
+
+            <div class="status-row">
+
+                <span>
+                    自动控制规则
+                </span>
+
+                <span class="green">
+                    启用
+                </span>
+
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <div
+        class="footer"
+        id="updateTime"
+    >
+        数据更新时间：--
+    </div>
+
+
+</div>
+
+
+
+<script>
+
+
+    /* ==================================================
+       环境数据
+    ================================================== */
+
+    async function loadSensors() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/sensors"
+                );
+
+            const result =
+                await response.json();
+
+
+            if (!result.success) {
+
+                return;
+            }
+
+
+            const data =
+                result.data;
+
+
+            document.getElementById(
+                "temperature"
+            ).textContent =
+                data.temperature ?? "--";
+
+
+            document.getElementById(
+                "humidity"
+            ).textContent =
+                data.humidity ?? "--";
+
+
+            document.getElementById(
+                "soilMoisture"
+            ).textContent =
+                data.soil_moisture ?? "--";
+
+
+            document.getElementById(
+                "light"
+            ).textContent =
+                data.light ?? "--";
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "环境数据读取失败",
+                error
+            );
+
+        }
+
+    }
+
+
+
+    /* ==================================================
+       YOLO
+    ================================================== */
+
+    async function loadDetection() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/detection"
+                );
+
+            const result =
+                await response.json();
+
+
+            if (!result.success) {
+
+                return;
+            }
+
+
+            const data =
+                result.data;
+
+
+            const confidence =
+                Number(
+                    data.confidence || 0
+                );
+
+
+            const percentage =
+                Math.round(
+                    confidence * 100
+                );
+
+
+            document.getElementById(
+                "pestName"
+            ).textContent =
+                data.pest_name
+                || "暂无检测";
+
+
+            document.getElementById(
+                "confidenceText"
+            ).textContent =
+                percentage + "%";
+
+
+            document.getElementById(
+                "confidenceBar"
+            ).style.width =
+                percentage + "%";
+
+
+            document.getElementById(
+                "detectionTime"
+            ).textContent =
+                "检测时间："
+                + (
+                    data.created_at
+                    || "--"
+                );
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "YOLO数据读取失败",
+                error
+            );
+
+        }
+
+    }
+
+
+
+    /* ==================================================
+       Agent诊疗
+    ================================================== */
+
+    async function loadDiagnosis() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/diagnosis"
+                );
+
+            const result =
+                await response.json();
+
+
+            if (!result.success) {
+
+                return;
+            }
+
+
+            const data =
+                result.data;
+
+
+            document.getElementById(
+                "diagnosisPest"
+            ).textContent =
+                data.pest_name
+                || "--";
+
+
+            document.getElementById(
+                "riskLevel"
+            ).textContent =
+                "风险等级："
+                + (
+                    data.risk_level
+                    || "--"
+                );
+
+
+            document.getElementById(
+                "diagnosisText"
+            ).textContent =
+                data.diagnosis
+                || "--";
+
+
+            document.getElementById(
+                "adviceText"
+            ).textContent =
+                data.advice
+                || "--";
+
+
+            let source =
+                data.knowledge_source;
+
+
+            if (
+                source
+                ===
+                "expert_database"
+            ) {
+
+                source =
+                    "本地专家数据库";
+            }
+
+
+            document.getElementById(
+                "knowledgeSource"
+            ).textContent =
+                "知识来源："
+                + (
+                    source
+                    || "--"
+                );
+
+
+            document.getElementById(
+                "expertId"
+            ).textContent =
+                "专家条目："
+                + (
+                    data.expert_id
+                    || "无"
+                );
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "诊疗数据读取失败",
+                error
+            );
+
+        }
+
+    }
+
+
+
+    /* ==================================================
+       设备日志
+    ================================================== */
+
+    async function loadDevice() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/device/latest"
+                );
+
+            const result =
+                await response.json();
+
+
+            if (!result.success) {
+
+                return;
+            }
+
+
+            const data =
+                result.data;
+
+
+            let deviceName =
+                data.device;
+
+
+            if (
+                deviceName
+                ===
+                "water_pump"
+            ) {
+
+                deviceName =
+                    "水泵";
+            }
+
+            else if (
+                deviceName
+                ===
+                "fan"
+            ) {
+
+                deviceName =
+                    "风扇";
+            }
+
+            else if (
+                deviceName
+                ===
+                "light"
+            ) {
+
+                deviceName =
+                    "补光灯";
+            }
+
+
+            document.getElementById(
+                "deviceName"
+            ).textContent =
+                deviceName
+                || "--";
+
+
+            document.getElementById(
+                "deviceAction"
+            ).textContent =
+                data.action
+                || "--";
+
+
+            document.getElementById(
+                "deviceDuration"
+            ).textContent =
+                data.duration != null
+                ?
+                data.duration + " 秒"
+                :
+                "--";
+
+
+            document.getElementById(
+                "deviceReason"
+            ).textContent =
+                data.reason
+                || "--";
+
+
+            document.getElementById(
+                "deviceTime"
+            ).textContent =
+                data.created_at
+                || "--";
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "设备数据读取失败",
+                error
+            );
+
+        }
+
+    }
+
+
+
+    /* ==================================================
+       刷新整个页面
+    ================================================== */
+
+    async function refreshDashboard() {
+
+        await Promise.all([
+
+            loadSensors(),
+
+            loadDetection(),
+
+            loadDiagnosis(),
+
+            loadDevice()
+
+        ]);
+
+
+        const now =
+            new Date();
+
+
+        document.getElementById(
+            "updateTime"
+        ).textContent =
+            "数据更新时间："
+            +
+            now.toLocaleString();
+
+    }
+
+
+
+    /* 第一次加载 */
+
+    refreshDashboard();
+
+
+
+    /* 每2秒刷新 */
+
+    setInterval(
+        refreshDashboard,
+        2000
+    );
+
+
+</script>
+
+
+</body>
+
+</html>

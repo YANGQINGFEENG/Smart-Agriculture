@@ -1,16 +1,13 @@
-***
-
+---
 name: "keil-compile-result-check"
 description: "执行Keil UV4命令行编译，自动解析日志检测错误、警告、目标状态与文件生成，快速判断编译是否成功。当用户需要检测Keil编译结果或分析UV4编译日志时调用。"
 version: "1.0.0"
 user-invocable: true
 allowed-tools:
-
-- run\_shell
-- read\_file
-- write\_file
-
-***
+  - run_shell
+  - read_file
+  - write_file
+---
 
 # Keil 编译结果检测与分析 Skill
 

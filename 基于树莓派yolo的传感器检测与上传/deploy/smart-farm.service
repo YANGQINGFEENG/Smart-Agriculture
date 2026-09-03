@@ -1,0 +1,18 @@
+[Unit]
+Description=Smart Farm IoT System
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/smart-farm
+ExecStart=/home/pi/smart-farm/venv/bin/python /home/pi/smart-farm/main.py start --no-ui
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smart-farm
+
+[Install]
+WantedBy=multi-user.target

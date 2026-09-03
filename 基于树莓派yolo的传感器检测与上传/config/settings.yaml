@@ -1,0 +1,384 @@
+system:
+  name: smart-farm-pi
+  version: 2.0.0
+  log_level: INFO
+  log_file: logs/system.log
+  timezone: Asia/Shanghai
+  enable_ui: true
+  ui_fullscreen: true
+  watchdog_enabled: true
+upload:
+  server_url: http://47.108.163.78:3000
+  gateway_ip: 10.248.88.186
+  gateway_type: wifi_sensor
+  mac: ""
+  farm_id: 1
+  area: 温室1号区域
+  interval: 30
+  timeout: 10
+  max_retries: 3
+  retry_delay: 5
+  upload_filter:
+    mode: all
+    device_ids: []
+    device_types: []
+  cache:
+    db_path: data/cache.db
+    max_age_days: 7
+    retry_interval: 60
+    batch_size: 50
+heartbeat:
+  enabled: true
+  interval: 30
+  timeout: 10
+device_mapping:
+  sensors:
+    dht11_temperature:
+      node_id: T-1-001
+      type: temperature
+      name: 空气温度传感器
+    dht11_humidity:
+      node_id: H-1-001
+      type: humidity
+      name: 空气湿度传感器
+    bmp280_temperature:
+      node_id: T-1-002
+      type: temperature
+      name: BMP280温度
+    bmp280_pressure:
+      node_id: PR-1-001
+      type: pressure
+      name: 气压传感器
+    bmp280_altitude:
+      node_id: AL-1-001
+      type: altitude
+      name: 海拔
+    vibration:
+      node_id: VB-1-001
+      type: vibration
+      name: 振动传感器
+    light:
+      node_id: LX-1-001
+      type: light
+      name: 光照传感器
+    # MPU6050 六轴姿态传感器（用于手势控制云台）
+    mpu6050:
+      node_id: AT-1-001
+      type: attitude
+      name: 六轴姿态传感器
+  actuators:
+    relay:
+      node_id: VL-1-001
+      type: valve
+      name: 继电器
+    laser:
+      node_id: LT-1-001
+      type: light
+      name: 激光
+    rgb_led:
+      node_id: LT-1-002
+      type: light
+      name: RGB-LED
+    fan:
+      node_id: FN-1-001
+      type: fan
+      name: 风扇
+    buzzer:
+      node_id: BZ-1-001
+      type: buzzer
+      name: 蜂鸣器
+    servo_pan:
+      node_id: SV-1-001
+      type: servo
+      name: 水平舵机
+    servo_tilt:
+      node_id: SV-1-002
+      type: servo
+      name: 俯仰舵机
+  # 摄像头作为特殊传感器节点上报（type=camera）
+  camera:
+    node_id: CAM-1-001
+    type: camera
+    name: 颜色追踪摄像头
+    location: 温室入口
+scanner:
+  enabled_interfaces:
+    - i2c
+    - gpio
+    - adc
+    - onewire
+  i2c:
+    bus_number: 1
+    scan_addresses: []
+    known_devices:
+      "0x40": pca9685 # PCA9685 舵机驱动板
+      # "0x76": bmp280  # 硬件未连接，禁用
+      # "0x77": bmp280  # 硬件未连接，禁用
+      "0x68": mpu6050
+      # "0x27": lcd1602  # 硬件未连接，禁用
+      # "0x3f": lcd1602  # 硬件未连接，禁用
+  gpio:
+    scan_pins:
+      - 5
+      - 6
+      - 12
+      - 13
+      - 16
+      - 17
+      - 19
+      - 20
+      - 21
+      - 22
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+    exclude_pins: []
+    debounce_ms: 50
+  adc:
+    channels:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+    threshold: 0.05
+    spi_port: 0
+    spi_device: 0
+  onewire:
+    bus_path: /sys/bus/w1/devices/
+    auto_load_kernel_module: true
+  auto_register: true
+  scan_on_startup: false
+ota:
+  mode: http
+  auto_check_enabled: true
+  auto_check_interval: 3600
+  auto_update: false
+  restart_after_update: true
+  http:
+    manifest_url: ""
+    timeout: 30
+    verify_ssl: true
+    backup_keep_count: 3
+    exclude_paths:
+      - .git
+      - __pycache__
+      - .backup
+      - .downloads
+      - logs
+      - data
+      - .venv
+      - venv
+      - .mimocode
+      - 3.程序案例
+      - 7.树莓派电子资料
+  git:
+    enabled: false
+    remote: origin
+    branch: main
+    reset_to_remote: true
+    update_submodules: true
+ui:
+  enabled: true
+  fullscreen: true
+  resolution: 1024x600
+  theme: light
+  refresh_interval_ms: 1000
+  font_family: PingFang SC
+  font_scale: 1.0
+  show_status_bar: true
+  show_tab_bar: true
+  pages:
+    - dashboard
+    - network
+    - devices
+    - scanner
+    - ota
+cache:
+  db_path: data/cache.db
+  max_age_days: 7
+
+# 摄像头配置
+camera:
+  enabled: true
+  resolution: [320, 240]
+  format: RGB888
+  hflip: false
+  vflip: true   # 物理安装方向：摄像头倒装，需垂直翻转
+  # 颜色追踪配置
+  tracking:
+    enabled: true
+    # HSV阈值（用于颜色检测）
+    hue_low: 96
+    hue_up: 120
+    hue2_low: 50
+    hue2_up: 0
+    sat_low: 157
+    sat_high: 255
+    val_low: 100
+    val_high: 255
+    # 追踪参数
+    min_area: 50
+    dead_zone: 15
+    gain: 75
+    # 颜色预设（服务端可通过 color 命令切换，control_value 填颜色名称）
+    color_presets:
+      blue:
+        hue_low: 96
+        hue_up: 120
+        hue2_low: 50
+        hue2_up: 0
+        sat_low: 157
+        sat_high: 255
+        val_low: 100
+        val_high: 255
+      red:
+        hue_low: 0
+        hue_up: 10
+        hue2_low: 170
+        hue2_up: 180
+        sat_low: 100
+        sat_high: 255
+        val_low: 100
+        val_high: 255
+      green:
+        hue_low: 35
+        hue_up: 85
+        hue2_low: 50
+        hue2_up: 0
+        sat_low: 80
+        sat_high: 255
+        val_low: 80
+        val_high: 255
+      yellow:
+        hue_low: 20
+        hue_up: 35
+        hue2_low: 50
+        hue2_up: 0
+        sat_low: 100
+        sat_high: 255
+        val_low: 100
+        val_high: 255
+      orange:
+        hue_low: 10
+        hue_up: 20
+        hue2_low: 50
+        hue2_up: 0
+        sat_low: 100
+        sat_high: 255
+        val_low: 100
+        val_high: 255
+
+  # 手势控制配置（MPU6050 加速度→云台控制）
+  gesture_control:
+    enabled: true # 是否启用手势控制
+    # MPU6050 寄存器配置
+    mpu_address: 0x68 # I2C 地址（AD0 接 GND=0x68，接 VCC=0x69）
+    accel_range: 0 # 加速度量程（0=±2g, 1=±4g, 2=±8g, 3=±16g）
+    gyro_range: 0 # 陀螺计量程（0=±250, 1=±500, 2=±1000, 3=±2000）
+    use_complementary: true # 是否使用互补滤波融合加速度+陀螺仪
+    complementary_alpha: 0.96 # 互补滤波系数（陀螺仪权重，0.95~0.98 典型值）
+    # 角度→舵机映射参数
+    deadzone: 3.0 # 死区（°），小于此阈值不触发移动，抑制抖动
+    sensitivity: 1.2 # 灵敏度，mpu_angle × sensitivity = 映射角度（<1 缩小，>1 放大）
+    # MPU6050 角度映射到舵机角度：servo = 90 + mpu_angle * sensitivity
+    # - MPU pitch [-90, +90] → Tilt 舵机 [0°, 180°]
+    # - MPU roll  [-90, +90] → Pan  舵机 [0°, 180°]
+    # 更新与安全
+    update_interval: 0.05 # 读取更新间隔（秒），20Hz
+    smooth_alpha: 0.3 # 舵机输出低通滤波（0=无滤波，越小越平滑但越滞后）
+    # 方向反转（根据实际安装方向可能需要）
+    reverse_pan: false # 反转水平方向
+    reverse_tilt: false # 反转俯仰方向
+
+# 舵机/云台配置
+servo:
+  enabled: true
+  # PCA9685通道配置
+  pan_channel: 0 # 水平舵机通道
+  tilt_channel: 1 # 俯仰舵机通道
+  # 角度范围
+  min_angle: 0
+  max_angle: 180
+  default_angle: 90
+  # 反转设置
+  pan_inverted: false
+  tilt_inverted: false
+
+# 视频流服务配置（MJPEG 实时流）
+# 浏览器/Next.js 前端可直接通过 <img src="http://树莓派IP:8081/stream"> 嵌入实时视频
+video_stream:
+  enabled: true
+  host: 0.0.0.0 # 监听地址（0.0.0.0 允许外部访问）
+  port: 8081 # MJPEG 服务端口（避免与 WebSocket 8080 冲突）
+  stream_fps: 15 # MJPEG 流帧率（帧/秒）
+  jpeg_quality: 70 # JPEG 编码质量（1-100，越高质量越好但带宽占用越大）
+
+# 摄像头帧上传配置（定期上传 JPEG 帧到服务器）
+# 用于历史回放、AI 分析、报警截图等场景
+frame_upload:
+  enabled: true
+  interval: 30 # 帧上传间隔（秒）
+  jpeg_quality: 75 # 上传帧 JPEG 质量（1-100）
+  # 是否仅在检测到目标时上传（节省带宽和存储）
+  # false=定时上传（用于历史回放）
+  # true=仅检测到目标时上传（用于报警截图）
+  upload_only_on_detection: false
+
+# YOLO 目标检测配置（使用训练好的 .pt 模型进行实时目标检测）
+# 检测结果会标注在视频流和上传帧上，推送给服务器
+yolo:
+  enabled: true # 是否启用 YOLO 目标检测
+  model_path: models/last.pt # 模型文件路径
+  conf_threshold: 0.5 # 置信度阈值（低于此值的目标被过滤）
+  iou_threshold: 0.45 # NMS IoU 阈值
+  max_det: 20 # 最大检测目标数
+  img_size: 320 # 推理图像尺寸（树莓派建议 320，平衡速度与精度）
+  device: cpu # 推理设备（cpu 或 cuda）
+  # --- 识别模型切换（云端网页下发）---
+  models_dir: models # 本地模型目录（扫描 *.pt 作为可切换清单）
+  official_models: # 官方通用模型（首次启动自动下载到 models_dir）
+    - yolov8n.pt # COCO 80 类通用模型
+    - yolo11n.pt # COCO 80 类通用模型（服务 venv ultralytics 8.4.138 支持 yolo11；系统 python3 仅 8.1.19）
+  sync_on_startup: true # 启动时与云端清单对齐（离线期间下发的切换在重连后补做）
+  status_report_interval: 60 # 模型状态周期上报间隔（秒），0 表示关闭；供网页端刷新推理耗时/次数
+
+# 智能养护 Agent 配置（从 bonsai_agent 迁移集成）
+# 流水线1：环境监测 → 规则决策 → 真实执行器自动控制
+# 流水线2：YOLO 检测 → 专家知识库 → DeepSeek 诊疗 → 上报云端
+agent:
+  enabled: true # 是否启用 Agent 服务
+  loop_interval: 5 # 环境监测轮询间隔（秒）
+  vision_interval: 10 # 视觉检查轮询间隔（秒）
+  detection_log_interval: 60 # 同名病虫害检测记录最小间隔（秒）
+  diagnosis_interval: 600 # 同名病虫害重复诊疗最小间隔（秒）
+  device_cooldown: # 设备自动启动安全冷却（秒）
+    water_pump: 600
+    fan: 60
+    light: 60
+  thresholds: # 决策阈值
+    soil_moisture_min: 25 # 土壤湿度下限（%）
+    temperature_max: 35 # 温度上限（℃）
+    light_min: 10000 # 光照下限（lux）
+  actuator_duration: # 动作持续时间（秒）
+    water_pump: 5
+    fan: 60
+    light: 60
+  actuator_mapping: # Agent 设备 -> 执行器ID 映射（device_mapping.actuators 中的 ID）
+    water_pump: relay
+    fan: fan
+    light: rgb_led
+  knowledge:
+    data_paths: # 专家知识库数据文件（按优先级，JSON 优先 / Excel 回退）
+      - agent/data/pest_database.json
+      - agent/data/专家数据库.xlsx
+  llm:
+    enabled: true # 是否启用 DeepSeek 辅助诊疗（关闭则仅专家库+兜底文案）
+    host: http://127.0.0.1:11434 # Ollama 地址（内存紧张可指向局域网/云端）
+    model: deepseek-r1:1.5b
+  upload_diagnosis: true # 诊疗结果是否上传云端
