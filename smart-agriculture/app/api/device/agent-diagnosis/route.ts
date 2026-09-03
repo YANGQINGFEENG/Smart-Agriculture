@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AgentDiagnosis');
 
 interface Gateway extends RowDataPacket {
   id: number
@@ -120,13 +123,13 @@ export async function POST(request: NextRequest) {
         )
         saved++
       } catch (err) {
-        console.error(`[AgentDiagnosis] 单条记录入库失败 (${record.pest_name}):`, err)
+        log.error(`单条记录入库失败 (${record.pest_name}):`, err)
         failed.push(record.pest_name)
       }
     }
 
-    console.log(
-      `[AgentDiagnosis] 诊疗结果上报: 网关=${gateway_ip}, 节点=${node_id || '-'}, ` +
+    log.info(
+      `诊疗结果上报: 网关=${gateway_ip}, 节点=${node_id || '-'}, ` +
       `接收=${validRecords.length}, 入库=${saved}, 失败=${failed.length}` +
       (failed.length > 0 ? ` (${failed.join(',')})` : '')
     )
@@ -141,7 +144,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('[AgentDiagnosis] 诊疗结果上报失败:', error)
+    log.error('诊疗结果上报失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -173,7 +176,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: { records: rows, total: rows.length } })
   } catch (error) {
-    console.error('[AgentDiagnosis] 获取诊疗历史失败:', error)
+    log.error('获取诊疗历史失败:', error)
     return NextResponse.json(
       { success: false, error: '获取诊疗历史失败' },
       { status: 500 }

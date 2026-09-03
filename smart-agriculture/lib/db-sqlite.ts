@@ -1,6 +1,9 @@
 // 数据库连接模块 - 使用SQLite
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
+import { createLogger } from './logger';
+
+const log = createLogger('DB-SQLite');
 
 let databaseInstance: Database | null = null;
 let initPromise: Promise<Database> | null = null;
@@ -17,10 +20,10 @@ async function initDatabase() {
       });
       databaseInstance = db;
       await createTables();
-      console.log('SQLite数据库连接成功');
+      log.debug('SQLite数据库连接成功');
       return databaseInstance;
     } catch (error) {
-      console.error('SQLite数据库连接失败:', error);
+      log.error('SQLite数据库连接失败:', error);
       initPromise = null;
       throw error;
     }
@@ -436,11 +439,11 @@ async function insertInitialData() {
         [typeInfo.type, typeInfo.name, typeInfo.unit]
       );
       missingSensorTypes++;
-      console.log(`[DB] 补充缺失的传感器类型: ${typeInfo.type} (${typeInfo.name})`);
+      log.debug(`补充缺失的传感器类型: ${typeInfo.type} (${typeInfo.name})`);
     }
   }
   if (missingSensorTypes > 0) {
-    console.log(`[DB] 共补充了 ${missingSensorTypes} 个缺失的传感器类型`);
+    log.debug(`共补充了 ${missingSensorTypes} 个缺失的传感器类型`);
   }
   
   // 检查是否已有传感器数据
@@ -520,11 +523,11 @@ async function insertInitialData() {
         [typeInfo.type, typeInfo.name, typeInfo.description]
       );
       missingTypes++;
-      console.log(`[DB] 补充缺失的执行器类型: ${typeInfo.type} (${typeInfo.name})`);
+      log.debug(`补充缺失的执行器类型: ${typeInfo.type} (${typeInfo.name})`);
     }
   }
   if (missingTypes > 0) {
-    console.log(`[DB] 共补充了 ${missingTypes} 个缺失的执行器类型`);
+    log.debug(`共补充了 ${missingTypes} 个缺失的执行器类型`);
   }
 
   // 检查是否已有执行器数据
@@ -590,7 +593,7 @@ async function testConnection() {
     await initDatabase();
     return true;
   } catch (error) {
-    console.error('数据库连接测试失败:', error);
+    log.error('数据库连接测试失败:', error);
     return false;
   }
 }

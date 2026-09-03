@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Actuators');
 
 /**
  * 执行器数据接口
@@ -112,7 +115,7 @@ export async function GET(request: NextRequest) {
             ? JSON.parse(row.feedback) 
             : row.feedback
         } catch (e) {
-          console.warn(`[Actuators API] 解析 feedback 失败: ${row.id}`, e)
+          log.warn(`解析 feedback 失败: ${row.id}`, e)
           feedbackData = null
         }
       }
@@ -130,7 +133,7 @@ export async function GET(request: NextRequest) {
       total: processedRows.length,
     })
   } catch (error) {
-    console.error('获取执行器列表失败:', error)
+    log.error('获取执行器列表失败:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -219,7 +222,7 @@ export async function POST(request: NextRequest) {
       message: '执行器创建成功',
     })
   } catch (error) {
-    console.error('创建执行器失败:', error)
+    log.error('创建执行器失败:', error)
     return NextResponse.json(
       { 
         success: false, 

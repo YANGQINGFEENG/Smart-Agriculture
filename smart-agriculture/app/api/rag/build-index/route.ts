@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('RagBuildIndex');
 
 const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || 'http://localhost:5001'
 
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
       data: result.data,
     })
   } catch (error) {
-    console.error('构建索引失败:', error)
+    log.error('构建索引失败:', error)
     return NextResponse.json(
       {
         success: false,

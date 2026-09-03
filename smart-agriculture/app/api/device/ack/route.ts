@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Ack');
 
 /**
  * 硬件回执确认API
@@ -33,7 +36,7 @@ import { getBeijingTimeForDB } from '@/lib/beijing-time'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log(`[ACK] 收到回执请求，原始body:`, JSON.stringify(body))
+    log.info(`收到回执请求，原始body:`, JSON.stringify(body))
     
     const gateway_ip = body.gateway_ip
     const actuator_id = body.actuator_id || body.actuatorId
@@ -44,11 +47,11 @@ export async function POST(request: NextRequest) {
     const color = body.color
     const brightness = body.brightness
 
-    console.log(`[ACK] 解析参数 - actuator_id: ${actuator_id}, command_id: ${command_id} (类型: ${typeof command_id}), status: ${status}`)
+    log.info(`解析参数 - actuator_id: ${actuator_id}, command_id: ${command_id} (类型: ${typeof command_id}), status: ${status}`)
 
     // 验证必要参数
     if (!actuator_id || !command_id || !status || !['executed', 'failed'].includes(status)) {
-      console.log(`[ACK] 参数验证失败 - actuator_id: ${!!actuator_id}, command_id: ${!!command_id}, status: ${status}`)
+      log.info(`参数验证失败 - actuator_id: ${!!actuator_id}, command_id: ${!!command_id}, status: ${status}`)
       return NextResponse.json(
         { success: false, error: '缺少必要参数：actuator_id、command_id、status（executed/failed）', 
           received: { actuator_id, command_id, status } },
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // 将command_id转换为数字类型（如果是字符串的话）
     const numericCommandId = typeof command_id === 'string' ? parseInt(command_id) : command_id
-    console.log(`[ACK] 收到硬件回执 - 网关IP: ${gateway_ip}, 执行器: ${actuator_id}, 命令ID: ${command_id} (转换后: ${numericCommandId}), 状态: ${status}`)
+    log.info(`收到硬件回执 - 网关IP: ${gateway_ip}, 执行器: ${actuator_id}, 命令ID: ${command_id} (转换后: ${numericCommandId}), 状态: ${status}`)
 
     // 验证命令是否存在且状态为待执行或执行中
     const existingCommand = await db.query<RowDataPacket[]>(
@@ -91,13 +94,13 @@ export async function POST(request: NextRequest) {
       const noStateChangeCommands = ['track', 'color', 'reset', 'gyro']
       const shouldUpdateState = !noStateChangeCommands.includes(command.command)
 
-      console.log(`[ACK] 命令类型: ${command.command}, shouldUpdateState: ${shouldUpdateState}`)
+      log.info(`命令类型: ${command.command}, shouldUpdateState: ${shouldUpdateState}`)
 
       if (shouldUpdateState) {
         const actualControlValue = control_value !== undefined ? control_value : command.control_value
         const actualState = state || (command.command === 'value' && (actualControlValue || 0) > 0 ? 'on' : (command.command === 'on' ? 'on' : 'off'))
 
-        console.log(`[ACK] 开始更新执行器 - actualState: ${actualState}, actualControlValue: ${actualControlValue}`)
+        log.info(`开始更新执行器 - actualState: ${actualState}, actualControlValue: ${actualControlValue}`)
 
         // 构建feedback数据（支持RGB扩展格式）
         const feedbackData: any = { state: actualState }
@@ -112,11 +115,11 @@ export async function POST(request: NextRequest) {
           feedbackData.brightness = control_value
         }
 
-        console.log(`[ACK] feedbackData:`, JSON.stringify(feedbackData))
+        log.info(`feedbackData:`, JSON.stringify(feedbackData))
 
         // 序列化feedback为JSON字符串
         const feedbackJson = JSON.stringify(feedbackData)
-        console.log(`[ACK] feedbackJson:`, feedbackJson)
+        log.info(`feedbackJson:`, feedbackJson)
 
         // 更新执行器状态
         await db.execute(
@@ -136,7 +139,7 @@ export async function POST(request: NextRequest) {
           ]
         )
 
-        console.log(`[ACK] 执行器 ${actuator_id} 更新成功`)
+        log.info(`执行器 ${actuator_id} 更新成功`)
       } else {
         // gyro/track/color 命令：合并 feedback 字段后立即写入，不等数据上报
         // 关键：如果 feedback 为空（尚无数据上报），不写入避免丢失 stream_url 等字段
@@ -170,14 +173,14 @@ export async function POST(request: NextRequest) {
             [getBeijingTimeForDB(), JSON.stringify(existingFeedback), actuator_id]
           )
 
-          console.log(`[ACK] 执行器 ${actuator_id} 已解锁（${command.command} 命令，feedback 已同步）`)
+          log.info(`执行器 ${actuator_id} 已解锁（${command.command} 命令，feedback 已同步）`)
         } else {
           // feedback 为空，仅解锁，等待数据上报补充完整 feedback
           await db.execute(
             'UPDATE actuators SET locked = 0 WHERE id = ?',
             [actuator_id]
           )
-          console.log(`[ACK] 执行器 ${actuator_id} 已解锁（${command.command} 命令，feedback 为空，跳过写入）`)
+          log.info(`执行器 ${actuator_id} 已解锁（${command.command} 命令，feedback 为空，跳过写入）`)
         }
       }
     } else {
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
         [actuator_id]
       )
 
-      console.log(`[ACK] 执行器 ${actuator_id} 执行失败，已解锁`)
+      log.info(`执行器 ${actuator_id} 执行失败，已解锁`)
     }
 
     // 如果提供了网关IP，更新网关状态
@@ -207,7 +210,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('[ACK] 硬件回执处理失败:', error)
+    log.error('硬件回执处理失败:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -290,7 +293,7 @@ export async function GET(request: NextRequest) {
       [command.id, actuator_id]
     )
 
-    console.log(`[ACK] 硬件端轮询到指令 - 执行器: ${actuator_id}, 指令: ${command.command}, 控制值: ${command.control_value}, 命令ID: ${command.id}`)
+    log.info(`硬件端轮询到指令 - 执行器: ${actuator_id}, 指令: ${command.command}, 控制值: ${command.control_value}, 命令ID: ${command.id}`)
 
     return NextResponse.json({
       success: true,
@@ -310,7 +313,7 @@ export async function GET(request: NextRequest) {
       message: 'OK',
     })
   } catch (error) {
-    console.error('[ACK] 硬件端轮询失败:', error)
+    log.error('硬件端轮询失败:', error)
     return NextResponse.json(
       { 
         success: false, 

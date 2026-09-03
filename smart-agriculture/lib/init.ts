@@ -1,5 +1,8 @@
 // 初始化模块
 // 用于设置全局配置、主题、或其他初始化操作
+import { createLogger } from './logger'
+
+const log = createLogger('Init')
 
 // 这里可以添加任何需要在应用启动时执行的代码
 // 例如：主题设置、全局状态初始化、API客户端配置等

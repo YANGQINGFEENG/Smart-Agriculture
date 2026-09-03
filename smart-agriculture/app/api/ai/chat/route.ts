@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { OLLAMA_HOST, AI_CHAT_MODEL, AI_CHAT_HISTORY_LIMIT } from '@/lib/ai-config'
 import { parseCommand, ActuatorSummary, KnowledgeEntry } from '@/lib/ai-command-parser'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AIChat');
 
 /**
  * 执行器记录接口（从数据库 actuators 表获取）
@@ -101,7 +104,7 @@ export async function POST(request: NextRequest) {
         area: a.area,
       }))
     } catch (dbErr) {
-      console.error('[AI Chat] 数据库查询执行器失败:', dbErr instanceof Error ? dbErr.message : dbErr)
+      log.error('数据库查询执行器失败:', dbErr instanceof Error ? dbErr.message : dbErr)
       // 数据库不可用时仍可提供基本的 AI 对话（不依赖执行器列表）
     }
 
@@ -131,9 +134,9 @@ export async function POST(request: NextRequest) {
         is_system: !!row.is_system,
         is_active: !!row.is_active,
       }))
-      console.log(`[AI Chat] 知识库加载完成: ${knowledgeEntries.length} 条 (${knowledgeQueryTime}ms)`)
+      log.info(`知识库加载完成: ${knowledgeEntries.length} 条 (${knowledgeQueryTime}ms)`)
     } catch (kbErr) {
-      console.warn('[AI Chat] 知识库查询失败，使用降级硬编码:', kbErr instanceof Error ? kbErr.message : kbErr)
+      log.warn('知识库查询失败，使用降级硬编码:', kbErr instanceof Error ? kbErr.message : kbErr)
       // 知识库不可用时，parseCommand 会自动降级到硬编码关键词
     }
 
@@ -151,9 +154,9 @@ export async function POST(request: NextRequest) {
         related_actuators: typeof row.related_actuators === 'string' ? JSON.parse(row.related_actuators) : row.related_actuators,
         composite_actions: typeof row.composite_actions === 'string' ? JSON.parse(row.composite_actions) : row.composite_actions,
       }))
-      console.log(`[AI Chat] 自动化方案加载完成: ${automationSchemes.length} 条`)
+      log.info(`自动化方案加载完成: ${automationSchemes.length} 条`)
     } catch (schemeErr) {
-      console.warn('[AI Chat] 自动化方案查询失败:', schemeErr instanceof Error ? schemeErr.message : schemeErr)
+      log.warn('自动化方案查询失败:', schemeErr instanceof Error ? schemeErr.message : schemeErr)
     }
 
     const systemPrompt = `你是智慧农业物联网平台的 AI 助手，负责解析用户的自然语言命令并转换为设备控制指令。
@@ -212,7 +215,7 @@ export async function POST(request: NextRequest) {
       aiResponse = result.message?.content || aiResponse
       ollamaAvailable = true
     } catch (err) {
-      console.warn('[AI Chat] Ollama 不可用，使用内置规则解析器:', err instanceof Error ? err.message : err)
+      log.warn('Ollama 不可用，使用内置规则解析器:', err instanceof Error ? err.message : err)
       // Ollama 不可用，使用内置规则解析器
     }
 
@@ -251,7 +254,7 @@ export async function POST(request: NextRequest) {
         actuatorsInfo as ActuatorSummary[],
         knowledgeEntries.length > 0 ? knowledgeEntries : undefined
       )
-      console.log(`[AI Chat] 解析器结果: action=${parsed.action}, actuatorId=${parsed.actuatorId}, type=${parsed.actuatorType}, reply=${parsed.reply.substring(0, 50)}`)
+      log.info(`解析器结果: action=${parsed.action}, actuatorId=${parsed.actuatorId}, type=${parsed.actuatorType}, reply=${parsed.reply.substring(0, 50)}`)
       commandInfo = {
         action: parsed.action,
         actuatorId: parsed.actuatorId,
@@ -295,7 +298,7 @@ export async function POST(request: NextRequest) {
         return false
       })
       if (matchedScheme) {
-        console.log(`[AI Chat] 降级匹配自动化方案: ${matchedScheme.name} (id=${matchedScheme.id})`)
+        log.info(`降级匹配自动化方案: ${matchedScheme.name} (id=${matchedScheme.id})`)
         commandInfo = {
           action: 'automation',
           actuatorId: '',
@@ -525,7 +528,7 @@ export async function POST(request: NextRequest) {
           command_id: cmdResult.data?.id,
         }
       } catch (execErr) {
-        console.error('[AI Chat] 命令执行异常:', execErr instanceof Error ? execErr.message : execErr)
+        log.error('命令执行异常:', execErr instanceof Error ? execErr.message : execErr)
         executionResult = {
           success: false,
           message: `命令执行异常: ${execErr instanceof Error ? execErr.message : '未知错误'}`,
@@ -556,7 +559,7 @@ export async function POST(request: NextRequest) {
         [AI_CHAT_HISTORY_LIMIT]
       )
     } catch (dbErr) {
-      console.warn('[AI Chat] 聊天历史保存失败（表可能不存在）:', dbErr instanceof Error ? dbErr.message : dbErr)
+      log.warn('聊天历史保存失败（表可能不存在）:', dbErr instanceof Error ? dbErr.message : dbErr)
     }
 
     return NextResponse.json({
@@ -569,7 +572,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : '未知错误'
-    console.error('[AI Chat] 未捕获异常:', errMsg, error)
+    log.error('未捕获异常:', errMsg, error)
     // 即使发生未捕获异常，也返回降级响应而非 500 错误
     return NextResponse.json({
       success: true,

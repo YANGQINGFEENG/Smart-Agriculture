@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, ResultSetHeader } from '@/lib/db'
 import { syncKnowledgeToRag } from '@/lib/knowledge-rag'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeImport');
 
 /**
  * POST /api/knowledge/import
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
       message: `导入完成: 新增 ${imported} 条, 更新 ${updated} 条, 跳过 ${skipped} 条`,
     })
   } catch (error) {
-    console.error('导入知识库失败:', error)
+    log.error('导入知识库失败:', error)
     return NextResponse.json(
       { success: false, error: '导入失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

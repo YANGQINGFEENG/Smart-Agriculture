@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('GatewayId');
 
 /**
  * DELETE /api/gateways/[id]
@@ -23,7 +26,7 @@ export async function DELETE(
       message: '网关删除成功',
     })
   } catch (error) {
-    console.error('删除网关失败:', error)
+    log.error('删除网关失败:', error)
     return NextResponse.json(
       { success: false, error: '删除网关失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

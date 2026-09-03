@@ -1,7 +1,10 @@
 import re
+import logging
 from pathlib import Path
 
 import ollama
+
+logger = logging.getLogger(__name__)
 
 
 # ==================================================
@@ -200,10 +203,7 @@ YOLO视觉模型检测到：
 
     except Exception as e:
 
-        print(
-            "DeepSeek辅助诊断失败：",
-            e
-        )
+        logger.error("DeepSeek辅助诊断失败：%s", e)
 
         diagnosis = ""
 
@@ -250,10 +250,7 @@ YOLO视觉模型检测到：
 
     except Exception as e:
 
-        print(
-            "DeepSeek复核提示失败：",
-            e
-        )
+        logger.error("DeepSeek复核提示失败：%s", e)
 
         warning = ""
 
@@ -326,10 +323,7 @@ YOLO视觉模型检测到疑似病虫害：
 
     except Exception as e:
 
-        print(
-            "DeepSeek通用诊断失败：",
-            e
-        )
+        logger.error("DeepSeek通用诊断失败：%s", e)
 
         diagnosis = ""
 
@@ -382,10 +376,7 @@ YOLO视觉模型检测到疑似病虫害：
 
     except Exception as e:
 
-        print(
-            "DeepSeek通用建议失败：",
-            e
-        )
+        logger.error("DeepSeek通用建议失败：%s", e)
 
         general_advice = ""
 

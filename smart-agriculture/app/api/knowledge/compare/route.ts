@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeCompare');
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
 
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('矛盾检测失败:', error)
+    log.error('矛盾检测失败:', error)
     return NextResponse.json(
       { success: false, error: '对比分析失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -168,7 +171,7 @@ ${knowledgeList}
       }
     }
   } catch (error) {
-    console.log('AI矛盾检测失败，使用规则检测')
+    log.info('AI矛盾检测失败，使用规则检测')
   }
 
   return []

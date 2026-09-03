@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeCheckConflicts');
 
 interface KnowledgeItem extends RowDataPacket {
   id: number
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('冲突检测失败:', error)
+    log.error('冲突检测失败:', error)
     return NextResponse.json(
       { success: false, error: '冲突检测失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

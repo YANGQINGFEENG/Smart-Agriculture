@@ -1,22 +1,21 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def water_pump_on(seconds):
 
-    print(
-        f"💧 水泵启动 {seconds} 秒"
-    )
+    logger.info("水泵启动 %d 秒", seconds)
 
 
 def fan_on():
 
-    print(
-        "🌬 风扇启动"
-    )
+    logger.info("风扇启动")
 
 
 def light_on():
 
-    print(
-        "💡 补光灯启动"
-    )
+    logger.info("补光灯启动")
 
 
 def execute_action(action):
@@ -44,6 +43,4 @@ def execute_action(action):
 
     else:
 
-        print(
-            "未知设备"
-        )
+        logger.warning("未知设备: %s", action["device"])

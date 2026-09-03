@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { getSensorTypes } from '@/lib/device-types'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('SensorTypes');
 
 /**
  * 传感器类型数据接口
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
       message: '获取传感器类型列表成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('获取传感器类型列表失败:', error)
+    log.error('获取传感器类型列表失败:', error)
     return NextResponse.json({
       success: false,
       message: '获取传感器类型列表失败',
@@ -85,7 +88,7 @@ export async function POST(request: NextRequest) {
       message: '传感器类型创建成功'
     }, { status: 201 })
   } catch (error) {
-    console.error('创建传感器类型失败:', error)
+    log.error('创建传感器类型失败:', error)
     return NextResponse.json({
       success: false,
       message: '创建传感器类型失败',

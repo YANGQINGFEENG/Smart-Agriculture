@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('PromptId');
 
 interface PromptTemplate extends RowDataPacket {
   id: number
@@ -45,7 +48,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('获取模板详情失败:', error)
+    log.error('获取模板详情失败:', error)
     return NextResponse.json(
       { success: false, error: '获取模板详情失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -103,7 +106,7 @@ export async function PUT(
       message: '模板更新成功',
     })
   } catch (error) {
-    console.error('更新模板失败:', error)
+    log.error('更新模板失败:', error)
     return NextResponse.json(
       { success: false, error: '更新模板失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -144,7 +147,7 @@ export async function DELETE(
       message: '模板删除成功',
     })
   } catch (error) {
-    console.error('删除模板失败:', error)
+    log.error('删除模板失败:', error)
     return NextResponse.json(
       { success: false, error: '删除模板失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Strategies');
 
 /**
  * 策略数据接口
@@ -35,8 +38,8 @@ export async function GET(request: NextRequest) {
     }
 
     const strategies = await db.query<Strategy[]>(query, params)
-    console.log('获取策略列表 - 查询到的策略数量:', strategies.length)
-    console.log('获取策略列表 - 策略ID列表:', strategies.map(s => s.id))
+    log.info('获取策略列表 - 查询到的策略数量:', strategies.length)
+    log.info('获取策略列表 - 策略ID列表:', strategies.map(s => s.id))
 
     return NextResponse.json({
       success: true,
@@ -44,7 +47,7 @@ export async function GET(request: NextRequest) {
       message: '获取策略列表成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('获取策略列表失败:', error)
+    log.error('获取策略列表失败:', error)
     return NextResponse.json({
       success: false,
       data: null,
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest) {
       message: '创建策略成功'
     }, { status: 201 })
   } catch (error) {
-    console.error('创建策略失败:', error)
+    log.error('创建策略失败:', error)
     return NextResponse.json({
       success: false,
       data: null,

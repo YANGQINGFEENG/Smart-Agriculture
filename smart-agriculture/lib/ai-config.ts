@@ -4,6 +4,10 @@
  * 所有 AI 路由应从此文件获取配置，避免硬编码
  */
 
+import { createLogger } from './logger'
+
+const log = createLogger('AI-Config')
+
 /** Ollama LLM 服务地址 */
 export const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
 

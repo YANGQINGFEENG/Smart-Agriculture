@@ -1,5 +1,8 @@
 // 数据库连接模块 - 使用MySQL
 import mysql, { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { createLogger } from './logger';
+
+const log = createLogger('DB-MySQL');
 
 let pool: mysql.Pool | null = null;
 
@@ -20,10 +23,10 @@ async function initDatabase() {
 
     // 测试连接
     await pool.getConnection();
-    console.log('MySQL数据库连接成功');
+    log.debug('MySQL数据库连接成功');
     return pool;
   } catch (error) {
-    console.error('MySQL数据库连接失败:', error);
+    log.error('MySQL数据库连接失败:', error);
     throw error;
   }
 }
@@ -35,7 +38,7 @@ async function testConnection() {
     await pool.getConnection();
     return true;
   } catch (error) {
-    console.error('数据库连接测试失败:', error);
+    log.error('数据库连接测试失败:', error);
     return false;
   }
 }

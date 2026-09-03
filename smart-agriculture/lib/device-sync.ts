@@ -1,6 +1,9 @@
 import { db } from './db'
 import { getBeijingTimeForDB } from './beijing-time'
 import { DeviceCategory, generateDeviceId, getDeviceTypeConfig, isSensorType, isActuatorType } from './device-types'
+import { createLogger } from './logger'
+
+const log = createLogger('DeviceSync')
 
 /**
  * 设备同步服务
@@ -249,7 +252,7 @@ async function syncToActuator(params: {
 }): Promise<SyncResult> {
   const { deviceId, gatewayId, farmId, nodeId, type, name, location, area, state, mode, controlValue, controlType, controlRange, originalType, feedback } = params
 
-  console.log(`[syncToActuator] 开始同步: deviceId=${deviceId}, type=${type}, name=${name}`)
+  log.debug(`开始同步: deviceId=${deviceId}, type=${type}, name=${name}`)
 
   let isNew = false
 
@@ -264,7 +267,7 @@ async function syncToActuator(params: {
 
   // 如果配置不存在，记录警告
   if (!deviceConfig) {
-    console.warn(`[syncToActuator] 警告: 找不到类型配置 type=${type}, 将使用默认配置`)
+    log.warn(`警告: 找不到类型配置 type=${type}, 将使用默认配置`)
   }
 
   const defaultControlType = controlType || deviceConfig?.controlType || 'boolean'
@@ -278,7 +281,7 @@ async function syncToActuator(params: {
   }
 
   if (existingActuator.length === 0) {
-    console.log(`[syncToActuator] 执行器不存在，准备创建新执行器: ${deviceId}`)
+    log.debug(`执行器不存在，准备创建新执行器: ${deviceId}`)
 
     // 获取执行器类型ID
     const actuatorTypes = await db.query<any[]>(
@@ -287,7 +290,7 @@ async function syncToActuator(params: {
     )
 
     if (actuatorTypes.length === 0) {
-      console.log(`[syncToActuator] 执行器类型不存在: type=${type}, 准备创建类型`)
+      log.debug(`执行器类型不存在: type=${type}, 准备创建类型`)
 
       // 如果类型不存在，尝试从device-types字典获取配置并创建
       if (deviceConfig && isActuatorType(type)) {
@@ -295,7 +298,7 @@ async function syncToActuator(params: {
           `INSERT INTO actuator_types (type, name, description) VALUES (?, ?, ?)`,
           [type, deviceConfig.name, deviceConfig.description || '']
         )
-        console.log(`[syncToActuator] 已创建执行器类型: ${type} (${deviceConfig.name})`)
+        log.debug(`已创建执行器类型: ${type} (${deviceConfig.name})`)
 
         const newTypes = await db.query<any[]>(
           'SELECT id FROM actuator_types WHERE type = ?',
@@ -325,12 +328,12 @@ async function syncToActuator(params: {
             ]
           )
           isNew = true
-          console.log(`[syncToActuator] 已创建执行器: ${deviceId}, type_id=${newTypes[0].id}`)
+          log.debug(`已创建执行器: ${deviceId}, type_id=${newTypes[0].id}`)
         } else {
-          console.error(`[syncToActuator] 错误: 创建类型后无法获取类型ID: type=${type}`)
+          log.error(`错误: 创建类型后无法获取类型ID: type=${type}`)
         }
       } else {
-        console.error(`[syncToActuator] 错误: 无法创建执行器类型: type=${type}, deviceConfig=${!!deviceConfig}, isActuatorType=${isActuatorType(type)}`)
+        log.error(`错误: 无法创建执行器类型: type=${type}, deviceConfig=${!!deviceConfig}, isActuatorType=${isActuatorType(type)}`)
       }
     } else {
       // 创建执行器（包含控制类型、控制范围和回馈数据）
@@ -356,10 +359,10 @@ async function syncToActuator(params: {
         ]
       )
       isNew = true
-      console.log(`[syncToActuator] 已创建执行器: ${deviceId}, type_id=${actuatorTypes[0].id}`)
+      log.debug(`已创建执行器: ${deviceId}, type_id=${actuatorTypes[0].id}`)
     }
   } else {
-    console.log(`[syncToActuator] 执行器已存在: ${deviceId}, 只更新状态`)
+    log.debug(`执行器已存在: ${deviceId}, 只更新状态`)
   }
 
   // 更新执行器状态（包含区域信息、控制值、控制类型、控制范围和回馈数据）
@@ -386,7 +389,7 @@ async function syncToActuator(params: {
   // 更新或创建设备节点记录
   await upsertDeviceNode(gatewayId, nodeId, type, name, location, 'actuator', area)
 
-  console.log(`[syncToActuator] 同步完成: deviceId=${deviceId}, isNew=${isNew}`)
+  log.debug(`同步完成: deviceId=${deviceId}, isNew=${isNew}`)
 
   return { deviceId, isNew, category: DeviceCategory.ACTUATOR }
 }

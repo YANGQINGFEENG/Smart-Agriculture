@@ -1157,7 +1157,7 @@ class System:
                 logger.warning(f"[采集] 传感器 {sensor_id} 数据质量差: {quality}，跳过")
                 return nodes
 
-            logger.info(f"[采集] 传感器 {sensor_id} 数据: {value} {data.get('unit', '')}")
+            logger.debug(f"[采集] 传感器 {sensor_id} 数据: {value} {data.get('unit', '')}")
 
             # 处理多值传感器（如 DHT11 同时返回温度和湿度）
             if isinstance(value, dict):
@@ -1207,7 +1207,7 @@ class System:
         sensors_mapping = self.device_mapping.get("sensors", {})
         area = self.config.get("upload.area", "")
 
-        logger.info(f"[采集] 开始采集数据，共 {len(self.sensors)} 个传感器，{len(self.actuators)} 个执行器")
+        logger.debug(f"[采集] 开始采集数据，共 {len(self.sensors)} 个传感器，{len(self.actuators)} 个执行器")
 
         # 并行读取所有传感器数据（使用线程池）
         if self.sensors:
@@ -1241,7 +1241,7 @@ class System:
                     nodes.extend(self._read_sensor_data(sensor_id, sensor, sensors_mapping, area))
 
         # 采集执行器状态（按协议规范格式）
-        logger.info(f"[采集] 采集执行器状态，共 {len(self.actuators)} 个执行器")
+        logger.debug(f"[采集] 采集执行器状态，共 {len(self.actuators)} 个执行器")
         actuators_mapping = self.device_mapping.get("actuators", {})
         area = self.config.get("upload.area", "")
         for actuator_id, actuator in self.actuators.items():
@@ -1291,7 +1291,7 @@ class System:
                     "location": location,
                     "area": area,
                 })
-                logger.info(f"[采集] 执行器 {actuator_id} 状态: {state}")
+                logger.debug(f"[采集] 执行器 {actuator_id} 状态: {state}")
             except Exception as e:
                 logger.error(f"Actuator {actuator_id} status error: {e}")
 
@@ -1302,7 +1302,7 @@ class System:
                 if camera_node:
                     nodes.append(camera_node)
                     found = camera_node.get("feedback", {}).get("found", False)
-                    logger.info(
+                    logger.debug(
                         f"[采集] 摄像头节点: {camera_node['node_id']} "
                         f"({'检测到目标' if found else '未检测到目标'})"
                     )
@@ -1312,7 +1312,7 @@ class System:
         # 上传
         if nodes:
             try:
-                logger.info(f"[上传] 准备上传 {len(nodes)} 个设备节点")
+                logger.debug(f"[上传] 准备上传 {len(nodes)} 个设备节点")
                 success = self.upload.upload_batch(nodes)
                 if success:
                     logger.info(f"[上传] 上传成功，共 {len(nodes)} 个设备节点")

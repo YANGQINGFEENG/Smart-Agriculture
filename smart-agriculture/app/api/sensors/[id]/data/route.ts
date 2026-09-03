@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('SensorData');
 
 /**
  * 传感器数据接口
@@ -109,7 +112,7 @@ export async function GET(
       total: data.length,
     })
   } catch (error) {
-    console.error('获取传感器数据失败:', error)
+    log.error('获取传感器数据失败:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -135,10 +138,10 @@ export async function POST(
     
     const body = await request.json()
     
-    console.log(`[Sensor] 收到传感器数据上传请求 - ID: ${id}, 数据:`, JSON.stringify(body))
+    log.info(`收到传感器数据上传请求 - ID: ${id}, 数据:`, JSON.stringify(body))
     
     if (typeof body.value !== 'number') {
-      console.log(`[Sensor] 参数错误 - ID: ${id}, value类型不正确`)
+      log.info(`参数错误 - ID: ${id}, value类型不正确`)
       return NextResponse.json(
         { success: false, error: '缺少必要参数：value（数值类型）' },
         { status: 400 }
@@ -151,7 +154,7 @@ export async function POST(
     )
 
     if (sensors.length === 0) {
-      console.log(`[Sensor] 传感器不存在 - ID: ${id}`)
+      log.info(`传感器不存在 - ID: ${id}`)
       return NextResponse.json(
         { success: false, error: '传感器不存在' },
         { status: 404 }
@@ -159,7 +162,7 @@ export async function POST(
     }
 
     if (body.value === 0) {
-      console.log(`[Sensor] 数据值为0，跳过更新 - ID: ${id}`)
+      log.info(`数据值为0，跳过更新 - ID: ${id}`)
       return NextResponse.json({
         success: true,
         data: null,
@@ -182,7 +185,7 @@ export async function POST(
       [result.lastID]
     )
 
-    console.log(`[Sensor] 传感器数据保存成功 - ID: ${id}, 值: ${newData[0].value}`)
+    log.info(`传感器数据保存成功 - ID: ${id}, 值: ${newData[0].value}`)
 
     return NextResponse.json({
       success: true,
@@ -190,7 +193,7 @@ export async function POST(
       message: 'OK',
     })
   } catch (error) {
-    console.error('[Sensor] 保存传感器数据失败:', error)
+    log.error('保存传感器数据失败:', error)
     return NextResponse.json(
       { 
         success: false, 

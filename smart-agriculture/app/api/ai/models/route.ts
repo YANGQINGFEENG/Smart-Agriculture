@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OLLAMA_HOST } from '@/lib/ai-config'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AIModels');
 
 /**
  * 模型管理 API
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
-    console.error('[Models] 获取模型列表失败:', error)
+    log.error('获取模型列表失败:', error)
     return NextResponse.json({
       success: false,
       service: { running: false, message: '获取模型列表失败' },
@@ -212,7 +215,7 @@ export async function POST(request: NextRequest) {
       data: result,
     })
   } catch (error) {
-    console.error('[Models] 模型操作失败:', error)
+    log.error('模型操作失败:', error)
     return NextResponse.json(
       { success: false, error: '模型操作失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

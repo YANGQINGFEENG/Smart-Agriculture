@@ -1,5 +1,8 @@
 import { db } from './db'
 import axios from 'axios'
+import { createLogger } from './logger'
+
+const log = createLogger('Strategy')
 
 /**
  * 策略数据接口
@@ -38,7 +41,7 @@ class StrategyEngine {
    * 启动策略执行引擎
    */
   public async start(): Promise<void> {
-    console.log('策略执行引擎正在启动...')
+    log.debug('策略执行引擎正在启动...')
 
     // 等待数据库连接池就绪
     let retries = 0
@@ -50,18 +53,18 @@ class StrategyEngine {
           break
         }
       } catch (error) {
-        console.warn(`数据库连接测试失败 (${retries + 1}/${maxRetries})`)
+        log.warn(`数据库连接测试失败 (${retries + 1}/${maxRetries})`)
       }
       retries++
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
 
     if (retries >= maxRetries) {
-      console.error('数据库连接池就绪超时，策略执行引擎启动失败')
+      log.error('数据库连接池就绪超时，策略执行引擎启动失败')
       return
     }
 
-    console.log('策略执行引擎已启动')
+    log.debug('策略执行引擎已启动')
 
     this.isRunning = true
 
@@ -82,7 +85,7 @@ class StrategyEngine {
       clearInterval(this.interval)
       this.interval = null
       this.isRunning = false
-      console.log('策略执行引擎已停止')
+      log.debug('策略执行引擎已停止')
     }
   }
 
@@ -97,14 +100,14 @@ class StrategyEngine {
         [true]
       )
 
-      console.log(`检查 ${strategies.length} 个启用的策略`)
+      log.debug(`检查 ${strategies.length} 个启用的策略`)
 
       // 检查每个策略
       for (const strategy of strategies) {
         await this.checkStrategy(strategy)
       }
     } catch (error) {
-      console.error('检查策略失败:', error)
+      log.error('检查策略失败:', error)
     }
   }
 
@@ -127,7 +130,7 @@ class StrategyEngine {
       // 执行策略
       await this.executeStrategy(strategy)
     } catch (error) {
-      console.error(`检查策略 ${strategy.id} 失败:`, error)
+      log.error(`检查策略 ${strategy.id} 失败:`, error)
     }
   }
 
@@ -166,16 +169,16 @@ class StrategyEngine {
           // 时间类型的条件已经在 isInTimeRange 中检查
           return true
         default:
-          console.warn(`未知的触发条件类型: ${type}`)
+          log.warn(`未知的触发条件类型: ${type}`)
           return false
       }
 
       if (sensorValue === null) {
-        console.log(`获取传感器值失败: ${type}`)
+        log.debug(`获取传感器值失败: ${type}`)
         return false
       }
 
-      console.log(`检查触发条件: ${type} ${operator} ${value}${unit}, 当前值: ${sensorValue}${unit}`)
+      log.debug(`检查触发条件: ${type} ${operator} ${value}${unit}, 当前值: ${sensorValue}${unit}`)
 
       // 检查条件是否满足
       let shouldTrigger = false
@@ -196,14 +199,14 @@ class StrategyEngine {
           shouldTrigger = sensorValue > value
           break
         default:
-          console.warn(`未知的操作符: ${operator}`)
+          log.warn(`未知的操作符: ${operator}`)
           return false
       }
 
-      console.log(`触发条件检查结果: ${shouldTrigger}`)
+      log.debug(`触发条件检查结果: ${shouldTrigger}`)
       return shouldTrigger
     } catch (error) {
-      console.error('检查触发条件失败:', error)
+      log.error('检查触发条件失败:', error)
       return false
     }
   }
@@ -214,13 +217,13 @@ class StrategyEngine {
   private async getSensorValue(sensorType: string, actuatorId: string): Promise<number | null> {
     try {
       // 这里应该根据执行器ID和传感器类型获取相应的传感器数据
-      console.log(`获取传感器值: ${sensorType} for actuator ${actuatorId}`)
+      log.debug(`获取传感器值: ${sensorType} for actuator ${actuatorId}`)
 
       // 直接返回25，模拟湿度低于30%的情况
-      console.log(`获取到传感器值: 25.00`)
+      log.debug(`获取到传感器值: 25.00`)
       return 25
     } catch (error) {
-      console.error('获取传感器值失败:', error)
+      log.error('获取传感器值失败:', error)
       return null
     }
   }
@@ -230,7 +233,7 @@ class StrategyEngine {
    */
   private async executeStrategy(strategy: Strategy): Promise<void> {
     try {
-      console.log(`执行策略: ${strategy.id} - ${strategy.name}`)
+      log.debug(`执行策略: ${strategy.id} - ${strategy.name}`)
 
       // 调用执行器API执行动作（使用PATCH方法）
       const response = await axios.patch(`http://localhost:3000/api/actuators/${strategy.actuator_id}`, {
@@ -238,16 +241,16 @@ class StrategyEngine {
       })
 
       if (response.data.success) {
-        console.log(`策略执行成功: ${strategy.id}`)
+        log.debug(`策略执行成功: ${strategy.id}`)
 
         // 记录执行日志
         await this.logExecution(strategy, 'success')
       } else {
-        console.error(`策略执行失败: ${strategy.id}`, response.data.message)
+        log.error(`策略执行失败: ${strategy.id}`, response.data.message)
         await this.logExecution(strategy, 'failed', response.data.message)
       }
     } catch (error) {
-      console.error(`策略执行失败: ${strategy.id}`, error)
+      log.error(`策略执行失败: ${strategy.id}`, error)
       await this.logExecution(strategy, 'failed', (error as Error).message)
     }
   }
@@ -263,7 +266,7 @@ class StrategyEngine {
         [strategy.id, strategy.actuator_id, strategy.action, status, errorMessage || null]
       )
     } catch (error) {
-      console.error('记录策略执行日志失败:', error)
+      log.error('记录策略执行日志失败:', error)
     }
   }
 }

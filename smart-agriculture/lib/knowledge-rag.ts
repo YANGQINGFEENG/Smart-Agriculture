@@ -3,6 +3,10 @@
  * 将知识库与RAG检索服务集成，支持语义搜索
  */
 
+import { createLogger } from './logger'
+
+const log = createLogger('RAG')
+
 const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || 'http://localhost:5001'
 
 interface RagSearchResult {
@@ -49,7 +53,7 @@ export async function syncKnowledgeToRag(knowledgeItems: Array<{
     const result = await response.json()
     return result.data
   } catch (error) {
-    console.error('同步到RAG索引失败:', error)
+    log.error('同步到RAG索引失败:', error)
     throw error
   }
 }
@@ -81,7 +85,7 @@ export async function semanticSearch(query: string, topK: number = 5): Promise<R
       score: item.score || 0,
     }))
   } catch (error) {
-    console.error('语义搜索失败:', error)
+    log.error('语义搜索失败:', error)
     return []
   }
 }
@@ -111,7 +115,7 @@ export async function clearRagIndex() {
     })
     return await response.json()
   } catch (error) {
-    console.error('清空RAG索引失败:', error)
+    log.error('清空RAG索引失败:', error)
     throw error
   }
 }

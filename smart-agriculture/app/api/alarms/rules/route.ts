@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AlarmRules');
 
 interface AlarmRule extends RowDataPacket {
   id: number
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
       total: rows.length,
     })
   } catch (error) {
-    console.error('获取报警规则失败:', error)
+    log.error('获取报警规则失败:', error)
     return NextResponse.json(
       { success: false, error: '获取报警规则失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -91,7 +94,7 @@ export async function POST(request: NextRequest) {
       message: '报警规则创建成功',
     })
   } catch (error) {
-    console.error('创建报警规则失败:', error)
+    log.error('创建报警规则失败:', error)
     return NextResponse.json(
       { success: false, error: '创建报警规则失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -134,7 +137,7 @@ export async function DELETE(request: NextRequest) {
       message: '报警规则删除成功',
     })
   } catch (error) {
-    console.error('删除报警规则失败:', error)
+    log.error('删除报警规则失败:', error)
     return NextResponse.json(
       { success: false, error: '删除报警规则失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

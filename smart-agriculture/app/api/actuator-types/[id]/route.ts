@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ActuatorTypeId');
 
 /**
  * DELETE /api/actuator-types/[id]
@@ -33,7 +36,7 @@ export async function DELETE(
       message: '执行器类型删除成功',
     })
   } catch (error) {
-    console.error('删除执行器类型失败:', error)
+    log.error('删除执行器类型失败:', error)
     return NextResponse.json({
       success: false,
       error: '删除执行器类型失败',

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AlarmRecords');
 
 interface AlarmRecord extends RowDataPacket {
   id: number
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('获取报警记录失败:', error)
+    log.error('获取报警记录失败:', error)
     return NextResponse.json(
       { success: false, error: '获取报警记录失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -110,7 +113,7 @@ export async function POST(request: NextRequest) {
       message: '报警记录创建成功',
     })
   } catch (error) {
-    console.error('创建报警记录失败:', error)
+    log.error('创建报警记录失败:', error)
     return NextResponse.json(
       { success: false, error: '创建报警记录失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -154,7 +157,7 @@ export async function PATCH(request: NextRequest) {
       message: '报警记录更新成功',
     })
   } catch (error) {
-    console.error('更新报警记录失败:', error)
+    log.error('更新报警记录失败:', error)
     return NextResponse.json(
       { success: false, error: '更新报警记录失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('CheckSensors');
 
 /**
  * 检查传感器表结构和数据
@@ -48,7 +51,7 @@ export async function GET(request: NextRequest) {
       message: '检查传感器表成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('检查传感器表失败:', error)
+    log.error('检查传感器表失败:', error)
     return NextResponse.json({
       success: false,
       message: '检查传感器表失败',

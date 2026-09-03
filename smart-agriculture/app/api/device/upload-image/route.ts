@@ -3,6 +3,9 @@ import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 import { db, ResultSetHeader } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('UploadImage');
 
 /**
  * 摄像头帧上传接口
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
     await writeFile(filePath, Buffer.from(bytes))
 
     const relativePath = `/uploads/camera/${fileName}`
-    console.log(`[Upload-Image] 帧上传成功: ${nodeId}, 文件: ${fileName}, 大小: ${image.size} bytes`)
+    log.info(`帧上传成功: ${nodeId}, 文件: ${fileName}, 大小: ${image.size} bytes`)
 
     // 更新摄像头执行器的 feedback，附带最新帧信息（便于前端展示最新截图）
     try {
@@ -91,12 +94,12 @@ export async function POST(request: NextRequest) {
           [relativePath, beijingTs, beijingTs, nodeId]
         )
         if (result.affectedRows > 0) {
-          console.log(`[Upload-Image] 已更新 ${nodeId} 的 last_frame_url`)
+          log.info(`已更新 ${nodeId} 的 last_frame_url`)
         }
       }
     } catch (dbErr) {
       // 数据库更新失败不影响文件上传主流程
-      console.error('[Upload-Image] feedback 更新失败（不影响上传）:', dbErr)
+      log.error('feedback 更新失败（不影响上传）:', dbErr)
     }
 
     return NextResponse.json({
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest) {
       detection,
     })
   } catch (error) {
-    console.error('[Upload-Image] 帧上传失败:', error)
+    log.error('帧上传失败:', error)
     return NextResponse.json(
       {
         success: false,

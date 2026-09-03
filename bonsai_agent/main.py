@@ -1,5 +1,8 @@
 import time
 
+from utils.logger import get_logger
+logger = get_logger("main")
+
 from tools.sensor_tool import get_sensor_data
 from tools.yolo_tool import get_yolo_result
 
@@ -88,7 +91,7 @@ last_diagnosis_time = 0
 
 
 # ==================================================
-# 清洗Excel中的文本
+# 清洗Excel上的文本
 # ==================================================
 
 def clean_text(value, default=""):
@@ -153,9 +156,7 @@ def build_expert_advice(expert_info):
 
 def process_environment():
 
-    print("\n========================================")
-    print("环境监测")
-    print("========================================")
+    logger.info("-------- 环境监测 --------")
 
 
     # --------------------------------------------------
@@ -165,20 +166,12 @@ def process_environment():
     sensor_data = get_sensor_data()
 
 
-    print(
-        f"温度：{sensor_data.get('temperature')} ℃"
-    )
-
-    print(
-        f"空气湿度：{sensor_data.get('humidity')} %"
-    )
-
-    print(
-        f"土壤湿度：{sensor_data.get('soil_moisture')} %"
-    )
-
-    print(
-        f"光照：{sensor_data.get('light')} lux"
+    logger.info(
+        "温度：%.1f ℃ | 空气湿度：%.1f %% | 土壤湿度：%.1f %% | 光照：%.0f lux",
+        sensor_data.get('temperature', 0),
+        sensor_data.get('humidity', 0),
+        sensor_data.get('soil_moisture', 0),
+        sensor_data.get('light', 0)
     )
 
 
@@ -191,9 +184,7 @@ def process_environment():
     )
 
 
-    print(
-        "✅ 传感器数据已保存到SQLite"
-    )
+    logger.info("传感器数据已保存到SQLite")
 
 
     # --------------------------------------------------
@@ -207,9 +198,7 @@ def process_environment():
 
     if not actions:
 
-        print(
-            "自动控制：当前环境正常，无需执行设备"
-        )
+        logger.info("自动控制：当前环境正常，无需执行设备")
 
         return
 
@@ -268,23 +257,15 @@ def process_environment():
             )
 
 
-            print(
-                f"⏳ {device} 处于安全冷却期，"
-                f"剩余约 {remaining} 秒"
+            logger.info(
+                "%s 处于安全冷却期，剩余约 %d 秒",
+                device, remaining
             )
 
             continue
 
 
-        print("\n自动控制触发：")
-
-        print(
-            f"设备：{device}"
-        )
-
-        print(
-            f"原因：{action.get('reason')}"
-        )
+        logger.info("自动控制触发：设备=%s, 原因=%s", device, action.get('reason'))
 
 
         # --------------------------------------------------
@@ -334,9 +315,7 @@ def process_environment():
         )
 
 
-        print(
-            "✅ 设备执行记录已保存到SQLite"
-        )
+        logger.info("设备执行记录已保存到SQLite")
 
 
 # ==================================================
@@ -361,9 +340,7 @@ def process_vision():
 
     if not yolo_result:
 
-        print(
-            "\nYOLO：当前未检测到病虫害"
-        )
+        logger.info("YOLO：当前未检测到病虫害")
 
         return
 
@@ -387,19 +364,10 @@ def process_vision():
     current_time = time.time()
 
 
-    print("\n========================================")
-    print("AI视觉监测")
-    print("========================================")
+    logger.info("-------- AI视觉监测 --------")
 
 
-    print(
-        f"YOLO检测：{pest_name}"
-    )
-
-
-    print(
-        f"置信度：{confidence * 100:.1f}%"
-    )
+    logger.info("YOLO检测：%s，置信度：%.1f%%", pest_name, confidence * 100)
 
 
     # ==================================================
@@ -444,9 +412,7 @@ def process_vision():
         )
 
 
-        print(
-            "✅ YOLO识别结果已保存到SQLite"
-        )
+        logger.info("YOLO识别结果已保存到SQLite")
 
 
     # ==================================================
@@ -476,17 +442,12 @@ def process_vision():
 
     if not should_diagnose:
 
-        print(
-            "DeepSeek：已有近期诊疗结果，"
-            "本轮不重复调用"
-        )
+        logger.info("DeepSeek：已有近期诊疗结果，本轮不重复调用")
 
         return
 
 
-    print(
-        "正在查询专家知识库..."
-    )
+    logger.info("正在查询专家知识库...")
 
 
     # ==================================================
@@ -511,14 +472,10 @@ def process_vision():
         )
 
 
-        print(
-            f"✅ 专家数据库匹配成功：{expert_id}"
-        )
+        logger.info("专家数据库匹配成功：%s", expert_id)
 
 
-        print(
-            "正在调用DeepSeek辅助分析..."
-        )
+        logger.info("正在调用DeepSeek辅助分析...")
 
 
         ai_result = (
@@ -578,14 +535,10 @@ def process_vision():
 
     else:
 
-        print(
-            "⚠️ 专家数据库未找到匹配条目"
-        )
+        logger.warning("专家数据库未找到匹配条目")
 
 
-        print(
-            "正在调用DeepSeek通用知识..."
-        )
+        logger.info("正在调用DeepSeek通用知识...")
 
 
         ai_result = (
@@ -642,14 +595,10 @@ def process_vision():
     )
 
 
-    print(
-        "✅ Agent诊疗结果已保存到SQLite"
-    )
+    logger.info("Agent诊疗结果已保存到SQLite")
 
 
-    print(
-        f"诊断：{diagnosis_data['diagnosis']}"
-    )
+    logger.info("诊断：%s", diagnosis_data['diagnosis'])
 
 
 # ==================================================
@@ -658,22 +607,12 @@ def process_vision():
 
 def run_system():
 
-    print("")
-    print("========================================")
-    print("       天工慧眼智能养护系统")
-    print("========================================")
-
-    print(
-        "系统已进入自动运行模式"
-    )
-
-    print(
-        f"主循环间隔：{LOOP_INTERVAL} 秒"
-    )
-
-    print(
-        "按 Ctrl + C 可停止系统"
-    )
+    logger.info("========================================")
+    logger.info("  天工慧眼智能养护系统")
+    logger.info("========================================")
+    logger.info("系统已进入自动运行模式")
+    logger.info("主循环间隔：%d 秒", LOOP_INTERVAL)
+    logger.info("按 Ctrl + C 可停止系统")
 
 
     while True:
@@ -694,9 +633,7 @@ def run_system():
             process_vision()
 
 
-            print(
-                "\n等待下一轮监测..."
-            )
+            logger.debug("等待下一轮监测...")
 
 
             time.sleep(
@@ -706,29 +643,17 @@ def run_system():
 
         except KeyboardInterrupt:
 
-            print("")
-            print("========================================")
-            print("天工慧眼系统已停止")
-            print("========================================")
+            logger.info("========================================")
+            logger.info("天工慧眼系统已停止")
+            logger.info("========================================")
 
             break
 
 
         except Exception as error:
 
-            print("")
-            print(
-                "⚠️ 本轮运行发生异常："
-            )
-
-            print(
-                error
-            )
-
-
-            print(
-                "系统将在5秒后继续运行..."
-            )
+            logger.warning("本轮运行发生异常：%s", error)
+            logger.info("系统将在5秒后继续运行...")
 
 
             time.sleep(

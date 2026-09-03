@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('CheckTables');
 
 /**
  * 检查执行器表结构
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
       message: '执行器表结构检查成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('检查表结构失败:', error)
+    log.error('检查表结构失败:', error)
     return NextResponse.json({
       success: false,
       message: '检查表结构失败',

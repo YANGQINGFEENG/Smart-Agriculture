@@ -145,6 +145,8 @@ class HeartbeatService:
         logger.debug(
             f"Heartbeat #{self._heartbeat_count}: {self._last_heartbeat_status}"
         )
+        if success and self._heartbeat_count % 10 == 0:
+            logger.info(f"心跳正常，已连续运行 {self._heartbeat_count} 次")
         return success
 
     def start(self, sensors_provider: Callable[[], Dict], actuators_provider: Callable[[], Dict]):

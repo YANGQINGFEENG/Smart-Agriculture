@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('WebSocket');
 
 // WebSocket服务器通过独立进程运行，这里通过HTTP转发接口发送命令
 const WS_RELAY_URL = process.env.WS_RELAY_URL || 'http://localhost:8081'
@@ -24,14 +27,14 @@ export async function sendCommandToActuator(actuatorId: string, command: any) {
     const result = await response.json()
     
     if (result.success && result.sent) {
-      console.log(`[WebSocket] Command sent via relay to actuator: ${actuatorId}`)
+      log.info(`Command sent via relay to actuator: ${actuatorId}`)
       return true
     } else {
-      console.log(`[WebSocket] No active WebSocket connection for actuator: ${actuatorId}`)
+      log.info(`No active WebSocket connection for actuator: ${actuatorId}`)
       return false
     }
   } catch (error) {
-    console.error(`[WebSocket] Failed to send command via relay:`, error)
+    log.error(`Failed to send command via relay:`, error)
     return false
   }
 }
@@ -50,7 +53,7 @@ export async function getConnectionStatus() {
       areas: 0,
     }
   } catch (error) {
-    console.error('[WebSocket] Failed to get status:', error)
+    log.error('Failed to get status:', error)
     return {
       devices: 0,
       actuators: 0,
@@ -76,7 +79,7 @@ export async function GET(request: NextRequest) {
       connections: connections,
     })
   } catch (error) {
-    console.error('[WebSocket] Error:', error)
+    log.error('Error:', error)
     return NextResponse.json(
       {
         success: false,

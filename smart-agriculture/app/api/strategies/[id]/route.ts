@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('StrategyId');
 
 /**
  * 策略数据接口
@@ -44,7 +47,7 @@ export async function GET(
       message: '获取策略成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('获取策略失败:', error)
+    log.error('获取策略失败:', error)
     return NextResponse.json({
       success: false,
       data: null,
@@ -140,7 +143,7 @@ export async function PUT(
       message: '更新策略成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('更新策略失败:', error)
+    log.error('更新策略失败:', error)
     return NextResponse.json({
       success: false,
       data: null,
@@ -186,7 +189,7 @@ export async function DELETE(
       message: '删除策略成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('删除策略失败:', error)
+    log.error('删除策略失败:', error)
     return NextResponse.json({
       success: false,
       data: null,

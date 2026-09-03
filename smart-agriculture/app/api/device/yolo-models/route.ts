@@ -3,6 +3,9 @@ import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('YoloModels');
 
 /**
  * YOLO 识别模型清单接口（网页端切换硬件识别模型）
@@ -138,7 +141,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[YoloModels] 获取模型清单失败:', error)
+    log.error('获取模型清单失败:', error)
     return NextResponse.json(
       { success: false, error: '获取模型清单失败' },
       { status: 500 }
@@ -201,8 +204,8 @@ export async function POST(request: NextRequest) {
         ]
       )
 
-      console.log(
-        `[YoloModels] 模型上传成功: ${filename} (${(file.size / 1024 / 1024).toFixed(2)}MB) -> ${gatewayIp}`
+      log.info(
+        `模型上传成功: ${filename} (${(file.size / 1024 / 1024).toFixed(2)}MB) -> ${gatewayIp}`
       )
 
       return NextResponse.json({
@@ -248,7 +251,7 @@ export async function POST(request: NextRequest) {
       ]
     )
 
-    console.log(`[YoloModels] 模型登记成功: ${filename} (${resolvedSource}) -> ${gateway_ip}`)
+    log.info(`模型登记成功: ${filename} (${resolvedSource}) -> ${gateway_ip}`)
 
     return NextResponse.json({
       success: true,
@@ -258,7 +261,7 @@ export async function POST(request: NextRequest) {
       timestamp: getBeijingTimeForDB(),
     })
   } catch (error) {
-    console.error('[YoloModels] 模型登记/上传失败:', error)
+    log.error('模型登记/上传失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -287,7 +290,7 @@ export async function DELETE(request: NextRequest) {
       message: result.affectedRows > 0 ? '模型登记已删除' : '未找到该模型登记',
     })
   } catch (error) {
-    console.error('[YoloModels] 删除模型登记失败:', error)
+    log.error('删除模型登记失败:', error)
     return NextResponse.json({ success: false, error: '删除失败' }, { status: 500 })
   }
 }

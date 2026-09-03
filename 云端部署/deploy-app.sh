@@ -34,4 +34,21 @@ pm2 start ecosystem.config.js || pm2 restart ecosystem.config.js
 pm2 status
 pm2 save
 
+# 安装 PM2 日志轮转
+pm2 install pm2-logrotate || true
+pm2 set pm2-logrotate:max_size 50M || true
+pm2 set pm2-logrotate:retain 7 || true
+pm2 set pm2-logrotate:compress true || true
+
+# 配置部署日志轮转
+cat > /etc/logrotate.d/smart-agri-deploy << 'LOGROTATE'
+/opt/deploy.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+}
+LOGROTATE
+
 echo "===== 部署完成 ====="

@@ -1,5 +1,10 @@
 const { spawn } = require('child_process');
 
+function ts() {
+  const d = new Date();
+  return `[${d.toISOString().replace('T', ' ').replace('Z', '')}]`;
+}
+
 // 启动独立WebSocket服务器
 const wsServer = spawn('node', ['websocket-server.js'], {
   stdio: ['inherit', 'pipe', 'pipe'],
@@ -8,13 +13,13 @@ const wsServer = spawn('node', ['websocket-server.js'], {
 
 // WebSocket服务器输出处理
 wsServer.stdout.on('data', (data) => {
-  const output = data.toString();
-  process.stdout.write('[WS] ' + output);
+  const lines = data.toString().split('\n').filter(l => l.trim());
+  lines.forEach(line => process.stdout.write(`${ts()} [WS] ${line}\n`));
 });
 
 wsServer.stderr.on('data', (data) => {
-  const output = data.toString();
-  process.stderr.write('[WS] ' + output);
+  const lines = data.toString().split('\n').filter(l => l.trim());
+  lines.forEach(line => process.stderr.write(`${ts()} [WS] ${line}\n`));
 });
 
 wsServer.on('close', (code) => {
@@ -29,17 +34,21 @@ const nextDev = spawn('npx', ['next', 'dev'], {
 
 // 过滤输出，排除GET /api请求的日志
 nextDev.stdout.on('data', (data) => {
-  const output = data.toString();
-  if (!output.includes('GET /api')) {
-    process.stdout.write(output);
-  }
+  const lines = data.toString().split('\n').filter(l => l.trim());
+  lines.forEach(line => {
+    if (!line.includes('GET /api')) {
+      process.stdout.write(`${ts()} [Next] ${line}\n`);
+    }
+  });
 });
 
 nextDev.stderr.on('data', (data) => {
-  const output = data.toString();
-  if (!output.includes('GET /api')) {
-    process.stderr.write(output);
-  }
+  const lines = data.toString().split('\n').filter(l => l.trim());
+  lines.forEach(line => {
+    if (!line.includes('GET /api')) {
+      process.stderr.write(`${ts()} [Next] ${line}\n`);
+    }
+  });
 });
 
 nextDev.on('close', (code) => {

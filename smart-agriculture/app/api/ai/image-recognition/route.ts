@@ -3,6 +3,9 @@ import fs from 'fs'
 import path from 'path'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { AI_INFERENCE_TIMEOUT, AI_UPLOAD_DIR } from '@/lib/ai-config'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ImageRecognition');
 
 /**
  * AI 图片识别 API
@@ -129,18 +132,18 @@ export async function POST(request: NextRequest) {
         const parsed = JSON.parse(detectionDataStr)
         detections = parsed.detections || parsed || []
         detectionData = detectionDataStr
-        console.log(`[ImageRecognition] 使用硬件端检测结果: ${detections.length} 个目标`)
+        log.info(`使用硬件端检测结果: ${detections.length} 个目标`)
       } catch {
-        console.warn('[ImageRecognition] 硬件端检测数据解析失败，跳过推理')
+        log.warn('硬件端检测数据解析失败，跳过推理')
       }
     } else {
       // 调用推理服务
       try {
         detections = await callInferenceService(imageBuffer, `${timestamp}_${safeName}`)
         detectionData = JSON.stringify(detections)
-        console.log(`[ImageRecognition] 推理完成: ${detections.length} 个目标`)
+        log.info(`推理完成: ${detections.length} 个目标`)
       } catch (err) {
-        console.error('[ImageRecognition] 推理服务调用失败:', err)
+        log.error('推理服务调用失败:', err)
         // 推理失败但仍保存图片，标记推理失败
         detectionData = JSON.stringify({ error: 'inference_failed' })
       }
@@ -175,7 +178,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[ImageRecognition] 图片识别错误:', error)
+    log.error('图片识别错误:', error)
     return NextResponse.json(
       { success: false, error: '图片识别失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -243,7 +246,7 @@ export async function GET(request: NextRequest) {
       data: { history, total: history.length },
     })
   } catch (error) {
-    console.error('[ImageRecognition] 获取历史记录错误:', error)
+    log.error('获取历史记录错误:', error)
     return NextResponse.json(
       { success: false, error: '获取历史记录失败' },
       { status: 500 }

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { AI_UPLOAD_DIR } from '@/lib/ai-config'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ImageRecognitionImages');
 
 /**
  * 提供 AI 识别图片访问
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
   } catch (error) {
-    console.error('[ImageRecognition] 图片访问错误:', error)
+    log.error('图片访问错误:', error)
     return NextResponse.json(
       { success: false, error: '内部服务器错误' },
       { status: 500 }

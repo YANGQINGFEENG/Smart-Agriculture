@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('TestDB');
 
 /**
  * GET /api/test-db
@@ -73,7 +76,7 @@ export async function GET() {
       }
     })
   } catch (error) {
-    console.error('数据库测试失败:', error)
+    log.error('数据库测试失败:', error)
     return NextResponse.json(
       {
         success: false,

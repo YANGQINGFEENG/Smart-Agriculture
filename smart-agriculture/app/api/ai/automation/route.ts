@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AIAutomation');
 
 /**
  * 自动化方案记录接口
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data, total: data.length })
   } catch (error) {
-    console.error('[AI Automation] 查询失败:', error instanceof Error ? error.message : error)
+    log.error('查询失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '获取自动化方案数据失败' },
       { status: 500 }
@@ -182,7 +185,7 @@ export async function POST(request: NextRequest) {
       message: '自动化方案创建成功',
     })
   } catch (error) {
-    console.error('[AI Automation] 创建失败:', error instanceof Error ? error.message : error)
+    log.error('创建失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '创建自动化方案失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -291,7 +294,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: '自动化方案更新成功' })
   } catch (error) {
-    console.error('[AI Automation] 更新失败:', error instanceof Error ? error.message : error)
+    log.error('更新失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '更新自动化方案失败' },
       { status: 500 }
@@ -335,7 +338,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: '自动化方案已删除' })
   } catch (error) {
-    console.error('[AI Automation] 删除失败:', error instanceof Error ? error.message : error)
+    log.error('删除失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '删除自动化方案失败' },
       { status: 500 }

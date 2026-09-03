@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('YoloModelSwitch');
 
 /**
  * 识别模型切换接口（网页端 -> 云端 -> 树莓派）
@@ -59,7 +62,7 @@ async function pushGatewayMessage(gatewayIp: string, message: any) {
     const result = await resp.json()
     return { ok: Boolean(result.success && result.sent), detail: result }
   } catch (error) {
-    console.error('[YoloModelSwitch] 网关消息下发失败:', error)
+    log.error('网关消息下发失败:', error)
     return { ok: false, detail: { error: error instanceof Error ? error.message : '未知错误' } }
   }
 }
@@ -188,8 +191,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(
-      `[YoloModelSwitch] 切换请求 #${requestId}: ${gatewayIp} -> ${filename} (sent=${pushed.ok})`
+    log.info(
+      `切换请求 #${requestId}: ${gatewayIp} -> ${filename} (sent=${pushed.ok})`
     )
 
     return NextResponse.json({
@@ -206,7 +209,7 @@ export async function POST(request: NextRequest) {
       timestamp: now,
     })
   } catch (error) {
-    console.error('[YoloModelSwitch] 切换失败:', error)
+    log.error('切换失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -247,7 +250,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: logs })
   } catch (error) {
-    console.error('[YoloModelSwitch] 查询切换记录失败:', error)
+    log.error('查询切换记录失败:', error)
     return NextResponse.json({ success: false, error: '查询切换记录失败' }, { status: 500 })
   }
 }

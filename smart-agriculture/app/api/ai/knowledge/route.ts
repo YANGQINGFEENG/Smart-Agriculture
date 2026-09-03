@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AIKnowledge');
 
 /**
  * AI 知识库条目接口
@@ -89,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data, total: data.length })
   } catch (error) {
-    console.error('[AI Knowledge] 查询失败:', error instanceof Error ? error.message : error)
+    log.error('查询失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '获取知识库数据失败' },
       { status: 500 }
@@ -171,7 +174,7 @@ export async function POST(request: NextRequest) {
       message: '知识条目创建成功',
     })
   } catch (error) {
-    console.error('[AI Knowledge] 创建失败:', error instanceof Error ? error.message : error)
+    log.error('创建失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '创建知识条目失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -260,7 +263,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: '知识条目更新成功' })
   } catch (error) {
-    console.error('[AI Knowledge] 更新失败:', error instanceof Error ? error.message : error)
+    log.error('更新失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '更新知识条目失败' },
       { status: 500 }
@@ -304,7 +307,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: '知识条目已删除' })
   } catch (error) {
-    console.error('[AI Knowledge] 删除失败:', error instanceof Error ? error.message : error)
+    log.error('删除失败:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       { success: false, error: '删除知识条目失败' },
       { status: 500 }

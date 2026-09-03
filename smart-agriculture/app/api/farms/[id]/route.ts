@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('FarmId');
 
 interface Farm extends RowDataPacket {
   id: number
@@ -59,7 +62,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('获取基地详情失败:', error)
+    log.error('获取基地详情失败:', error)
     return NextResponse.json(
       { success: false, error: '获取基地详情失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -117,7 +120,7 @@ export async function PUT(
       message: '基地更新成功',
     })
   } catch (error) {
-    console.error('更新基地失败:', error)
+    log.error('更新基地失败:', error)
     return NextResponse.json(
       { success: false, error: '更新基地失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -155,7 +158,7 @@ export async function DELETE(
       message: '基地删除成功',
     })
   } catch (error) {
-    console.error('删除基地失败:', error)
+    log.error('删除基地失败:', error)
     return NextResponse.json(
       { success: false, error: '删除基地失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

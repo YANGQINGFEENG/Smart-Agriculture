@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Sensors');
 
 /**
  * 传感器数据接口
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
       params.push(type)
     }
     if (farmId) {
-      console.warn('sensors表不支持farm_id过滤，该参数已忽略')
+      log.warn('sensors表不支持farm_id过滤，该参数已忽略')
     }
 
     if (conditions.length > 0) {
@@ -81,7 +84,7 @@ export async function GET(request: NextRequest) {
       total: formattedRows.length,
     })
   } catch (error) {
-    console.error('获取传感器列表失败:', error)
+    log.error('获取传感器列表失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -154,7 +157,7 @@ export async function POST(request: NextRequest) {
       message: '传感器创建成功',
     })
   } catch (error) {
-    console.error('创建传感器失败:', error)
+    log.error('创建传感器失败:', error)
     return NextResponse.json(
       {
         success: false,

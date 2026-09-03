@@ -206,14 +206,14 @@ class UploadService:
         POST /api/device/report
         """
         if not nodes:
-            logger.info("[上传] 没有需要上传的设备节点")
+            logger.debug("[上传] 没有需要上传的设备节点")
             return True
 
         # 打印要上传的设备列表
         node_summary = []
         for n in nodes:
             node_summary.append(f"{n.get('node_id', '?')}({n.get('type', '?')})")
-        logger.info(f"[上传] 准备上传 {len(nodes)} 个设备节点: {', '.join(node_summary)}")
+        logger.debug(f"[上传] 准备上传 {len(nodes)} 个设备节点: {', '.join(node_summary)}")
 
         payload = {
             "gateway_ip": self._get_gateway_ip(),
@@ -256,12 +256,12 @@ class UploadService:
         retry_delay = self._get_retry_delay()
         node_count = len(payload.get("nodes", []))
 
-        logger.info(f"[上传] 服务器地址: {server_url}/api/device/report")
-        logger.info(f"[上传] 请求超时: {timeout}秒, 最大重试: {max_retries}次, 重试延迟: {retry_delay}秒")
+        logger.debug(f"[上传] 服务器地址: {server_url}/api/device/report")
+        logger.debug(f"[上传] 请求超时: {timeout}秒, 最大重试: {max_retries}次, 重试延迟: {retry_delay}秒")
 
         for attempt in range(max_retries):
             try:
-                logger.info(f"[上传] 第 {attempt + 1}/{max_retries} 次尝试...")
+                logger.debug(f"[上传] 第 {attempt + 1}/{max_retries} 次尝试...")
                 resp = requests.post(
                     f"{server_url}/api/device/report",
                     json=payload,
@@ -273,9 +273,9 @@ class UploadService:
                         result = resp.json()
                         msg = result.get("message", "上传成功")
                         total = result.get("total_nodes", node_count)
-                        logger.info(f"[上传] HTTP {resp.status_code} - {msg}，处理 {total} 个节点")
+                        logger.debug(f"[上传] HTTP {resp.status_code} - {msg}，处理 {total} 个节点")
                     except Exception:
-                        logger.info(f"[上传] HTTP {resp.status_code} - 上传成功（无JSON响应）")
+                        logger.debug(f"[上传] HTTP {resp.status_code} - 上传成功（无JSON响应）")
                     return True
                 else:
                     error_detail = resp.text[:300] if resp.text else "空响应"

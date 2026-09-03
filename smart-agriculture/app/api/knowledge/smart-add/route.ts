@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeSmartAdd');
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
 
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('智能添加知识失败:', error)
+    log.error('智能添加知识失败:', error)
     return NextResponse.json(
       { success: false, error: '智能处理失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -114,14 +117,14 @@ ${text}
         try {
           const parsed = JSON.parse(jsonMatch[0])
           if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
-            console.log(`AI识别到 ${parsed.items.length} 个知识点`)
+            log.info(`AI识别到 ${parsed.items.length} 个知识点`)
             return parsed.items
           }
         } catch {}
       }
     }
   } catch (error) {
-    console.log('AI拆分失败，使用规则拆分')
+    log.info('AI拆分失败，使用规则拆分')
   }
 
   // AI失败时使用规则拆分

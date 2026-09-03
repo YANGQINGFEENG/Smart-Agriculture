@@ -3,6 +3,9 @@ import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { syncDevice } from '@/lib/device-sync'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
 import { DeviceCategory, isSensorType, isActuatorType, getDeviceTypeConfig, getActuatorTypeConfig, getSensorTypeConfig, getUnassignedDeviceType, ControlType } from '@/lib/device-types'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Report');
 
 interface Gateway extends RowDataPacket {
   id: number
@@ -189,7 +192,7 @@ export async function POST(request: NextRequest) {
     // 检查是否有未知类型的设备（不再拒绝，而是标记为未分配）
     const unknownTypeNodes = nodes.filter(node => !isSensorType(node.type) && !isActuatorType(node.type))
     if (unknownTypeNodes.length > 0) {
-      console.log(`[Report] 检测到未知设备类型: ${unknownTypeNodes.map(n => n.type).join(', ')}，将自动分配到"未分配"类别`)
+      log.info(`检测到未知设备类型: ${unknownTypeNodes.map(n => n.type).join(', ')}，将自动分配到"未分配"类别`)
     }
 
     // 1. 查找或创建网关
@@ -216,7 +219,7 @@ export async function POST(request: NextRequest) {
       const newGatewayId = (result as any).lastID || (result as any).insertId
       gateway = await db.query<Gateway[]>('SELECT * FROM gateways WHERE id = ?', [newGatewayId])
 
-      console.log(`[Report] 自动创建网关: ${gateway_ip}`)
+      log.info(`自动创建网关: ${gateway_ip}`)
     } else {
       // 更新网关状态和区域信息
       await db.execute(
@@ -252,7 +255,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('[Report] 设备数据上报失败:', error)
+    log.error('设备数据上报失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -315,7 +318,7 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
   const correctedType = deviceTypeMappings[type] || type
 
   if (correctedType !== type) {
-    console.log(`[Report] 设备类型映射修正: ${type} -> ${correctedType}`)
+    log.info(`设备类型映射修正: ${type} -> ${correctedType}`)
   }
 
   // 检查是否为已知设备类型
@@ -335,15 +338,15 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
       if (state !== undefined) {
         deviceClass = DeviceCategory.ACTUATOR
         actualType = correctedType  // 保持 'light' 作为执行器类型
-        console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据state字段判断为执行器`)
+        log.info(`设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据state字段判断为执行器`)
       } else if (value !== undefined) {
         deviceClass = DeviceCategory.SENSOR
         // 将传感器 light 映射为 light_sensor，与执行器 light 彻底分离
         actualType = correctedType === 'light' ? 'light_sensor' : correctedType
         if (correctedType === 'light') {
-          console.log(`[Report] 设备 ${node_id} 类型 light 传感器已映射为 light_sensor，与执行器 light 分离`)
+          log.info(`设备 ${node_id} 类型 light 传感器已映射为 light_sensor，与执行器 light 分离`)
         } else {
-          console.log(`[Report] 设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据value字段判断为传感器`)
+          log.info(`设备 ${node_id} 类型 ${correctedType} 同时存在于传感器和执行器，根据value字段判断为传感器`)
         }
       } else {
         // 默认为传感器
@@ -364,7 +367,7 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
     deviceClass = DeviceCategory.UNASSIGNED
     actualType = getUnassignedDeviceType(value !== undefined, state !== undefined)
 
-    console.log(`[Report] 设备 ${node_id} (原始类型: ${type}, 修正后: ${correctedType}) 已分配到未分配类别: ${actualType}`)
+    log.info(`设备 ${node_id} (原始类型: ${type}, 修正后: ${correctedType}) 已分配到未分配类别: ${actualType}`)
   }
 
   // 验证必填字段（未分配设备不强制要求）
@@ -450,7 +453,7 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
         `UPDATE actuators SET feedback = ? WHERE id = ?`,
         [JSON.stringify(feedback), syncResult.deviceId]
       )
-      console.log(`[Report] 已更新执行器回馈数据: ${syncResult.deviceId}`)
+      log.info(`已更新执行器回馈数据: ${syncResult.deviceId}`)
     }
 
     // 日志输出：传感器只显示基本信息，执行器显示控制类型
@@ -458,7 +461,7 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
       ? `[控制类型: ${controlConfig.controlType}, 控制范围: ${controlConfig.controlRange.min}-${controlConfig.controlRange.max}]`
       : ''
     
-    console.log(`[Report] 设备节点处理成功: ${node_id} -> ${type}(${actualType}) (${deviceClass}) ${logInfo}`)
+    log.info(`设备节点处理成功: ${node_id} -> ${type}(${actualType}) (${deviceClass}) ${logInfo}`)
 
     // 返回结果：传感器不包含控制类型信息
     const result: any = {
@@ -480,7 +483,7 @@ async function processNodeData(gatewayId: number, farmId: number, nodeData: Repo
 
     return result
   } catch (error) {
-    console.error(`[Report] 设备节点处理失败: ${node_id}`, error)
+    log.error(`设备节点处理失败: ${node_id}`, error)
     return {
       node_id,
       type,

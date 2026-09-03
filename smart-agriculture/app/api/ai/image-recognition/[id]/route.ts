@@ -3,6 +3,9 @@ import fs from 'fs'
 import path from 'path'
 import { db, RowDataPacket } from '@/lib/db'
 import { AI_UPLOAD_DIR } from '@/lib/ai-config'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ImageRecognitionId');
 
 /**
  * 删除图片识别历史记录
@@ -36,13 +39,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       const imagePath = path.join(process.cwd(), AI_UPLOAD_DIR, fileName)
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath)
-        console.log(`[ImageRecognition] 已删除图片: ${fileName}`)
+        log.info(`已删除图片: ${fileName}`)
       }
     }
 
     return NextResponse.json({ success: true, message: '历史记录和图片删除成功' })
   } catch (error) {
-    console.error('[ImageRecognition] 删除历史记录错误:', error)
+    log.error('删除历史记录错误:', error)
     return NextResponse.json(
       { success: false, error: '删除失败' },
       { status: 500 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ActuatorId');
 
 /**
  * 执行器数据接口
@@ -95,7 +98,7 @@ export async function GET(
       data: result,
     })
   } catch (error) {
-    console.error('获取执行器详情失败:', error)
+    log.error('获取执行器详情失败:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -124,7 +127,7 @@ export async function PATCH(
     const { id } = await params
     const body = await request.json()
 
-    console.log(`[Actuator] 收到用户操作请求 - ID: ${id}, 数据:`, JSON.stringify(body))
+    log.info(`收到用户操作请求 - ID: ${id}, 数据:`, JSON.stringify(body))
 
     const actuators = await db.query<Actuator[]>(
       'SELECT id, state, mode, locked FROM actuators WHERE id = ?',
@@ -132,7 +135,7 @@ export async function PATCH(
     )
 
     if (actuators.length === 0) {
-      console.log(`[Actuator] 执行器不存在: ${id}`)
+      log.info(`执行器不存在: ${id}`)
       return NextResponse.json(
         { success: false, error: '执行器不存在' },
         { status: 404 }
@@ -141,7 +144,7 @@ export async function PATCH(
 
     // 检查执行器是否被锁定
     if (actuators[0].locked) {
-      console.log(`[Actuator] 执行器已被锁定，拒绝操作: ${id}`)
+      log.info(`执行器已被锁定，拒绝操作: ${id}`)
       return NextResponse.json(
         { success: false, error: '执行器正在执行操作，请稍后再试' },
         { status: 423 }
@@ -296,7 +299,7 @@ export async function PATCH(
          VALUES (?, ?, 'pending', ?)`,
         [id, newState, getBeijingTimeForDB()]
       )
-      console.log(`[Actuator] 用户操作已锁定 - ID: ${id}, 新状态: ${newState}, 已下发控制指令`)
+      log.info(`用户操作已锁定 - ID: ${id}, 新状态: ${newState}, 已下发控制指令`)
     }
 
     const updatedActuators = await db.query<Actuator[]>(
@@ -319,7 +322,7 @@ export async function PATCH(
       [id]
     )
 
-    console.log(`[Actuator] 服务器状态已锁定 - ID: ${id}, 状态: ${updatedActuators[0].state}, 模式: ${updatedActuators[0].mode}`)
+    log.info(`服务器状态已锁定 - ID: ${id}, 状态: ${updatedActuators[0].state}, 模式: ${updatedActuators[0].mode}`)
 
     return NextResponse.json({
       success: true,
@@ -327,7 +330,7 @@ export async function PATCH(
       message: '服务器状态已锁定，等待硬件同步',
     })
   } catch (error) {
-    console.error('[Actuator] 用户操作失败:', error)
+    log.error('用户操作失败:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -359,7 +362,7 @@ export async function POST(
     const { id } = await params
     const body = await request.json()
 
-    console.log(`[Actuator] 收到硬件状态上报 - ID: ${id}, 数据:`, JSON.stringify(body))
+    log.info(`收到硬件状态上报 - ID: ${id}, 数据:`, JSON.stringify(body))
 
     const actuators = await db.query<Actuator[]>(
       'SELECT id, state, mode FROM actuators WHERE id = ?',
@@ -367,7 +370,7 @@ export async function POST(
     )
 
     if (actuators.length === 0) {
-      console.log(`[Actuator] 执行器不存在: ${id}`)
+      log.info(`执行器不存在: ${id}`)
       return NextResponse.json(
         { success: false, error: '执行器不存在' },
         { status: 404 }
@@ -385,9 +388,9 @@ export async function POST(
     const serverState = actuators[0].state
     const serverMode = actuators[0].mode
 
-    console.log(`[Actuator] 状态对比 - ID: ${id}`)
-    console.log(`  服务器锁定状态: ${serverState}, 服务器模式: ${serverMode}`)
-    console.log(`  硬件上报状态: ${hardwareState || '未提供'}, 硬件模式: ${hardwareMode || '未提供'}`)
+    log.info(`状态对比 - ID: ${id}`)
+    log.info(`  服务器锁定状态: ${serverState}, 服务器模式: ${serverMode}`)
+    log.info(`  硬件上报状态: ${hardwareState || '未提供'}, 硬件模式: ${hardwareMode || '未提供'}`)
 
     // 更新设备在线状态（仅此一项允许硬件修改）
     if (body.status !== undefined) {
@@ -422,8 +425,8 @@ export async function POST(
 
     if (stateMismatch || modeMismatch) {
       // 状态不一致 → 服务器状态锁定，要求硬件强制同步
-      console.log(`[Actuator] 状态冲突 - ID: ${id}, 服务器锁定状态: ${serverState}/${serverMode}, 硬件上报: ${hardwareState}/${hardwareMode}`)
-      console.log(`[Actuator] 下发强制同步指令，要求硬件匹配服务器状态`)
+      log.info(`状态冲突 - ID: ${id}, 服务器锁定状态: ${serverState}/${serverMode}, 硬件上报: ${hardwareState}/${hardwareMode}`)
+      log.info(`下发强制同步指令，要求硬件匹配服务器状态`)
 
       // 记录硬件上报的状态到历史表（用于追踪硬件实际状态变化）
       await db.executeWithRetry(
@@ -457,7 +460,7 @@ export async function POST(
     }
 
     // 状态一致 → 无需任何操作
-    console.log(`[Actuator] 状态一致 - ID: ${id}, 服务器锁定状态: ${serverState}/${serverMode}`)
+    log.info(`状态一致 - ID: ${id}, 服务器锁定状态: ${serverState}/${serverMode}`)
 
     return NextResponse.json({
       success: true,
@@ -469,7 +472,7 @@ export async function POST(
       message: '状态一致，服务器锁定状态不变',
     })
   } catch (error) {
-    console.error('[Actuator] 硬件状态上报处理失败:', error)
+    log.error('硬件状态上报处理失败:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -564,7 +567,7 @@ export async function PUT(
       message: '执行器信息更新成功',
     })
   } catch (error) {
-    console.error('更新执行器失败:', error)
+    log.error('更新执行器失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -614,7 +617,7 @@ export async function DELETE(
       message: '执行器删除成功',
     })
   } catch (error) {
-    console.error('删除执行器失败:', error)
+    log.error('删除执行器失败:', error)
     return NextResponse.json(
       { 
         success: false, 

@@ -1,0 +1,274 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¦ÌVision V5.36.0.0
+Copyright (C) 2021 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: name lenovo, name, LIC=EXJT4-FSI59-X7IRZ-JN5X2-A7NGP-Q2RZG
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Plus  Version: 5.36.0.0
+Toolchain Path:  D:\Program Files\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 update 7 (build 960)
+Assembler:       Armasm.exe V5.06 update 7 (build 960)
+Linker/Locator:  ArmLink.exe V5.06 update 7 (build 960)
+Library Manager: ArmAr.exe V5.06 update 7 (build 960)
+Hex Converter:   FromElf.exe V5.06 update 7 (build 960)
+CPU DLL:         SARMCM3.DLL V5.36.0.0
+Dialog DLL:      DCM.DLL V1.17.3.0
+Target DLL:      UL2CM3.DLL V1.164.0.0
+Dialog DLL:      TCM.DLL V1.53.0.0
+ 
+<h2>Project:</h2>
+E:\tghy\hardware-optimized\hardware.uvprojx
+Project File Date:  04/14/2026
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Program Files\ARM\ARMCC\Bin'
+Rebuild target 'Target 1'
+Note: source file '.\Library\misc.c' - object file renamed from '.\Objects\misc.o' to '.\Objects\misc_1.o'.
+Note: source file '.\Library\stm32f10x_adc.c' - object file renamed from '.\Objects\stm32f10x_adc.o' to '.\Objects\stm32f10x_adc_1.o'.
+Note: source file '.\Library\stm32f10x_bkp.c' - object file renamed from '.\Objects\stm32f10x_bkp.o' to '.\Objects\stm32f10x_bkp_1.o'.
+Note: source file '.\Library\stm32f10x_can.c' - object file renamed from '.\Objects\stm32f10x_can.o' to '.\Objects\stm32f10x_can_1.o'.
+Note: source file '.\Library\stm32f10x_cec.c' - object file renamed from '.\Objects\stm32f10x_cec.o' to '.\Objects\stm32f10x_cec_1.o'.
+Note: source file '.\Library\stm32f10x_crc.c' - object file renamed from '.\Objects\stm32f10x_crc.o' to '.\Objects\stm32f10x_crc_1.o'.
+Note: source file '.\Library\stm32f10x_dac.c' - object file renamed from '.\Objects\stm32f10x_dac.o' to '.\Objects\stm32f10x_dac_1.o'.
+Note: source file '.\Library\stm32f10x_dbgmcu.c' - object file renamed from '.\Objects\stm32f10x_dbgmcu.o' to '.\Objects\stm32f10x_dbgmcu_1.o'.
+Note: source file '.\Library\stm32f10x_dma.c' - object file renamed from '.\Objects\stm32f10x_dma.o' to '.\Objects\stm32f10x_dma_1.o'.
+Note: source file '.\Library\stm32f10x_exti.c' - object file renamed from '.\Objects\stm32f10x_exti.o' to '.\Objects\stm32f10x_exti_1.o'.
+Note: source file '.\Library\stm32f10x_flash.c' - object file renamed from '.\Objects\stm32f10x_flash.o' to '.\Objects\stm32f10x_flash_1.o'.
+Note: source file '.\Library\stm32f10x_fsmc.c' - object file renamed from '.\Objects\stm32f10x_fsmc.o' to '.\Objects\stm32f10x_fsmc_1.o'.
+Note: source file '.\Library\stm32f10x_gpio.c' - object file renamed from '.\Objects\stm32f10x_gpio.o' to '.\Objects\stm32f10x_gpio_1.o'.
+Note: source file '.\Library\stm32f10x_i2c.c' - object file renamed from '.\Objects\stm32f10x_i2c.o' to '.\Objects\stm32f10x_i2c_1.o'.
+Note: source file '.\Library\stm32f10x_iwdg.c' - object file renamed from '.\Objects\stm32f10x_iwdg.o' to '.\Objects\stm32f10x_iwdg_1.o'.
+Note: source file '.\Library\stm32f10x_pwr.c' - object file renamed from '.\Objects\stm32f10x_pwr.o' to '.\Objects\stm32f10x_pwr_1.o'.
+Note: source file '.\Library\stm32f10x_rcc.c' - object file renamed from '.\Objects\stm32f10x_rcc.o' to '.\Objects\stm32f10x_rcc_1.o'.
+Note: source file '.\Library\stm32f10x_rtc.c' - object file renamed from '.\Objects\stm32f10x_rtc.o' to '.\Objects\stm32f10x_rtc_1.o'.
+Note: source file '.\Library\stm32f10x_sdio.c' - object file renamed from '.\Objects\stm32f10x_sdio.o' to '.\Objects\stm32f10x_sdio_1.o'.
+Note: source file '.\Library\stm32f10x_spi.c' - object file renamed from '.\Objects\stm32f10x_spi.o' to '.\Objects\stm32f10x_spi_1.o'.
+Note: source file '.\Library\stm32f10x_tim.c' - object file renamed from '.\Objects\stm32f10x_tim.o' to '.\Objects\stm32f10x_tim_1.o'.
+Note: source file '.\Library\stm32f10x_usart.c' - object file renamed from '.\Objects\stm32f10x_usart.o' to '.\Objects\stm32f10x_usart_1.o'.
+Note: source file '.\Library\stm32f10x_wwdg.c' - object file renamed from '.\Objects\stm32f10x_wwdg.o' to '.\Objects\stm32f10x_wwdg_1.o'.
+compiling main.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+App\Src\main.c: 0 warnings, 1 error
+compiling system.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+App\Src\system.c: 0 warnings, 1 error
+compiling uart.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+BSP\Src\uart.c: 0 warnings, 1 error
+compiling stm32f10x_adc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_adc.c: 0 warnings, 1 error
+compiling wifi_manager.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Middlewares\WiFi\wifi_manager.c: 0 warnings, 1 error
+compiling stm32f10x_bkp.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_bkp.c: 0 warnings, 1 error
+compiling stm32f10x_cec.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_cec.c: 0 warnings, 1 error
+compiling stm32f10x_crc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_crc.c: 0 warnings, 1 error
+compiling protocol.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Middlewares\Protocol\protocol.c: 0 warnings, 1 error
+compiling stm32f10x_dac.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_dac.c: 0 warnings, 1 error
+compiling stm32f10x_can.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_can.c: 0 warnings, 1 error
+compiling misc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\misc.c: 0 warnings, 1 error
+compiling stm32f10x_dbgmcu.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_dbgmcu.c: 0 warnings, 1 error
+compiling stm32f10x_dma.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_dma.c: 0 warnings, 1 error
+compiling stm32f10x_exti.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_exti.c: 0 warnings, 1 error
+compiling stm32f10x_flash.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_flash.c: 0 warnings, 1 error
+compiling stm32f10x_fsmc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_fsmc.c: 0 warnings, 1 error
+compiling stm32f10x_gpio.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_gpio.c: 0 warnings, 1 error
+compiling stm32f10x_iwdg.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_iwdg.c: 0 warnings, 1 error
+compiling stm32f10x_i2c.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_i2c.c: 0 warnings, 1 error
+compiling stm32f10x_pwr.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_pwr.c: 0 warnings, 1 error
+compiling stm32f10x_rcc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_rcc.c: 0 warnings, 1 error
+compiling stm32f10x_rtc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_rtc.c: 0 warnings, 1 error
+compiling stm32f10x_sdio.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_sdio.c: 0 warnings, 1 error
+compiling stm32f10x_spi.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_spi.c: 0 warnings, 1 error
+compiling stm32f10x_tim.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_tim.c: 0 warnings, 1 error
+compiling stm32f10x_usart.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_usart.c: 0 warnings, 1 error
+compiling stm32f10x_wwdg.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_wwdg.c: 0 warnings, 1 error
+compiling misc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\misc.c: 0 warnings, 1 error
+compiling stm32f10x_adc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_adc.c: 0 warnings, 1 error
+compiling stm32f10x_bkp.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_bkp.c: 0 warnings, 1 error
+compiling stm32f10x_can.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_can.c: 0 warnings, 1 error
+compiling stm32f10x_crc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_crc.c: 0 warnings, 1 error
+compiling stm32f10x_cec.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_cec.c: 0 warnings, 1 error
+compiling stm32f10x_dac.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_dac.c: 0 warnings, 1 error
+compiling stm32f10x_dbgmcu.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_dbgmcu.c: 0 warnings, 1 error
+compiling stm32f10x_dma.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_dma.c: 0 warnings, 1 error
+compiling stm32f10x_exti.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_exti.c: 0 warnings, 1 error
+compiling stm32f10x_flash.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_flash.c: 0 warnings, 1 error
+compiling stm32f10x_fsmc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_fsmc.c: 0 warnings, 1 error
+compiling stm32f10x_gpio.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_gpio.c: 0 warnings, 1 error
+compiling stm32f10x_i2c.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_i2c.c: 0 warnings, 1 error
+compiling stm32f10x_iwdg.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_iwdg.c: 0 warnings, 1 error
+compiling stm32f10x_pwr.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_pwr.c: 0 warnings, 1 error
+compiling stm32f10x_rcc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_rcc.c: 0 warnings, 1 error
+compiling stm32f10x_rtc.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_rtc.c: 0 warnings, 1 error
+compiling stm32f10x_sdio.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_sdio.c: 0 warnings, 1 error
+compiling stm32f10x_spi.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_spi.c: 0 warnings, 1 error
+compiling stm32f10x_tim.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_tim.c: 0 warnings, 1 error
+compiling stm32f10x_usart.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_usart.c: 0 warnings, 1 error
+compiling stm32f10x_wwdg.c...
+D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include\stm32f10x.h(486): error:  #5: cannot open source input file "core_cm3.h": No such file or directory
+  #include "core_cm3.h"
+Library\stm32f10x_wwdg.c: 0 warnings, 1 error
+".\Objects\hardware.axf" - 51 Error(s), 0 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: Keil
+                https://www.keil.com/pack/Keil.STM32F1xx_DFP.2.4.1.pack
+                Keil.STM32F1xx_DFP.2.4.1
+                STMicroelectronics STM32F1 Series Device Support, Drivers and Examples
+
+<h2>Collection of Component include folders:</h2>
+  D:\Program Files\Keil\STM32F1xx_DFP\2.4.1\Device\Include
+
+<h2>Collection of Component Files used:</h2>
+Target not created.
+Build Time Elapsed:  00:00:02
+</pre>
+</body>
+</html>

@@ -13,3 +13,14 @@ echo "[4/4] 初始日志："
 cat /var/log/i2c-watchdog.log
 echo "=== 验证：pinctrl/i2cget 路径检查 ==="
 ls -la /usr/bin/pinctrl /usr/sbin/i2cget
+
+# 配置日志轮转
+cat > /etc/logrotate.d/i2c-watchdog << 'EOF'
+/var/log/i2c-watchdog.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+}
+EOF

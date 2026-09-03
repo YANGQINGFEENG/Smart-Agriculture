@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { OLLAMA_HOST, AI_DIAGNOSIS_MODEL, AI_DIAGNOSIS_TIMEOUT } from '@/lib/ai-config'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('AIDiagnosis');
 
 interface SensorData extends RowDataPacket {
   sensor_id: string
@@ -45,7 +48,7 @@ async function getLatestSensorData(): Promise<SensorData[]> {
     const rows = await db.query<SensorData[]>(query)
     return rows
   } catch (error) {
-    console.error('获取传感器数据失败:', error)
+    log.error('获取传感器数据失败:', error)
     return []
   }
 }
@@ -60,7 +63,7 @@ async function getLatestDetectionResults(): Promise<DetectionResult[]> {
     )
     return rows
   } catch (error) {
-    console.error('获取图片识别结果失败:', error)
+    log.error('获取图片识别结果失败:', error)
     return []
   }
 }
@@ -171,30 +174,30 @@ ${detectionText || '暂无图片识别数据'}
     const result = await response.json()
     let aiResponse = result.message?.content || '{"thinking": [], "diagnosis": {"summary": "诊断失败", "issues": [], "suggestions": [], "actions": []}}'
 
-    console.log('===========================================')
-    console.log('AI诊断接口 - OLLAMA API 响应内容:')
-    console.log(`  model: '${result.model}'`)
-    console.log(`  created_at: '${result.created_at}'`)
-    console.log('  message: {')
-    console.log(`    role: '${result.message?.role}'`)
-    console.log(`    content: '${aiResponse.slice(0, 200)}${aiResponse.length > 200 ? '...' : ''}'`)
+    log.info('===========================================')
+    log.info('AI诊断接口 - OLLAMA API 响应内容:')
+    log.info(`  model: '${result.model}'`)
+    log.info(`  created_at: '${result.created_at}'`)
+    log.info('  message: {')
+    log.info(`    role: '${result.message?.role}'`)
+    log.info(`    content: '${aiResponse.slice(0, 200)}${aiResponse.length > 200 ? '...' : ''}'`)
     if (result.message?.thinking) {
-      console.log(`    thinking: '${result.message.thinking.slice(0, 300)}${result.message.thinking.length > 300 ? '...' : ''}'`)
+      log.info(`    thinking: '${result.message.thinking.slice(0, 300)}${result.message.thinking.length > 300 ? '...' : ''}'`)
     }
-    console.log('  }')
-    console.log(`  done: ${result.done}`)
-    console.log(`  done_reason: '${result.done_reason}'`)
-    console.log(`  total_duration: ${result.total_duration}`)
-    console.log(`  load_duration: ${result.load_duration}`)
-    console.log(`  prompt_eval_count: ${result.prompt_eval_count}`)
-    console.log(`  eval_count: ${result.eval_count}`)
-    console.log('===========================================')
+    log.info('  }')
+    log.info(`  done: ${result.done}`)
+    log.info(`  done_reason: '${result.done_reason}'`)
+    log.info(`  total_duration: ${result.total_duration}`)
+    log.info(`  load_duration: ${result.load_duration}`)
+    log.info(`  prompt_eval_count: ${result.prompt_eval_count}`)
+    log.info(`  eval_count: ${result.eval_count}`)
+    log.info('===========================================')
 
     let diagnosisResult
     try {
       diagnosisResult = JSON.parse(aiResponse)
     } catch (parseError) {
-      console.error('AI诊断接口 - JSON解析失败:', parseError)
+      log.error('AI诊断接口 - JSON解析失败:', parseError)
       diagnosisResult = {
         thinking: [
           '正在分析传感器数据...',
@@ -258,16 +261,16 @@ ${detectionText || '暂无图片识别数据'}
     const normalCount = d.sensorAnalysis.filter((sa: any) => sa.status === 'normal').length
     const abnormalCount = d.sensorAnalysis.filter((sa: any) => sa.status === 'abnormal').length
 
-    console.log('===========================================')
-    console.log('AI诊断结果统计:')
-    console.log(`  传感器总数: ${d.sensorAnalysis.length}`)
-    console.log(`  正常传感器: ${normalCount}`)
-    console.log(`  异常传感器: ${abnormalCount}`)
-    console.log(`  发现问题: ${d.issues.length}`)
-    console.log(`  建议措施: ${d.suggestions.length}`)
-    console.log(`  执行策略: ${d.actions.length}`)
-    console.log(`  摘要长度: ${d.summary.length} 字符`)
-    console.log('===========================================')
+    log.info('===========================================')
+    log.info('AI诊断结果统计:')
+    log.info(`  传感器总数: ${d.sensorAnalysis.length}`)
+    log.info(`  正常传感器: ${normalCount}`)
+    log.info(`  异常传感器: ${abnormalCount}`)
+    log.info(`  发现问题: ${d.issues.length}`)
+    log.info(`  建议措施: ${d.suggestions.length}`)
+    log.info(`  执行策略: ${d.actions.length}`)
+    log.info(`  摘要长度: ${d.summary.length} 字符`)
+    log.info('===========================================')
 
     // 保存诊断历史
     try {
@@ -287,7 +290,7 @@ ${detectionText || '暂无图片识别数据'}
       )
     } catch (dbErr) {
       // 诊断历史保存失败不影响主流程
-      console.warn('[Diagnosis] 诊断历史保存失败（表可能不存在）:', dbErr instanceof Error ? dbErr.message : dbErr)
+      log.warn('诊断历史保存失败（表可能不存在）:', dbErr instanceof Error ? dbErr.message : dbErr)
     }
 
     return NextResponse.json({
@@ -306,7 +309,7 @@ ${detectionText || '暂无图片识别数据'}
       }
     })
   } catch (error) {
-    console.error('AI诊断接口错误:', error)
+    log.error('AI诊断接口错误:', error)
     return NextResponse.json(
       { 
         success: false, 

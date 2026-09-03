@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
 import http from 'http'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('ActuatorCommands');
 
 /**
  * 执行器命令下发 API
@@ -81,12 +84,12 @@ function pushCommandViaWebSocket(actuatorId: string, commandData: Record<string,
       }
     )
     req.on('error', (err) => {
-      console.error('[Commands] WebSocket 推送失败:', err.message)
+      log.error('WebSocket 推送失败:', err.message)
       resolve(false)
     })
     req.on('timeout', () => {
       req.destroy()
-      console.error('[Commands] WebSocket 推送超时')
+      log.error('WebSocket 推送超时')
       resolve(false)
     })
     req.write(payload)
@@ -265,7 +268,7 @@ export async function POST(
     const controlType = body.control_type || 'boolean'
     const command = body.command
 
-    console.log(`[Commands] 收到命令 - 执行器: ${id}, control_type: ${controlType}, command: ${command}`)
+    log.info(`收到命令 - 执行器: ${id}, control_type: ${controlType}, command: ${command}`)
 
     // 校验执行器存在且未锁定
     const actuators = await db.query<ActuatorRow[]>(
@@ -369,7 +372,7 @@ export async function POST(
       [id, String(command), controlValue, JSON.stringify(commandData), getBeijingTimeForDB()]
     )
     const commandId = insertResult.insertId
-    console.log(`[Commands] 命令已入库 - ID: ${commandId}, command: ${command}, control_value: ${controlValue}`)
+    log.info(`命令已入库 - ID: ${commandId}, command: ${command}, control_value: ${controlValue}`)
 
     // 锁定执行器
     await db.execute(
@@ -386,7 +389,7 @@ export async function POST(
     wsPayload.created_at = getBeijingTimeForDB()
 
     const pushed = await pushCommandViaWebSocket(id, wsPayload)
-    console.log(`[Commands] WebSocket 推送结果: ${pushed ? '成功' : '失败（硬件可轮询兜底）'}`)
+    log.info(`WebSocket 推送结果: ${pushed ? '成功' : '失败（硬件可轮询兜底）'}`)
 
     return NextResponse.json({
       success: true,
@@ -402,7 +405,7 @@ export async function POST(
       message: '命令已下发，等待硬件回执',
     })
   } catch (error) {
-    console.error('[Commands] 下发命令失败:', error)
+    log.error('下发命令失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -505,7 +508,7 @@ export async function GET(
       }
     }
 
-    console.log(`[Commands] 硬件轮询到指令 - 执行器: ${id}, 命令ID: ${cmd.id}, command: ${cmd.command}`)
+    log.info(`硬件轮询到指令 - 执行器: ${id}, 命令ID: ${cmd.id}, command: ${cmd.command}`)
 
     return NextResponse.json({
       success: true,
@@ -521,7 +524,7 @@ export async function GET(
       message: 'OK',
     })
   } catch (error) {
-    console.error('[Commands] 获取命令失败:', error)
+    log.error('获取命令失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -634,21 +637,21 @@ export async function PATCH(
             `UPDATE actuators SET last_update = ?, locked = 0, feedback = ? WHERE id = ?`,
             [getBeijingTimeForDB(), JSON.stringify(existingFeedback), id]
           )
-          console.log(`[Commands] 回执成功(no-state-change) - 命令ID: ${commandId}, cmd: ${cmd.command}, feedback已同步`)
+          log.info(`回执成功(no-state-change) - 命令ID: ${commandId}, cmd: ${cmd.command}, feedback已同步`)
         } else {
           // feedback 为空（尚无数据上报），仅解锁，等待数据上报补充完整 feedback
           await db.execute(
             'UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?',
             [getBeijingTimeForDB(), id]
           )
-          console.log(`[Commands] 回执成功(no-state-change) - 命令ID: ${commandId}, cmd: ${cmd.command}, feedback为空跳过写入`)
+          log.info(`回执成功(no-state-change) - 命令ID: ${commandId}, cmd: ${cmd.command}, feedback为空跳过写入`)
         }
       }
-      console.log(`[Commands] 回执成功 - 命令ID: ${commandId}, 状态: ${actualState}`)
+      log.info(`回执成功 - 命令ID: ${commandId}, 状态: ${actualState}`)
     } else {
       // 执行失败，仅解锁
       await db.execute('UPDATE actuators SET locked = 0 WHERE id = ?', [id])
-      console.log(`[Commands] 回执失败 - 命令ID: ${commandId}`)
+      log.info(`回执失败 - 命令ID: ${commandId}`)
     }
 
     return NextResponse.json({
@@ -659,7 +662,7 @@ export async function PATCH(
       status,
     })
   } catch (error) {
-    console.error('[Commands] 回执处理失败:', error)
+    log.error('回执处理失败:', error)
     return NextResponse.json(
       {
         success: false,

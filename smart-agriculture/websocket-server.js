@@ -7,6 +7,8 @@
  */
 
 const WebSocket = require('ws');
+const { createLogger } = require('./lib/logger');
+const log = createLogger('WS');
 const mysql = require('mysql2/promise');
 
 // WebSocket服务器实例
@@ -55,15 +57,15 @@ async function initDatabase() {
       queueLimit: 0,
     };
     
-    console.log('[DB] 数据库配置:', { host: dbConfig.host, user: dbConfig.user, database: dbConfig.database, password: dbConfig.password ? '***' : '空' });
+    log.info('数据库配置:', { host: dbConfig.host, user: dbConfig.user, database: dbConfig.database, password: dbConfig.password ? '***' : '空' });
     
     db = mysql.createPool(dbConfig);
     // 测试连接
     const [rows] = await db.query('SELECT 1');
-    console.log('[DB] 数据库连接成功');
+    log.info('数据库连接成功');
   } catch (error) {
-    console.error('[DB] 数据库连接失败:', error.message);
-    console.log('[DB] 尝试使用SQLite作为后备...');
+    log.error('数据库连接失败:', error.message);
+    log.info('尝试使用SQLite作为后备...');
     // 如果MySQL连接失败，尝试SQLite（需要安装sqlite3）
     try {
       const sqlite3 = require('sqlite3').verbose();
@@ -72,9 +74,9 @@ async function initDatabase() {
         filename: './database.sqlite',
         driver: sqlite3.Database,
       });
-      console.log('[DB] SQLite连接成功');
+      log.info('SQLite连接成功');
     } catch (sqliteError) {
-      console.error('[DB] SQLite连接也失败:', sqliteError.message);
+      log.error('SQLite连接也失败:', sqliteError.message);
       process.exit(1);
     }
   }
@@ -105,12 +107,12 @@ function initWebSocketServer() {
         areaConnections.set(area, wsSet);
       }
       wsSet.add(ws);
-      console.log(`[WS] Area connection registered: ${area}`);
+      log.info(`Area connection registered: ${area}`);
     }
     
     if (deviceId) {
       deviceConnections.set(deviceId, ws);
-      console.log(`[WS] Device connected: ${deviceId}`);
+      log.info(`Device connected: ${deviceId}`);
       
       ws.send(JSON.stringify({
         type: WebSocketMessageType.WELCOME,
@@ -119,7 +121,7 @@ function initWebSocketServer() {
       }));
     } else if (actuatorId) {
       actuatorConnections.set(actuatorId, ws);
-      console.log(`[WS] Actuator connected: ${actuatorId}`);
+      log.info(`Actuator connected: ${actuatorId}`);
       
       ws.send(JSON.stringify({
         type: WebSocketMessageType.WELCOME,
@@ -137,7 +139,7 @@ function initWebSocketServer() {
       }
       wsSet.add(ws);
       
-      console.log(`[WS] Gateway connected: ${gatewayIp}, Area: ${gatewayArea}`);
+      log.info(`Gateway connected: ${gatewayIp}, Area: ${gatewayArea}`);
       
       ws.send(JSON.stringify({
         type: WebSocketMessageType.WELCOME,
@@ -147,7 +149,7 @@ function initWebSocketServer() {
       }));
     } else {
       // 前端浏览器连接（没有查询参数）
-      console.log(`[WS] Browser client connected: ${connectionId}`);
+      log.info(`Browser client connected: ${connectionId}`);
       
       ws.send(JSON.stringify({
         type: WebSocketMessageType.WELCOME,
@@ -165,10 +167,10 @@ function initWebSocketServer() {
     ws.on('close', () => {
       if (deviceId) {
         deviceConnections.delete(deviceId);
-        console.log(`[WS] Device disconnected: ${deviceId}`);
+        log.info(`Device disconnected: ${deviceId}`);
       } else if (actuatorId) {
         actuatorConnections.delete(actuatorId);
-        console.log(`[WS] Actuator disconnected: ${actuatorId}`);
+        log.info(`Actuator disconnected: ${actuatorId}`);
       } else if (gatewayIp) {
         gatewayConnections.delete(gatewayIp);
         const gatewayArea = `区域-${gatewayIp}`;
@@ -179,7 +181,7 @@ function initWebSocketServer() {
             areaConnections.delete(gatewayArea);
           }
         }
-        console.log(`[WS] Gateway disconnected: ${gatewayIp}`);
+        log.info(`Gateway disconnected: ${gatewayIp}`);
       }
       
       if (area) {
@@ -195,11 +197,11 @@ function initWebSocketServer() {
     
     // 处理错误
     ws.on('error', (error) => {
-      console.error(`[WS] Error for ${connectionId}:`, error);
+      log.error(`Error for ${connectionId}:`, error);
     });
   });
   
-  console.log('[WS] Server started on port 8080');
+  log.info('Server started on port 8080');
 }
 
 /**
@@ -252,10 +254,10 @@ async function handleWebSocketMessage(ws, message, deviceId, actuatorId, gateway
         await handleModelStatus(gatewayIp, data.data || {});
         break;
       default:
-        console.log('[WS] Unknown message type:', data.type);
+        log.info('Unknown message type:', data.type);
     }
   } catch (error) {
-    console.error('[WS] Message handling error:', error);
+    log.error('Message handling error:', error);
     ws.send(JSON.stringify({
       type: WebSocketMessageType.ERROR,
       message: 'Invalid message format',
@@ -279,7 +281,7 @@ function handleHeartbeat(ws) {
 async function handleDeviceRegister(data) {
   try {
     const { device_id, type, name, location, area } = data;
-    console.log(`[WS] Device registered: ${device_id}, type: ${type}`);
+    log.info(`Device registered: ${device_id}, type: ${type}`);
     
     if (!db) return;
     
@@ -291,7 +293,7 @@ async function handleDeviceRegister(data) {
       [device_id, name || device_id, type === 'actuator' ? 'actuator' : 'sensor', type, location || '', area || '']
     );
   } catch (error) {
-    console.error('[WS] Device register error:', error);
+    log.error('Device register error:', error);
   }
 }
 
@@ -303,7 +305,7 @@ async function handleGatewayRegister(data, connectionGatewayIp) {
     // 优先使用消息中的 gateway_ip，回退到连接上下文中的 IP
     const { gateway_type, mac, farm_id, area } = data;
     const gateway_ip = data.gateway_ip || connectionGatewayIp || 'unknown';
-    console.log(`[WS] Gateway registered: ${gateway_ip}`);
+    log.info(`Gateway registered: ${gateway_ip}`);
     
     if (!db) return;
     
@@ -323,7 +325,7 @@ async function handleGatewayRegister(data, connectionGatewayIp) {
       );
     }
   } catch (error) {
-    console.error('[WS] Gateway register error:', error);
+    log.error('Gateway register error:', error);
   }
 }
 
@@ -332,13 +334,13 @@ async function handleGatewayRegister(data, connectionGatewayIp) {
  */
 async function handleSensorData(gatewayIp, sensorData) {
   try {
-    console.log(`[WS] Sensor data from gateway ${gatewayIp}:`, sensorData);
+    log.debug('Sensor data from gateway %s: %d items', gatewayIp, sensorData.length);
     
     if (!db) return;
     
     const [gateways] = await db.query('SELECT id, farm_id FROM gateways WHERE ip_address = ?', [gatewayIp]);
     if (gateways.length === 0) {
-      console.warn(`[WS] Gateway not found for IP: ${gatewayIp}`);
+      log.warn(`Gateway not found for IP: ${gatewayIp}`);
       return;
     }
     
@@ -387,7 +389,7 @@ async function handleSensorData(gatewayIp, sensorData) {
       }
     }
   } catch (error) {
-    console.error('[WS] Sensor data handling error:', error);
+    log.error('Sensor data handling error:', error);
   }
 }
 
@@ -396,13 +398,13 @@ async function handleSensorData(gatewayIp, sensorData) {
  */
 async function handleActuatorStatus(gatewayIp, actuatorData) {
   try {
-    console.log(`[WS] Actuator status from gateway ${gatewayIp}:`, actuatorData);
+    log.debug('Actuator status from gateway %s: %d items', gatewayIp, actuatorData.length);
     
     if (!db) return;
     
     const [gateways] = await db.query('SELECT id, farm_id FROM gateways WHERE ip_address = ?', [gatewayIp]);
     if (gateways.length === 0) {
-      console.warn(`[WS] Gateway not found for IP: ${gatewayIp}`);
+      log.warn(`Gateway not found for IP: ${gatewayIp}`);
       return;
     }
     
@@ -444,7 +446,7 @@ async function handleActuatorStatus(gatewayIp, actuatorData) {
       }
     }
   } catch (error) {
-    console.error('[WS] Actuator status handling error:', error);
+    log.error('Actuator status handling error:', error);
   }
 }
 
@@ -453,13 +455,13 @@ async function handleActuatorStatus(gatewayIp, actuatorData) {
  */
 async function handleDataReport(gatewayIp, reportData) {
   try {
-    console.log(`[WS] Data report from gateway ${gatewayIp}:`, reportData);
+    log.debug('Data report from gateway %s: %d nodes', gatewayIp, reportData.nodes ? reportData.nodes.length : 0);
     
     if (!db) return;
     
     const [gateways] = await db.query('SELECT id, farm_id FROM gateways WHERE ip_address = ?', [gatewayIp]);
     if (gateways.length === 0) {
-      console.warn(`[WS] Gateway not found for IP: ${gatewayIp}`);
+      log.warn(`Gateway not found for IP: ${gatewayIp}`);
       return;
     }
     
@@ -554,7 +556,7 @@ async function handleDataReport(gatewayIp, reportData) {
       }
     }
   } catch (error) {
-    console.error('[WS] Data report handling error:', error);
+    log.error('Data report handling error:', error);
   }
 }
 
@@ -567,7 +569,7 @@ async function handleDataReport(gatewayIp, reportData) {
  */
 async function handleCommandAck(actuatorId, commandId, status, controlValue, state) {
   try {
-    console.log(`[WS] Command ack - Actuator: ${actuatorId}, Command ID: ${commandId}, Status: ${status}, State: ${state}`);
+    log.info(`Command ack - Actuator: ${actuatorId}, Command ID: ${commandId}, Status: ${status}, State: ${state}`);
     
     if (!db || !actuatorId) return;
     
@@ -577,7 +579,7 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
     );
     
     if (existingCommands.length === 0) {
-      console.warn(`[WS] Command not found: ${commandId} for actuator ${actuatorId}`);
+      log.warn(`Command not found: ${commandId} for actuator ${actuatorId}`);
       return;
     }
     
@@ -614,7 +616,7 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
            new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
         );
         
-        console.log(`[WS] Actuator ${actuatorId} updated - state: ${newState}`);
+        log.info(`Actuator ${actuatorId} updated - state: ${newState}`);
       } else {
         // gyro/track/color 命令：合并 feedback 字段后立即写入，不等数据上报
         // 关键：如果 feedback 为空（尚无数据上报），不写入避免丢失 stream_url 等字段
@@ -648,14 +650,14 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
             [new Date().toISOString().replace('T', ' ').slice(0, 19), JSON.stringify(existingFeedback), actuatorId]
           );
           
-          console.log(`[WS] Actuator ${actuatorId} unlocked (${command.command} command, feedback synced)`);
+          log.info(`Actuator ${actuatorId} unlocked (${command.command} command, feedback synced)`);
         } else {
           // feedback 为空，仅解锁，等待数据上报补充完整 feedback
           await db.execute(
             'UPDATE actuators SET last_update = ?, locked = 0 WHERE id = ?',
             [new Date().toISOString().replace('T', ' ').slice(0, 19), actuatorId]
           );
-          console.log(`[WS] Actuator ${actuatorId} unlocked (${command.command} command, feedback empty - skipped write)`);
+          log.info(`Actuator ${actuatorId} unlocked (${command.command} command, feedback empty - skipped write)`);
         }
       }
     } else {
@@ -665,7 +667,7 @@ async function handleCommandAck(actuatorId, commandId, status, controlValue, sta
     // 通知前端命令状态（含 feedback 数据，确保手势控制/追踪等状态同步）
     await notifyCommandStatus(actuatorId, commandId, status, controlValue, command.command);
   } catch (error) {
-    console.error('[WS] Command ack handling error:', error);
+    log.error('Command ack handling error:', error);
   }
 }
 
@@ -718,7 +720,7 @@ async function notifyCommandStatus(actuatorId, commandId, status, controlValue, 
     const actuatorWs = actuatorConnections.get(actuatorId);
     if (actuatorWs && actuatorWs.readyState === WebSocket.OPEN) {
       actuatorWs.send(JSON.stringify(statusMessage));
-      console.log(`[WS] Command status sent to actuator client: ${actuatorId}`);
+      log.info(`Command status sent to actuator client: ${actuatorId}`);
     }
     
     // 通过区域连接广播
@@ -730,11 +732,11 @@ async function notifyCommandStatus(actuatorId, commandId, status, controlValue, 
             conn.send(JSON.stringify(statusMessage));
           }
         });
-        console.log(`[WS] Command status broadcast to area: ${area} (含feedback)`);
+        log.info(`Command status broadcast to area: ${area} (含feedback)`);
       }
     }
   } catch (error) {
-    console.error('[WS] Error in notifyCommandStatus:', error);
+    log.error('Error in notifyCommandStatus:', error);
   }
 }
 
@@ -743,7 +745,7 @@ async function notifyCommandStatus(actuatorId, commandId, status, controlValue, 
  */
 async function handleAreaSync(ws, area) {
   try {
-    console.log(`[WS] Area sync request for: ${area}`);
+    log.info(`Area sync request for: ${area}`);
     
     if (!db) {
       ws.send(JSON.stringify({
@@ -767,7 +769,7 @@ async function handleAreaSync(ws, area) {
       },
     }));
   } catch (error) {
-    console.error('[WS] Area sync error:', error);
+    log.error('Area sync error:', error);
     ws.send(JSON.stringify({
       type: WebSocketMessageType.ERROR,
       message: 'Area sync failed',
@@ -786,7 +788,7 @@ function sendCommandToActuator(actuatorId, command) {
       type: WebSocketMessageType.COMMAND,
       data: command
     }));
-    console.log(`[WS] Command sent directly to actuator: ${actuatorId}`);
+    log.info(`Command sent directly to actuator: ${actuatorId}`);
     return true;
   }
   
@@ -809,7 +811,7 @@ function sendCommandToActuator(actuatorId, command) {
                   actuator_id: actuatorId
                 }
               }));
-              console.log(`[WS] Command sent via gateway ${gatewayIp} to actuator: ${actuatorId}`);
+              log.info(`Command sent via gateway ${gatewayIp} to actuator: ${actuatorId}`);
               return true;
             }
           }
@@ -828,17 +830,17 @@ function sendCommandToActuator(actuatorId, command) {
                 }));
               }
             });
-            console.log(`[WS] Command sent via area broadcast ${area} to actuator: ${actuatorId}`);
+            log.info(`Command sent via area broadcast ${area} to actuator: ${actuatorId}`);
             return true;
           }
         }
       })
       .catch((error) => {
-        console.error('[WS] Error querying actuator area:', error);
+        log.error('Error querying actuator area:', error);
       });
   }
   
-  console.log(`[WS] No active connection found for actuator: ${actuatorId}`);
+  log.info(`No active connection found for actuator: ${actuatorId}`);
   return false;
 }
 
@@ -849,10 +851,10 @@ function sendMessageToGateway(gatewayIp, message) {
   const ws = gatewayConnections.get(gatewayIp);
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(message));
-    console.log(`[WS] Message sent to gateway ${gatewayIp}: ${message.type}`);
+    log.info(`Message sent to gateway ${gatewayIp}: ${message.type}`);
     return true;
   }
-  console.log(`[WS] No active gateway connection: ${gatewayIp}`);
+  log.info(`No active gateway connection: ${gatewayIp}`);
   return false;
 }
 
@@ -909,8 +911,8 @@ async function handleModelStatus(connGatewayIp, data) {
             [gatewayIp, targetFile]
           );
         }
-        console.log(
-          `[WS] Model switch ack #${requestId} from ${gatewayIp}: ${success ? 'success' : 'failed'} ${message}`
+        log.info(
+          'Model switch ack #' + requestId + ' from ' + gatewayIp + ': ' + (success ? 'success' : 'failed') + ' ' + message
         );
       }
     } else if (filename) {
@@ -927,7 +929,7 @@ async function handleModelStatus(connGatewayIp, data) {
       );
     }
   } catch (error) {
-    console.error('[WS] handleModelStatus error:', error.message);
+    log.error('handleModelStatus error:', error.message);
   }
 }
 
@@ -1019,24 +1021,24 @@ async function main() {
   });
   
   httpServer.listen(8081, () => {
-    console.log('[WS] HTTP command relay server started on port 8081');
+    log.info('HTTP command relay server started on port 8081');
   });
   
-  console.log('[WS] 独立WebSocket服务器启动完成');
+  log.info('独立WebSocket服务器启动完成');
 }
 
 // 启动服务器
 main().catch((error) => {
-  console.error('[WS] 启动失败:', error);
+  log.error('启动失败:', error);
   process.exit(1);
 });
 
 // 处理进程退出
 process.on('SIGINT', () => {
-  console.log('[WS] 正在关闭服务器...');
+  log.info('正在关闭服务器...');
   if (wss) {
     wss.close(() => {
-      console.log('[WS] 服务器已关闭');
+      log.info('服务器已关闭');
       process.exit(0);
     });
   } else {

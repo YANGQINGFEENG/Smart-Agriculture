@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('DeviceNodes');
 
 interface DeviceNode extends RowDataPacket {
   id: number
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
       total: rows.length,
     })
   } catch (error) {
-    console.error('获取设备节点列表失败:', error)
+    log.error('获取设备节点列表失败:', error)
     return NextResponse.json(
       { success: false, error: '获取设备节点列表失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -104,7 +107,7 @@ export async function POST(request: NextRequest) {
       message: '设备节点创建成功',
     })
   } catch (error) {
-    console.error('创建设备节点失败:', error)
+    log.error('创建设备节点失败:', error)
     return NextResponse.json(
       { success: false, error: '创建设备节点失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

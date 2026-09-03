@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('SensorTypeId');
 
 /**
  * DELETE /api/sensor-types/[id]
@@ -32,7 +35,7 @@ export async function DELETE(
       message: '传感器类型删除成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('删除传感器类型失败:', error)
+    log.error('删除传感器类型失败:', error)
     return NextResponse.json({
       success: false,
       message: '删除传感器类型失败',

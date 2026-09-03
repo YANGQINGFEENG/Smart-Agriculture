@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeId');
 
 interface KnowledgeItem extends RowDataPacket {
   id: number
@@ -41,7 +44,7 @@ export async function GET(
       data: rows[0],
     })
   } catch (error) {
-    console.error('获取知识详情失败:', error)
+    log.error('获取知识详情失败:', error)
     return NextResponse.json(
       { success: false, error: '获取知识详情失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -98,7 +101,7 @@ export async function PUT(
       message: '知识更新成功',
     })
   } catch (error) {
-    console.error('更新知识失败:', error)
+    log.error('更新知识失败:', error)
     return NextResponse.json(
       { success: false, error: '更新知识失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
@@ -139,7 +142,7 @@ export async function DELETE(
       message: '知识删除成功',
     })
   } catch (error) {
-    console.error('删除知识失败:', error)
+    log.error('删除知识失败:', error)
     return NextResponse.json(
       { success: false, error: '删除知识失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

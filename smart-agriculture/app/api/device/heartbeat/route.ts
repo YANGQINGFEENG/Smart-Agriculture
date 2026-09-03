@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Heartbeat');
 
 interface Gateway extends RowDataPacket {
   id: number
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
       gatewayId = (result as any).lastID || (result as any).insertId
       farmId = farm_id
 
-      console.log(`[Heartbeat] 自动创建网关: ${gateway_ip}`)
+      log.info(`自动创建网关: ${gateway_ip}`)
     } else {
       gatewayId = gateway[0].id
       farmId = gateway[0].farm_id
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('[Heartbeat] 心跳处理失败:', error)
+    log.error('心跳处理失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -156,7 +159,7 @@ export async function GET(request: NextRequest) {
       data: gateway[0],
     })
   } catch (error) {
-    console.error('[Heartbeat] 查询心跳状态失败:', error)
+    log.error('查询心跳状态失败:', error)
     return NextResponse.json(
       {
         success: false,

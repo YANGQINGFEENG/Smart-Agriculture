@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, ResultSetHeader, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('SensorId');
 
 /**
  * PUT /api/sensors/[id]
@@ -81,7 +84,7 @@ export async function PUT(
       message: '传感器信息更新成功',
     })
   } catch (error) {
-    console.error('更新传感器失败:', error)
+    log.error('更新传感器失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -127,7 +130,7 @@ export async function DELETE(
       message: '传感器删除成功',
     })
   } catch (error) {
-    console.error('删除传感器失败:', error)
+    log.error('删除传感器失败:', error)
     return NextResponse.json(
       {
         success: false,

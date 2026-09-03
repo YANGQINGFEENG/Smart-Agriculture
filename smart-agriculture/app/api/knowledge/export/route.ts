@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
 import { getRagStatus } from '@/lib/knowledge-rag'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeExport');
 
 interface KnowledgeItem extends RowDataPacket {
   id: number
@@ -147,7 +150,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('导出知识库失败:', error)
+    log.error('导出知识库失败:', error)
     return NextResponse.json(
       { success: false, error: '导出失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

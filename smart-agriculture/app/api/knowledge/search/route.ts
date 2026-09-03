@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
 import { semanticSearch, getRagStatus } from '@/lib/knowledge-rag'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('KnowledgeSearch');
 
 interface KnowledgeItem extends RowDataPacket {
   id: number
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
           search_type: 'semantic',
         }))
       } catch (error) {
-        console.log('语义搜索不可用，使用关键词搜索')
+        log.info('语义搜索不可用，使用关键词搜索')
       }
     }
 
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
       mode,
     })
   } catch (error) {
-    console.error('搜索知识失败:', error)
+    log.error('搜索知识失败:', error)
     return NextResponse.json(
       { success: false, error: '搜索失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }

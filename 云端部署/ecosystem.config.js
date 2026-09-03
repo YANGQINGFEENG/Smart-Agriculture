@@ -21,6 +21,10 @@ module.exports = {
       max_memory_restart: '1G',
       instances: 1,
       autorestart: true,
+      out_file: '/var/log/pm2/smart-agri-web-out.log',
+      error_file: '/var/log/pm2/smart-agri-web-error.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
       // 环境变量从项目根目录 .env.local 由 Next.js 自行加载
     },
     {
@@ -34,6 +38,10 @@ module.exports = {
       max_memory_restart: '500M',
       instances: 1,
       autorestart: true,
+      out_file: '/var/log/pm2/smart-agri-ws-out.log',
+      error_file: '/var/log/pm2/smart-agri-ws-error.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
     },
   ],
 };

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket } from '@/lib/db'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('StrategyExecutionLogs');
 
 /**
  * 策略执行日志接口
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest) {
       message: '获取策略执行日志成功'
     }, { status: 200 })
   } catch (error) {
-    console.error('获取策略执行日志失败:', error)
+    log.error('获取策略执行日志失败:', error)
     return NextResponse.json({
       success: false,
       data: null,
@@ -125,7 +128,7 @@ export async function POST(request: NextRequest) {
       message: '创建策略执行日志成功'
     }, { status: 201 })
   } catch (error) {
-    console.error('创建策略执行日志失败:', error)
+    log.error('创建策略执行日志失败:', error)
     return NextResponse.json({
       success: false,
       data: null,

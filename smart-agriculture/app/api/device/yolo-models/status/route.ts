@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, RowDataPacket, ResultSetHeader } from '@/lib/db'
 import { getBeijingTimeForDB } from '@/lib/beijing-time'
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('YoloModelStatus');
 
 /**
  * 树莓派识别模型状态上报接口
@@ -192,8 +195,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(
-      `[YoloModelStatus] ${gatewayIp} 上报: 当前模型 ${currentModel || '无'}, ` +
+    log.info(
+      `${gatewayIp} 上报: 当前模型 ${currentModel || '无'}, ` +
         `类别 ${body.class_count || 0}, 本地模型 ${synced} 个` +
         (requestId ? `, 切换回执 #${requestId}=${switchResult?.success ? '成功' : '失败'}` : '')
     )
@@ -207,7 +210,7 @@ export async function POST(request: NextRequest) {
       request_id: requestId,
     })
   } catch (error) {
-    console.error('[YoloModelStatus] 状态上报处理失败:', error)
+    log.error('状态上报处理失败:', error)
     return NextResponse.json(
       {
         success: false,
@@ -256,7 +259,7 @@ export async function GET(request: NextRequest) {
       data: row ? { ...row, local_models: localModels, classes } : null,
     })
   } catch (error) {
-    console.error('[YoloModelStatus] 查询状态失败:', error)
+    log.error('查询状态失败:', error)
     return NextResponse.json({ success: false, error: '查询状态失败' }, { status: 500 })
   }
 }
